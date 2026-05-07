@@ -434,7 +434,7 @@ Rules:
 
         let css = ':root {\n';
         for (const [key, val] of Object.entries(vars)) {
-            if (val) css += `  --rt-custom-${key}: ${val} !important;\n`;
+            if (val) css += `  ${key}: ${val} !important;\n`;
         }
         css += '}';
         tag.textContent = css;
