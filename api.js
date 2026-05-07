@@ -1,0 +1,459 @@
+/**
+ * api.js — Fatbody D&D Framework
+ * All external LLM networking. Stateless — reads settings via parameter, no DOM.
+ *
+ * Imports: settings.js
+ * Imported by: state-engine.js, theme-wizard.js, settings-ui.js
+ */
+
+import { getSettings } from './settings.js';
+
+// ── Connection Profile Helpers ─────────────────────────────────────────────────
+
+export async function checkConnectionProfilesActive() {
+    return $('#sys-settings-button').find('#connection_profiles').length > 0;
+}
+
+export async function getConnectionProfiles() {
+    if (!(await checkConnectionProfilesActive())) return [];
+    const { executeSlashCommandsWithOptions } = SillyTavern.getContext();
+    const result = await executeSlashCommandsWithOptions(`/profile-list`);
+    try {
+        return JSON.parse(result.pipe);
+    } catch {
+        return [];
+    }
+}
+
+export async function getCurrentCompletionPreset() {
+    const { executeSlashCommandsWithOptions } = SillyTavern.getContext();
+    const result = await executeSlashCommandsWithOptions(`/preset`);
+    return result?.pipe?.trim() || null;
+}
+
+export async function setCompletionPreset(name) {
+    if (!name) return;
+    const { executeSlashCommandsWithOptions } = SillyTavern.getContext();
+    await executeSlashCommandsWithOptions(`/preset "${name}"`);
+}
+
+// ── CORS Proxy Helpers ─────────────────────────────────────────────────────────
+
+function proxiedUrl(url, useProxy = true) {
+    if (!useProxy) return url;
+    return `/proxy/${url}`;
+}
+
+function getProxyHeaders() {
+    try {
+        const ctx = SillyTavern.getContext();
+        if (typeof ctx.getRequestHeaders === 'function') {
+            return ctx.getRequestHeaders();
+        }
+    } catch (e) { /* fallback */ }
+    return { 'Content-Type': 'application/json' };
+}
+
+// ── Ollama ─────────────────────────────────────────────────────────────────────
+
+export async function sendViaOllama(url, model, systemPrompt, userPrompt, maxTokens, presetSettings = {}) {
+    if (!url) throw new Error('Ollama URL is not configured.');
+    if (!model) throw new Error('Ollama model is not selected.');
+
+    const baseUrl = url.replace(/\/+$/, '');
+    const targetUrl = `${baseUrl}/api/chat`;
+
+    const requestBody = {
+        model: model,
+        messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+        ],
+        stream: false,
+        options: {
+            temperature: presetSettings.temperature ?? presetSettings.temp ?? presetSettings.temp_openai ?? 0.1,
+            top_p: presetSettings.top_p ?? presetSettings.top_p_openai ?? 1.0,
+            top_k: presetSettings.top_k ?? presetSettings.top_k_openai ?? 40,
+            repeat_penalty: presetSettings.repetition_penalty ?? presetSettings.rep_pen ?? presetSettings.repetition_penalty_openai ?? 1.1,
+            num_predict: (maxTokens && maxTokens > 0) ? maxTokens : undefined,
+        },
+    };
+    console.log(`[RPG Tracker] sendViaOllama — model: "${model}", url: "${targetUrl}"`);
+    if (Object.keys(presetSettings).length > 0) console.log(`[RPG Tracker] Applied Preset Data:`, presetSettings);
+    console.log(`[RPG Tracker] Parameters — Temp: ${requestBody.options.temperature}, Top_P: ${requestBody.options.top_p}, Top_K: ${requestBody.options.top_k}`);
+    console.log(`[RPG Tracker] Prompts — System: "${systemPrompt.substring(0, 50)}...", User: "${userPrompt.substring(0, 50)}..."`);
+
+    let response;
+    const headers = { 'Content-Type': 'application/json' };
+    try {
+        const proxyHeaders = getProxyHeaders();
+        const finalHeaders = { ...headers, ...proxyHeaders };
+        response = await fetch(proxiedUrl(targetUrl), {
+            method: 'POST',
+            headers: finalHeaders,
+            body: JSON.stringify(requestBody),
+        });
+        if (!response.ok && response.status === 404) {
+            throw new Error('Proxy 404');
+        }
+    } catch (proxyError) {
+        try {
+            response = await fetch(targetUrl, {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify(requestBody),
+            });
+        } catch (directError) {
+            throw new Error(`Failed to connect to Ollama. Proxy error: ${proxyError.message}. Direct error: ${directError.message}`);
+        }
+    }
+
+    if (!response.ok) {
+        if (response.status === 401) throw new Error('Ollama returned 401 Unauthorized. Check that no authentication is required, or configure it correctly.');
+        throw new Error(`Ollama request failed (${response.status})`);
+    }
+    const data = await response.json();
+    const result = data.message.content;
+    console.log(`[RPG Tracker] Response from Ollama: "${result.substring(0, 100)}..."`);
+    return result;
+}
+
+export async function fetchOllamaModels(url) {
+    if (!url) throw new Error('Ollama URL is not configured.');
+    const baseUrl = url.replace(/\/+$/, '');
+    const targetUrl = `${baseUrl}/api/tags`;
+    let response;
+    try {
+        const proxyHeaders = getProxyHeaders();
+        response = await fetch(proxiedUrl(targetUrl), { method: 'GET', headers: proxyHeaders });
+        if (!response.ok && response.status === 404) {
+            response = await fetch(targetUrl, { method: 'GET', headers: { 'Content-Type': 'application/json' } });
+        }
+    } catch (e) {
+        response = await fetch(targetUrl, { method: 'GET', headers: { 'Content-Type': 'application/json' } });
+    }
+    if (!response.ok) {
+        if (response.status === 401) throw new Error('Ollama returned 401 Unauthorized. Check that no authentication is required.');
+        throw new Error(`Failed to fetch Ollama models (${response.status})`);
+    }
+    const data = await response.json();
+    return data.models || [];
+}
+
+// ── OpenAI Compatible ──────────────────────────────────────────────────────────
+
+export async function sendViaOpenAI(url, apiKey, model, systemPrompt, userPrompt, maxTokens, presetSettings = {}) {
+    if (!url) throw new Error('OpenAI Compatible URL is not configured.');
+    if (!model) throw new Error('OpenAI Compatible model name is not set.');
+
+    const baseUrl = url.replace(/\/+$/, '');
+    let endpoint = baseUrl;
+    if (!endpoint.endsWith('/chat/completions')) {
+        if (endpoint.endsWith('/v1')) endpoint += '/chat/completions';
+        else if (!endpoint.includes('/chat/completions')) endpoint += '/v1/chat/completions';
+    }
+
+    const isLocal = /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?/i.test(endpoint);
+    const headers = { 'Content-Type': 'application/json' };
+    if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
+
+    const requestBody = {
+        model: model,
+        messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
+        temperature: presetSettings.temperature ?? presetSettings.temp ?? presetSettings.temp_openai ?? 0.1,
+        top_p: presetSettings.top_p ?? presetSettings.top_p_openai ?? 1.0,
+        frequency_penalty: presetSettings.frequency_penalty ?? presetSettings.freq_pen ?? presetSettings.freq_pen_openai ?? 0,
+        presence_penalty: presetSettings.presence_penalty ?? presetSettings.presence_pen ?? presetSettings.pres_pen_openai ?? 0,
+        stream: true,
+    };
+    if (maxTokens && maxTokens > 0) requestBody.max_tokens = maxTokens;
+
+    console.log(`[RPG Tracker] sendViaOpenAI — model: "${model}", url: "${endpoint}"`);
+    if (Object.keys(presetSettings).length > 0) console.log(`[RPG Tracker] Applied Preset Data:`, presetSettings);
+    console.log(`[RPG Tracker] Parameters — Temp: ${requestBody.temperature}, Top_P: ${requestBody.top_p}, Freq_Pen: ${requestBody.frequency_penalty}`);
+    console.log(`[RPG Tracker] Prompts — System: "${systemPrompt.substring(0, 50)}...", User: "${userPrompt.substring(0, 50)}..."`);
+
+    let response;
+    if (isLocal) {
+        try {
+            const proxyHeaders = getProxyHeaders();
+            const finalHeaders = { ...headers, ...proxyHeaders };
+            response = await fetch(proxiedUrl(endpoint), { method: 'POST', headers: finalHeaders, body: JSON.stringify(requestBody) });
+            if (!response.ok && response.status === 404) {
+                throw new Error('Proxy 404');
+            }
+        } catch (e) {
+            response = await fetch(endpoint, { method: 'POST', headers: headers, body: JSON.stringify(requestBody), credentials: 'omit' });
+        }
+    } else {
+        response = await fetch(endpoint, { method: 'POST', headers: headers, body: JSON.stringify(requestBody), credentials: 'omit' });
+    }
+
+    if (!response.ok) {
+        if (response.status === 401) throw new Error('OpenAI endpoint returned 401 Unauthorized. Check your API key.');
+        throw new Error(`OpenAI request failed (${response.status})`);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let fullContent = '';
+    let buffer = '';
+
+    try {
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed || !trimmed.startsWith('data:')) continue;
+                const data = trimmed.slice(5).trim();
+                if (data === '[DONE]') continue;
+                try {
+                    const parsed = JSON.parse(data);
+                    const delta = parsed.choices?.[0]?.delta?.content;
+                    if (delta) fullContent += delta;
+                } catch (e) { }
+            }
+        }
+    } finally { reader.releaseLock(); }
+
+    if (!fullContent.trim()) throw new Error('OpenAI returned an empty response.');
+    console.log(`[RPG Tracker] Response from OpenAI: "${fullContent.substring(0, 100)}..."`);
+    return fullContent;
+}
+
+export async function fetchOpenAIModels(url, apiKey) {
+    if (!url) throw new Error('OpenAI URL is not configured.');
+    const baseUrl = url.replace(/\/+$/, '');
+    let endpoint = baseUrl;
+    if (!endpoint.endsWith('/models')) {
+        if (endpoint.endsWith('/v1')) endpoint += '/models';
+        else if (!endpoint.includes('/models')) endpoint += '/v1/models';
+    }
+
+    const isLocal = /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?/i.test(endpoint);
+    const headers = { 'Content-Type': 'application/json' };
+    if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
+
+    if (isLocal) {
+        try {
+            const proxyHeaders = getProxyHeaders();
+            const finalHeaders = { ...headers, ...proxyHeaders };
+            const proxyResponse = await fetch(proxiedUrl(endpoint), { method: 'GET', headers: finalHeaders });
+            if (proxyResponse.ok) {
+                const data = await proxyResponse.json();
+                return data.data || data.models || [];
+            }
+        } catch (e) { /* proxy network error, fall through */ }
+    }
+
+    try {
+        const directResponse = await fetch(endpoint, {
+            method: 'GET',
+            headers: headers,
+            credentials: 'omit',
+        });
+        if (directResponse.ok) {
+            const data = await directResponse.json();
+            return data.data || data.models || [];
+        }
+        if (directResponse.status === 401) {
+            throw new Error('Endpoint returned 401 Unauthorized. Check your API key.');
+        }
+        throw new Error(`HTTP ${directResponse.status}`);
+    } catch (e) {
+        if (e.message.includes('401')) throw e;
+        if (isLocal) {
+            throw new Error(
+                `Cannot reach ${endpoint} due to CORS restrictions.\n\n` +
+                `Solutions:\n` +
+                `1. Enable ST's CORS proxy: set "enableCorsProxy: true" in config.yaml and restart ST.\n` +
+                `2. Or type the model name manually in the text box below.\n\n` +
+                `(Original error: ${e.message})`
+            );
+        }
+        throw e;
+    }
+}
+
+export async function testOpenAIConnection(url, apiKey, model) {
+    try {
+        const result = await sendViaOpenAI(url, apiKey, model || 'test', 'You are a test assistant.', 'Respond with exactly: CONNECTION_OK', 100);
+        return { success: true, message: `Connection successful! Response: "${result.substring(0, 100)}"` };
+    } catch (error) {
+        return { success: false, message: `Connection failed: ${error.message}` };
+    }
+}
+
+// ── Primary dispatch ───────────────────────────────────────────────────────────
+
+/**
+ * Routes a state request to the correct backend based on settings.connectionSource.
+ * Handles: 'profile', 'ollama', 'openai', 'default' (generateRaw).
+ * @param {ReturnType<import('./settings.js').getSettings>} settings
+ * @param {string} systemPrompt
+ * @param {string} userPrompt
+ * @returns {Promise<string>}
+ */
+export async function sendStateRequest(settings, systemPrompt, userPrompt) {
+    const context = SillyTavern.getContext();
+
+    console.log(`[RPG Tracker] sendStateRequest — source: "${settings.connectionSource}", profileId: "${settings.connectionProfileId}", preset: "${settings.completionPresetId}"`);
+
+    // ── Profile mode: use ConnectionManagerRequestService (silent, no UI flicker) ──
+    if (settings.connectionSource === 'profile' && settings.connectionProfileId) {
+        const service = context.ConnectionManagerRequestService;
+
+        if (!service || typeof service.sendRequest !== 'function') {
+            console.warn('[RPG Tracker] ConnectionManagerRequestService not available (ST too old?). Falling back to generateRaw with profile switch.');
+        } else {
+            if (settings.debugMode) console.log(`[RPG Tracker] Sending via profile (silent): ${settings.connectionProfileId}${settings.completionPresetId ? `, preset override: ${settings.completionPresetId}` : ''}`);
+
+            let profile;
+            try {
+                profile = service.getProfile(settings.connectionProfileId);
+            } catch {
+                const profiles = context.extensionSettings?.connectionManager?.profiles || [];
+                profile = profiles.find(p => p.name === settings.connectionProfileId || p.id === settings.connectionProfileId);
+            }
+
+            if (!profile) throw new Error(`[RPG Tracker] Connection Profile not found: ${settings.connectionProfileId}`);
+
+            const selectedApiMap = service.validateProfile(profile);
+            const messages = [
+                { role: 'system', content: systemPrompt },
+                { role: 'user',   content: userPrompt   },
+            ];
+
+            const maxTokens = settings.maxTokens && settings.maxTokens > 0 ? settings.maxTokens : undefined;
+            const presetToUse = settings.completionPresetId || profile.preset;
+
+            let raw;
+            if (selectedApiMap.selected === 'openai') {
+                const proxies = context.proxies || [];
+                const proxyPreset = proxies.find((p) => p.name === profile.proxy);
+                raw = await context.ChatCompletionService.processRequest({
+                    stream: false,
+                    messages,
+                    max_tokens: maxTokens,
+                    model: profile.model,
+                    chat_completion_source: selectedApiMap.source,
+                    secret_id: profile['secret-id'],
+                    custom_url: profile['api-url'],
+                    vertexai_region: profile['api-url'],
+                    zai_endpoint: profile['api-url'],
+                    siliconflow_endpoint: profile['api-url'],
+                    minimax_endpoint: profile['api-url'],
+                    reverse_proxy: proxyPreset?.url,
+                    proxy_password: proxyPreset?.password,
+                    custom_prompt_post_processing: profile['prompt-post-processing'],
+                }, {
+                    presetName: presetToUse,
+                }, true);
+            } else if (selectedApiMap.selected === 'textgenerationwebui') {
+                const promptString = messages.map(m => `### ${m.role}:\n${m.content}`).join('\n\n');
+                raw = await context.TextCompletionService.processRequest({
+                    stream: false,
+                    prompt: promptString,
+                    max_tokens: maxTokens,
+                    max_new_tokens: maxTokens,
+                    model: profile.model,
+                    api_type: selectedApiMap.type,
+                    api_server: profile['api-url'],
+                    secret_id: profile['secret-id'],
+                }, {
+                    instructName: profile.instruct,
+                    presetName: presetToUse,
+                }, true);
+            } else {
+                throw new Error(`[RPG Tracker] Unsupported API type: ${selectedApiMap.selected}`);
+            }
+
+            if (typeof raw === 'string') return raw;
+            const r = /** @type {any} */ (raw);
+            const text = r?.content
+                ?? r?.message?.content
+                ?? r?.choices?.[0]?.message?.content
+                ?? r?.choices?.[0]?.text
+                ?? null;
+
+            if (text) return text;
+            throw new Error(`[RPG Tracker] Profile request returned unexpected type: ${JSON.stringify(raw).substring(0, 200)}`);
+        }
+    }
+
+    // Helper: resolve preset settings from the active preset manager
+    const getPresetData = () => {
+        if (!settings.completionPresetId) return {};
+        let manager = context.getPresetManager();
+        let data = manager ? manager.getCompletionPresetByName(settings.completionPresetId) : null;
+        if (!data) {
+            manager = context.getPresetManager('textgenerationwebui');
+            data = manager ? manager.getCompletionPresetByName(settings.completionPresetId) : null;
+        }
+        if (!data) {
+            manager = context.getPresetManager('openai');
+            data = manager ? manager.getCompletionPresetByName(settings.completionPresetId) : null;
+        }
+        if (!data && settings.debugMode) console.warn(`[RPG Tracker] Preset "${settings.completionPresetId}" not found in common PresetManagers.`);
+        return data || {};
+    };
+    const presetSettings = getPresetData();
+
+    // ── Ollama Mode ──
+    if (settings.connectionSource === 'ollama') {
+        if (settings.debugMode) console.log(`[RPG Tracker] Sending via Ollama: ${settings.ollamaModel}`);
+        return await sendViaOllama(settings.ollamaUrl, settings.ollamaModel, systemPrompt, userPrompt, settings.maxTokens, presetSettings);
+    }
+
+    // ── OpenAI Compatible Mode ──
+    if (settings.connectionSource === 'openai') {
+        if (settings.debugMode) console.log(`[RPG Tracker] Sending via OpenAI Compatible: ${settings.openaiModel}`);
+        return await sendViaOpenAI(settings.openaiUrl, settings.openaiKey, settings.openaiModel, systemPrompt, userPrompt, settings.maxTokens, presetSettings);
+    }
+
+    // ── Default mode: generateRaw through the active connection ──
+    const { generateRaw } = context;
+    if (!generateRaw) throw new Error('[RPG Tracker] generateRaw is not available.');
+
+    let originalPreset = null;
+    try {
+        if (settings.completionPresetId) {
+            originalPreset = await getCurrentCompletionPreset();
+            if (settings.debugMode) console.log(`[RPG Tracker] Switching Preset: ${originalPreset} -> ${settings.completionPresetId}`);
+            await setCompletionPreset(settings.completionPresetId);
+        }
+
+        const options = {
+            prompt: userPrompt,
+            systemPrompt: systemPrompt,
+            bypassAll: true,
+        };
+
+        if (settings.maxTokens && settings.maxTokens > 0) {
+            options.responseLength = settings.maxTokens;
+        }
+
+        const result = await generateRaw(options);
+
+        if (typeof result === 'string') return result;
+        const r = /** @type {any} */ (result);
+        return r?.choices?.[0]?.message?.content
+            ?? r?.choices?.[0]?.text
+            ?? r?.message?.content
+            ?? r?.content
+            ?? JSON.stringify(result);
+
+    } catch (err) {
+        console.error('[RPG Tracker] Request failed:', err);
+        throw err;
+    } finally {
+        if (originalPreset && settings.completionPresetId && originalPreset !== settings.completionPresetId) {
+            if (settings.debugMode) console.log(`[RPG Tracker] Restoring preset: ${originalPreset}`);
+            await setCompletionPreset(originalPreset);
+        }
+    }
+}
