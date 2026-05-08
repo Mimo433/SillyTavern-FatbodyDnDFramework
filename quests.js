@@ -58,11 +58,9 @@ export function computeFrustration(quest, currentTime) {
 
     const coeff = Math.max(0.1, quest.frustration_coefficient ?? 1.0);
 
-    if (!quest.deadline_time) {
-        // No deadline: use 24 in-game hours as a soft "expected" window
-        const window = 24 * 60;
-        const ratio  = elapsed / window;
-        return Math.pow(ratio, 1 / coeff) * 2 - 1;
+    if (!quest.deadline_time || String(quest.deadline_time).toLowerCase() === 'none') {
+        // No deadline: NPC remains neutral regardless of time elapsed
+        return 0;
     }
 
     const deadline = parseInWorldTime(quest.deadline_time);
