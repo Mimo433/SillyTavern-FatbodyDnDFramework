@@ -182,13 +182,10 @@ export function registerLogQuestTool() {
         // Unregister first (idempotent)
         unregisterFunctionTool('LogQuest');
 
-        // In legacy mode, the state model handles quests — no tool needed
-        if (s.questLegacyMode) return;
+        // In legacy mode or if quests are disabled in Narrator Config, no tool needed
+        if (s.questLegacyMode || s.syspromptModules?.quests === false) return;
 
-        // Only register if the module is enabled
-        if (!s.modules?.quests) return;
-
-        const isHardcore = s.syspromptModules?.quests !== false;
+        const isHardcore = !!s.questsHardcore;
 
         const properties = {
             title: { type: 'string', description: 'Clear, thematic name of the quest.' },

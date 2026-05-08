@@ -914,29 +914,73 @@ Rules:
             });
         });
 
-        const onboardingResetLink = el.querySelector('#rt-onboarding-auto-apply');
-        if (onboardingResetLink) {
-            onboardingResetLink.addEventListener('click', async (e) => {
+        // --- Onboarding Narrator Configuration (Salad Bar Sync) ---
+        const s = getSettings();
+        
+        // RNG Mode Sync
+        const onboardingRngInputs = el.querySelectorAll('input[name="rt_onboarding_rng_mode"]');
+        onboardingRngInputs.forEach(input => {
+            input.checked = (input.value === (s.diceFunctionTool ? 'hybrid' : 'legacy'));
+            input.addEventListener('change', () => {
+                const targetId = input.value === 'hybrid' ? '#rpg_rng_hybrid' : '#rpg_rng_legacy';
+                $(targetId).prop('checked', true).trigger('change');
+            });
+        });
+
+        // Quests Enabled Sync
+        const onboardingQuestsCb = el.querySelector('#rt_onboarding_quests_enabled');
+        if (onboardingQuestsCb) {
+            onboardingQuestsCb.checked = s.syspromptModules?.quests !== false;
+            const optionsDiv = el.querySelector('#rt_onboarding_quest_options');
+            if (optionsDiv) optionsDiv.style.display = onboardingQuestsCb.checked ? 'flex' : 'none';
+            
+            onboardingQuestsCb.addEventListener('change', () => {
+                if (optionsDiv) optionsDiv.style.display = onboardingQuestsCb.checked ? 'flex' : 'none';
+                $('#rpg_sysprompt_mod_quests').prop('checked', onboardingQuestsCb.checked).trigger('change');
+            });
+        }
+
+        // Hardcore Quests Sync
+        const onboardingHardcoreCb = el.querySelector('#rt_onboarding_quests_hardcore');
+        if (onboardingHardcoreCb) {
+            onboardingHardcoreCb.checked = !!s.questsHardcore;
+            onboardingHardcoreCb.addEventListener('change', () => {
+                $('#rpg_quests_hardcore').prop('checked', onboardingHardcoreCb.checked).trigger('change');
+            });
+        }
+
+        // Quest Mode Sync
+        const onboardingQuestModeInputs = el.querySelectorAll('input[name="rt_onboarding_quest_mode"]');
+        onboardingQuestModeInputs.forEach(input => {
+            const isLegacy = s.questLegacyMode;
+            input.checked = (input.value === (isLegacy ? 'legacy' : 'standard'));
+            input.addEventListener('change', () => {
+                const targetId = input.value === 'standard' ? '#rpg_quest_standard' : '#rpg_quest_legacy';
+                $(targetId).prop('checked', true).trigger('change');
+            });
+        });
+
+        // Optional Components Sync
+        const syncOptionalMod = (onboardingId, mainId, settingKey) => {
+            const cb = el.querySelector(onboardingId);
+            if (cb) {
+                cb.checked = !!s.syspromptModules?.[settingKey];
+                cb.addEventListener('change', () => {
+                    $(mainId).prop('checked', cb.checked).trigger('change');
+                });
+            }
+        };
+        syncOptionalMod('#rt_onboarding_mod_loot', '#rpg_sysprompt_mod_loot', 'loot');
+        syncOptionalMod('#rt_onboarding_mod_random_events', '#rpg_sysprompt_mod_random_events', 'random_events');
+        syncOptionalMod('#rt_onboarding_mod_resting', '#rpg_sysprompt_mod_resting', 'resting');
+
+        const onboardingApplyBtn = el.querySelector('#rt_onboarding_btn_apply_sysprompt');
+        if (onboardingApplyBtn) {
+            onboardingApplyBtn.addEventListener('click', async (e) => {
                 e.preventDefault();
-                if (!confirm('This will:\n\n1. Reset the Core State Model prompt to built-in default\n2. Reset all Stock Module prompts, Active Modules, and Module Order to factory defaults\n3. Fetch the latest sysprompt.txt and write it directly into your Quick Prompt "Main" box\n\nYour custom modules will NOT be affected. Proceed?')) return;
-
-                const ctx2 = SillyTavern.getContext();
-                const { extensionSettings } = ctx2;
-
-                // 1. Reset Core prompt
-                delete extensionSettings[MODULE_NAME].systemPromptTemplate;
-                const freshSettings = getSettings();
-                $('#rpg_tracker_core_prompt').val(freshSettings.systemPromptTemplate);
-
-                // 2. Reset stock modules, order, active modules
-                delete extensionSettings[MODULE_NAME].stockPrompts;
-                delete extensionSettings[MODULE_NAME].blockOrder;
-                delete extensionSettings[MODULE_NAME].modules;
-                refreshOrderList();
-                saveSettings();
-
-                // 3. Fetch sysprompt.txt and apply to ST Quick Prompt "Main"
-                const fileName = 'sysprompt.txt';
+                
+                // Fetch and apply sysprompt without resetting tracker state/modules
+                const fileName = getSettings().diceFunctionTool ? 'sysprompt.txt' : 'sysprompt_legacy.txt';
                 let content;
                 try {
                     const response = await fetch(`/scripts/extensions/third-party/${FOLDER_NAME}/${fileName}`);
@@ -951,15 +995,17 @@ Rules:
                 }
 
                 if (!content) {
-                    toastr['error']('Could not load sysprompt.txt. Reset completed but Main prompt was NOT updated.', 'RPG Tracker');
+                    toastr['error']('Could not load sysprompt.txt.', 'RPG Tracker');
                     return;
                 }
+
+                content = buildSysprompt(content);
 
                 const mainTextarea = /** @type {HTMLTextAreaElement} */ (document.getElementById('main_prompt_quick_edit_textarea'));
                 if (mainTextarea) {
                     mainTextarea.value = content;
                     mainTextarea.dispatchEvent(new Event('blur', { bubbles: true }));
-                    toastr['success']('All prompts reset & Main sysprompt applied! ✅', 'RPG Tracker');
+                    toastr['success']('Narrator sysprompt applied! ✅', 'RPG Tracker');
                 } else {
                     const ta = document.createElement('textarea');
                     ta.value = content;
@@ -969,9 +1015,9 @@ Rules:
                     ta.select();
                     try {
                         document.execCommand('copy');
-                        toastr['warning']('All prompts reset. Quick Prompt "Main" textarea not found (wrong API mode?). Sysprompt copied to clipboard — paste it manually.', 'RPG Tracker');
+                        toastr['warning']('Quick Prompt "Main" textarea not found. Sysprompt copied to clipboard — paste it manually.', 'RPG Tracker');
                     } catch (e) {
-                        toastr['warning']('All prompts reset. Quick Prompt "Main" textarea not found and clipboard copy failed. Use the SYSPROMPT button to copy manually.', 'RPG Tracker');
+                        toastr['warning']('Quick Prompt "Main" textarea not found and clipboard copy failed. Use the SYSPROMPT button to copy manually.', 'RPG Tracker');
                     } finally {
                         document.body.removeChild(ta);
                     }
@@ -1279,29 +1325,15 @@ Rules:
                         <button class="rpg-tracker-nav-btn" id="rpg-tracker-nav-fwd" title="View next snapshot">→</button>
                     </div>
                 </div>
-                <div class="flex-container gap-1 alignitemscenter rt-rng-footer-group">
-                    <button id="rt-rng-toggle-overlay" class="rt-rng-toggle-overlay" title="Toggle RNG Queue Injection">
-                        <i class="fa-solid fa-dice"></i> <span class="rt-rng-label-text">RNG Queue: </span><span id="rt-rng-status-text" class="rt-rng-status-text">OFF</span>
-                    </button>
-                    <button id="rt-dice-tool-toggle" class="rt-rng-toggle-overlay" title="Toggle Tool Call RNG">
-                        <i class="fa-solid fa-robot"></i> <span class="rt-rng-label-text">Tool Call RNG: </span><span id="rt-dice-tool-status-text" class="rt-rng-status-text">OFF</span>
-                    </button>
+                <div class="flex-container gap-1 alignitemscenter rt-rng-footer-group" style="display:none;">
+                    <!-- Removed inline RNG toggles, now located in extension settings -->
                 </div>
                 <div class="flex-container gap-1 alignitemscenter rt-utility-footer-group">
                     <span id="rpg-tracker-count">~${Math.round(settings.currentMemo.length / 2.62)} tokens</span>
                     <button class="rpg-tracker-nav-btn" id="rpg-tracker-memo-clear" style="padding: 1px 5px; font-size: 9px; opacity: 0.8; margin-left: 5px;" title="Clear memo and history">CLEAR</button>
-                    <div style="position: relative; display: flex; align-items: center;">
-                        <div id="rt-sysprompt-menu" class="rt-sysprompt-menu" style="display: none;">
-                             <button class="rt-sysprompt-opt" data-file="sysprompt.txt">Tool Call + Queue (recommended)</button>
-                             <button class="rt-sysprompt-opt" data-file="sysprompt_legacy.txt">Queue Only</button>
-                             <hr style="margin: 2px 0; border: none; border-top: 1px solid rgba(255,255,255,0.05);">
-                             <button class="rt-sysprompt-opt" id="rt-sysprompt-help-btn">What are these?</button>
-                         </div>
-                         <button class="rpg-tracker-nav-btn" id="rt-copy-sysprompt" style="padding: 1px 5px; font-size: 9px; opacity: 0.8; margin-left: 5px;" title="Copy Narrator System Prompt">SYSPROMPT</button>
-                     </div>
-                 </div>
-             </div>
-         `;
+                </div>
+            </div>
+        `;
 
         document.body.appendChild(panel);
 
@@ -1450,56 +1482,7 @@ Rules:
             _rawEditDebounce = setTimeout(refreshRenderedView, 400);
         });
 
-        // ── RNG & Dice Toggle Logic ──
-        const rngBtn = panel.querySelector('#rt-rng-toggle-overlay');
-        const diceToolBtn = panel.querySelector('#rt-dice-tool-toggle');
-
-        const syncFooterToggles = () => {
-            const s = getSettings();
-
-            // Sync RNG Engine
-            const rngText = panel.querySelector('#rt-rng-status-text');
-            if (rngText) rngText.textContent = s.rngEnabled ? 'ON' : 'OFF';
-            if (rngBtn) {
-                if (s.rngEnabled) rngBtn.classList.add('active');
-                else rngBtn.classList.remove('active');
-            }
-            const rngCb = document.getElementById('rpg_tracker_rng_enabled');
-            if (rngCb) /** @type {HTMLInputElement} */ (rngCb).checked = s.rngEnabled;
-
-            // Sync AI Dice Tool
-            const diceText = panel.querySelector('#rt-dice-tool-status-text');
-            if (diceText) diceText.textContent = s.diceFunctionTool ? 'ON' : 'OFF';
-            if (diceToolBtn) {
-                if (s.diceFunctionTool) diceToolBtn.classList.add('active');
-                else diceToolBtn.classList.remove('active');
-            }
-            const diceCb = document.getElementById('rpg_tracker_dice_function_tool');
-            if (diceCb) /** @type {HTMLInputElement} */ (diceCb).checked = s.diceFunctionTool;
-        };
-
-        if (rngBtn) {
-            rngBtn.addEventListener('click', () => {
-                const s = getSettings();
-                s.rngEnabled = !s.rngEnabled;
-                saveSettings();
-                syncFooterToggles();
-                toastr['info'](`RNG Queue ${s.rngEnabled ? 'Enabled' : 'Disabled'}.`, 'Fatbody Framework');
-            });
-        }
-
-        if (diceToolBtn) {
-            diceToolBtn.addEventListener('click', () => {
-                const s = getSettings();
-                s.diceFunctionTool = !s.diceFunctionTool;
-                saveSettings();
-                syncFooterToggles();
-                registerDiceFunctionTool();
-                toastr['info'](`Tool Call RNG ${s.diceFunctionTool ? 'Enabled' : 'Disabled'}.`, 'Fatbody Framework');
-            });
-        }
-
-        syncFooterToggles();
+        // (RNG footer toggles removed; managed via settings.html)
 
         // View toggle (Raw ↔ Rendered)
         let _viewBtn = /** @type {HTMLElement} */ (panel.querySelector('#rpg-tracker-view-btn'));
@@ -1714,100 +1697,6 @@ Rules:
             }
         });
 
-        // Copy System Prompt logic
-        const syspromptMenu = /** @type {HTMLElement} */ (panel.querySelector('#rt-sysprompt-menu'));
-        const syspromptBtn = /** @type {HTMLElement} */ (panel.querySelector('#rt-copy-sysprompt'));
-
-        syspromptBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const isVisible = syspromptMenu.style.display === 'flex';
-            syspromptMenu.style.display = isVisible ? 'none' : 'flex';
-        });
-
-        panel.querySelectorAll('.rt-sysprompt-opt').forEach(opt => {
-            opt.addEventListener('click', async (e) => {
-                const fileName = /** @type {HTMLElement} */ (e.currentTarget).getAttribute('data-file');
-                
-                if (!fileName) {
-                    // This is the "What are these?" button
-                    const { Popup } = SillyTavern.getContext();
-                    const helpContent = `
-                        <div style="text-align: left; line-height: 1.4; max-height: 70vh; overflow-y: auto; padding-right: 5px;">
-                            <h4 style="margin-top: 0; color: var(--rt-accent);">RNG Queue (Combat)</h4>
-                            <p>Generates a list of pre-rolled dice and injects them into the story context. This keeps combat fast and fluid because the AI doesn't need to stop for a tool call on every attack—it just uses the next roll in the queue.</p>
-                            <p>Functions perfectly in combat because combat works on a "grid" determined by initiative, taking any opportunity of mechanical sycophancy away from the AI.</p>
-
-                            <h4 style="color: var(--rt-accent);">Tool Call RNG (Narrative)</h4>
-                            <p>A reactive tool call where the AI proactively asks to roll specific dice for a specific action (e.g., picking a lock). This prevents "cheating" by forcing the AI to commit to a difficulty (DC) before seeing the roll result.</p>
-                            <p style="background: rgba(255, 165, 0, 0.1); border-left: 3px solid orange; padding: 10px; font-size: 11px; color: #eee; border-radius: 0 4px 4px 0;">
-                                <b>NOTE:</b> "Enable function calling" <b>must</b> be enabled in SillyTavern's <b>AI Response Configuration</b> for tool calls to work.
-                            </p>
-
-                            <h4 style="color: var(--rt-accent);">System Prompt Selection</h4>
-                            <p>Choose the system prompt that matches your selected RNG method:</p>
-                            <ul style="padding-left: 20px;">
-                                <li style="margin-bottom: 8px;"><b>Tool Call + Queue</b>: The modern hybrid system (recommended). Mandatory for the Tool Call RNG toggle to function.</li>
-                                <li><b>Queue Only</b>: The legacy behavior. Ideal if your model doesn't support tool calling or if you prefer the classic "always-in-context" RNG.</li>
-                            </ul>
-                        </div>
-                    `;
-                    Popup.show.confirm('RNG Systems Explained', helpContent, { okButton: 'OK', cancelButton: false });
-                    syspromptMenu.style.display = 'none';
-                    return;
-                }
-
-                let content;
-
-                // Attempt to fetch the live file from disk first
-                try {
-                    const response = await fetch(`/scripts/extensions/third-party/SillyTavern-FatbodyDnDFramework/${fileName}`);
-                    if (response.ok) {
-                        content = await response.text();
-                        console.log(`[Fatbody Framework] Loaded ${fileName} from live file.`);
-                    } else {
-                        throw new Error(`Server returned ${response.status}`);
-                    }
-                } catch (err) {
-                    console.warn(`[Fatbody Framework] Could not fetch ${fileName} from live file, using hardcoded fallback:`, err);
-                    content = RT_PROMPTS[fileName];
-                }
-
-                if (!content) {
-                    toastr['error'](`Prompt not found: ${fileName}`, "Fatbody Framework");
-                    return;
-                }
-
-                // Use a hidden textarea fallback — works on HTTP (Termux) where navigator.clipboard is blocked
-                const ta = document.createElement('textarea');
-                ta.value = content;
-                ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;';
-                document.body.appendChild(ta);
-                ta.focus();
-                ta.select();
-                try {
-                    document.execCommand('copy');
-                    const isLegacy = fileName === 'sysprompt_legacy.txt';
-                    const msg = isLegacy 
-                        ? `${fileName} copied to clipboard! Make sure to disable tool call RNG from the bottom of the UI.`
-                        : `${fileName} copied to clipboard! Make sure to enable function calls in the completion preset!`;
-                    toastr['success'](msg, "Fatbody Framework");
-                    syspromptMenu.style.display = 'none';
-                } catch (err) {
-                    console.error("[Fatbody Framework] execCommand copy failed:", err);
-                    toastr['error']('Could not copy to clipboard.', "Fatbody Framework");
-                } finally {
-                    document.body.removeChild(ta);
-                }
-            });
-        });
-
-        // Close menu when clicking outside
-        window.addEventListener('click', (e) => {
-            if (syspromptMenu && syspromptMenu.style.display === 'flex' && !syspromptMenu.contains(/** @type {Node} */(e.target)) && e.target !== syspromptBtn) {
-                syspromptMenu.style.display = 'none';
-            }
-        });
-
         syncMemoView();
     }
 
@@ -1820,6 +1709,8 @@ Rules:
         _historyViewIndex = newIndex;
         syncMemoView();
     }
+
+
 
     function syncMemoView() {
         const s = getSettings();
@@ -2582,9 +2473,17 @@ Rules:
             if (!s.blockOrder.includes(tag)) s.blockOrder.push(tag);
         });
 
-        // Current order, filtered for validity
+        // Current order, filtered for validity and optional module toggles
         const validCustomTags = new Set(allCustomTags);
-        const order = s.blockOrder.filter(tag => BLOCK_ORDER.includes(tag) || validCustomTags.has(tag));
+        const order = s.blockOrder.filter(tag => {
+            const isStock = BLOCK_ORDER.includes(tag);
+            if (!isStock && !validCustomTags.has(tag)) return false;
+
+            // Hide QUESTS if disabled in Narrator Config
+            if (tag === 'QUESTS' && s.syspromptModules?.quests === false) return false;
+
+            return true;
+        });
         s.blockOrder = order;
 
         order.forEach((tag, index) => {
@@ -2701,12 +2600,26 @@ Rules:
      */
     function buildSysprompt(rawText) {
         if (!rawText) return "";
-        const mods = getSettings().syspromptModules || {};
-        return rawText
+        const s = getSettings();
+        const mods = s.syspromptModules || {};
+        let content = rawText
             .replace(/<(\w[\w_-]*)>([\s\S]*?)<\/\1>/g, (match, tag) => {
                 if (mods[tag] === false) return '';
                 return match;
-            })
+            });
+
+        // Handle Quests Hardcore rules stripping
+        if (!s.questsHardcore) {
+            content = content.replace(/- Assign an in-world Deadline.*\n/g, '');
+            content = content.replace(/- Set a frustration_coefficient.*\n/g, '');
+            content = content.replace(/ {2}· 0\.4 = Very patient.*\n/g, '');
+            content = content.replace(/ {2}· 1\.0 = Normal.*\n/g, '');
+            content = content.replace(/ {2}· 3\.0 = Volatile.*\n/g, '');
+            content = content.replace(/- The NPC Mood evolves continuously.*\n/g, '');
+            content = content.replace(/- Set auto_fail to true ONLY.*\n/g, '');
+        }
+
+        return content
             .replace(/\n{3,}/g, "\n\n")
             .trim();
     }
@@ -3367,7 +3280,7 @@ Rules:
                 saveSettings();
 
                 // 3. Fetch sysprompt and apply to ST Quick Prompt "Main"
-                const fileName = getSettings().questLegacyMode ? 'sysprompt_legacy.txt' : 'sysprompt.txt';
+                const fileName = getSettings().diceFunctionTool ? 'sysprompt.txt' : 'sysprompt_legacy.txt';
                 let content;
                 try {
                     const response = await fetch(`/scripts/extensions/third-party/${FOLDER_NAME}/${fileName}`);
@@ -3387,7 +3300,7 @@ Rules:
                     return;
                 }
 
-                content = typeof buildSysprompt === 'function' ? buildSysprompt(content) : content;
+                content = buildSysprompt(content);
 
                 const mainTextarea = /** @type {HTMLTextAreaElement} */ (document.getElementById('main_prompt_quick_edit_textarea'));
                 if (mainTextarea) {
@@ -3430,30 +3343,71 @@ Rules:
                     if (!fresh.syspromptModules) fresh.syspromptModules = {};
                     fresh.syspromptModules[key] = !!$(this).prop('checked');
                     
-                    // If toggling quests, refresh the tool schema too
                     if (key === 'quests') {
+                        $('#rpg_quests_options').toggle(!!$(this).prop('checked'));
                         registerLogQuestTool();
+                        refreshOrderList();
                     }
 
                     saveSettings();
                 });
+
+                if (key === 'quests') {
+                    $('#rpg_quests_options').toggle(val);
+                }
             });
 
-            // Legacy Quest Mode toggle
-            const _legacyModeEl = /** @type {HTMLInputElement} */ (document.getElementById('rpg_quest_legacy_mode'));
-            if (_legacyModeEl) {
-                _legacyModeEl.checked = !!getSettings().questLegacyMode;
-                _legacyModeEl.addEventListener('change', function () {
+            // Hardcore Quests toggle
+            const hardcoreQuestsCb = /** @type {HTMLInputElement} */ (document.getElementById('rpg_quests_hardcore'));
+            if (hardcoreQuestsCb) {
+                const s = getSettings();
+                hardcoreQuestsCb.checked = !!s.questsHardcore;
+                hardcoreQuestsCb.addEventListener('change', function () {
                     const fresh = getSettings();
-                    fresh.questLegacyMode = !!this.checked;
-                    // Swap the stock prompt slot to match the mode
+                    fresh.questsHardcore = !!this.checked;
+                    
+                    // If in legacy mode, we need to refresh the module prompt to strip/add hardcore rules
+                    if (fresh.questLegacyMode) {
+                        let prompt = DEFAULT_STOCK_PROMPTS.quests_legacy;
+                        if (!fresh.questsHardcore) {
+                            prompt = prompt.replace(/  DEADLINE:.*\n/g, '');
+                            prompt = prompt.replace(/  FRUSTRATION_COEFF:.*\n/g, '');
+                            prompt = prompt.replace(/- DEADLINE \/ FRUSTRATION_COEFF:.*\n/g, '');
+                            prompt = prompt.replace(/- FRUSTRATION_COEFF:.*\n/g, '');
+                        }
+                        fresh.stockPrompts.quests = prompt;
+                        refreshOrderList();
+                    }
+                    
+                    registerLogQuestTool();
+                    saveSettings();
+                });
+            }
+
+            // Quest Mode (Standard vs Legacy)
+            const questModeRadios = document.querySelectorAll('input[name="rpg_sysprompt_quest_mode"]');
+            if (questModeRadios.length) {
+                const s = getSettings();
+                const currentQuestMode = s.questLegacyMode ? 'legacy' : 'standard';
+                $(`input[name="rpg_sysprompt_quest_mode"][value="${currentQuestMode}"]`).prop('checked', true);
+
+                $('input[name="rpg_sysprompt_quest_mode"]').on('change', function () {
+                    const fresh = getSettings();
+                    fresh.questLegacyMode = ($(this).val() === 'legacy');
+                    
                     if (fresh.questLegacyMode) {
                         if (!fresh.stockPrompts) fresh.stockPrompts = {};
-                        // Store tool prompt if we haven't yet, then load legacy
                         if (!fresh._questToolPromptBackup) fresh._questToolPromptBackup = fresh.stockPrompts.quests;
-                        fresh.stockPrompts.quests = DEFAULT_STOCK_PROMPTS.quests_legacy;
+                        
+                        let prompt = DEFAULT_STOCK_PROMPTS.quests_legacy;
+                        if (!fresh.questsHardcore) {
+                            prompt = prompt.replace(/  DEADLINE:.*\n/g, '');
+                            prompt = prompt.replace(/  FRUSTRATION_COEFF:.*\n/g, '');
+                            prompt = prompt.replace(/- DEADLINE \/ FRUSTRATION_COEFF:.*\n/g, '');
+                            prompt = prompt.replace(/- FRUSTRATION_COEFF:.*\n/g, '');
+                        }
+                        fresh.stockPrompts.quests = prompt;
                     } else {
-                        // Restore tool-mode prompt
                         fresh.stockPrompts.quests = fresh._questToolPromptBackup ?? DEFAULT_STOCK_PROMPTS.quests;
                         delete fresh._questToolPromptBackup;
                     }
@@ -3463,8 +3417,30 @@ Rules:
                 });
             }
 
+            // RNG Mode (Hybrid vs Legacy)
+            const rngModeRadios = document.querySelectorAll('input[name="rpg_sysprompt_rng_mode"]');
+            if (rngModeRadios.length) {
+                const s = getSettings();
+                let currentRngMode = (s.rngEnabled && s.diceFunctionTool === false) ? 'legacy' : 'hybrid';
+                $(`input[name="rpg_sysprompt_rng_mode"][value="${currentRngMode}"]`).prop('checked', true);
+
+                $('input[name="rpg_sysprompt_rng_mode"]').on('change', function () {
+                    const fresh = getSettings();
+                    const val = $(this).val();
+                    if (val === 'hybrid') {
+                        fresh.rngEnabled = true;
+                        fresh.diceFunctionTool = true;
+                        registerDiceFunctionTool();
+                    } else {
+                        fresh.rngEnabled = true;
+                        fresh.diceFunctionTool = false;
+                    }
+                    saveSettings();
+                });
+            }
+
             $('#rpg_tracker_btn_apply_sysprompt').on('click', async function () {
-                const fileName = getSettings().questLegacyMode ? 'sysprompt_legacy.txt' : 'sysprompt.txt';
+                const fileName = getSettings().diceFunctionTool ? 'sysprompt.txt' : 'sysprompt_legacy.txt';
                 let content;
                 try {
                     const response = await fetch(`/scripts/extensions/third-party/${FOLDER_NAME}/${fileName}`);
@@ -3483,7 +3459,7 @@ Rules:
                     return;
                 }
 
-                if (typeof buildSysprompt === 'function') content = buildSysprompt(content);
+                content = buildSysprompt(content);
 
                 const mainTextarea = /** @type {HTMLTextAreaElement} */ (document.getElementById('main_prompt_quick_edit_textarea'));
                 if (mainTextarea) {
