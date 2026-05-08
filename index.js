@@ -22,6 +22,19 @@ import { registerLogQuestTool } from './quests.js';
     let _stateModelRunning = false;
     let _currentChatId = null;
     let themeUndoStack = [];
+
+    /**
+     * Centralized save helper that handles both global settings and
+     * the Chat-Linked State for the active chat.
+     */
+    function saveSettings() {
+        const s = getSettings();
+        const ctx = SillyTavern.getContext();
+        ctx.saveSettingsDebounced();
+        if (s.chatLinkEnabled && _currentChatId) {
+            saveChatState(_currentChatId);
+        }
+    }
     // ── Renderer / navigation state ──
     let _historyViewIndex = -1;    // -1 = live, 0 = most recent snapshot, higher = older
     let _renderedViewActive = false;
@@ -206,7 +219,7 @@ Rules:
         }
         settings.customTheme = vars;
         settings.trackerTheme = 'rt-theme-custom';
-        SillyTavern.getContext().saveSettingsDebounced();
+        saveSettings();
         applyCustomTheme(vars);
 
         document.querySelectorAll('.rpg-tracker-panel').forEach(p => {
@@ -255,7 +268,7 @@ Rules:
             nameSpan.addEventListener('click', () => {
                 settings.customTheme = JSON.parse(JSON.stringify(vars));
                 settings.trackerTheme = 'rt-theme-custom';
-                SillyTavern.getContext().saveSettingsDebounced();
+                saveSettings();
                 applyCustomTheme(settings.customTheme);
                 
                 // Update UI
@@ -281,7 +294,7 @@ Rules:
             delBtn.addEventListener('click', () => {
                 if (confirm(`Are you sure you want to delete the theme "${name}"?`)) {
                     delete settings.savedThemes[name];
-                    SillyTavern.getContext().saveSettingsDebounced();
+                    saveSettings();
                     refreshSavedThemesList();
                     toastr['info'](`Deleted theme: ${name}`, 'Theme Library');
                 }
@@ -321,7 +334,7 @@ Rules:
             const ss = getSettings();
             if (!ss.barColors) ss.barColors = {};
             ss.barColors[barId] = { ...cfg };
-            SillyTavern.getContext().saveSettingsDebounced();
+            saveSettings();
             refreshRenderedView();
         };
 
@@ -387,7 +400,7 @@ Rules:
                 const ss = getSettings();
                 if (initialCfg) ss.barColors[barId] = initialCfg;
                 else delete ss.barColors[barId];
-                SillyTavern.getContext().saveSettingsDebounced();
+                saveSettings();
                 refreshRenderedView();
                 popup.remove();
             });
@@ -395,7 +408,7 @@ Rules:
             popup.querySelector('#recolor-reset').addEventListener('click', () => {
                 const ss = getSettings();
                 if (ss.barColors) delete ss.barColors[barId];
-                SillyTavern.getContext().saveSettingsDebounced();
+                saveSettings();
                 refreshRenderedView();
                 popup.remove();
             });
@@ -520,7 +533,7 @@ Rules:
      */
     async function runStateModelPass(narrativeOutput, isFullContext = false, overrideLookback = null) {
         const settings = getSettings();
-        const { generateRaw, saveSettingsDebounced } = SillyTavern.getContext();
+        const { generateRaw } = SillyTavern.getContext();
 
         if (!generateRaw) {
             console.error("[RPG Tracker] generateRaw not found in context.");
@@ -632,7 +645,7 @@ Rules:
                 updateUIMemo(merged);
                 syncMemoView();
                 refreshRenderedView();
-                saveSettingsDebounced();
+                saveSettings();
 
                 if (settings.debugMode) console.log("[RPG Tracker] State Model pass complete.");
 
@@ -673,7 +686,7 @@ Rules:
         }
 
         const settings = getSettings();
-        const { generateRaw, saveSettingsDebounced } = SillyTavern.getContext();
+        const { generateRaw } = SillyTavern.getContext();
         if (!generateRaw) return;
 
         try {
@@ -755,7 +768,7 @@ Rules:
                     updateUIMemo(merged);
                     syncMemoView();
                     refreshRenderedView();
-                    saveSettingsDebounced();
+                    saveSettings();
                     toastr['success']('Tracker updated.', 'RPG Tracker');
                 } else {
                     toastr['info']('No changes were made.', 'RPG Tracker');
@@ -836,7 +849,7 @@ Rules:
         
         // Sync quests to memo for Raw View
         syncQuestsToMemo();
-        SillyTavern.getContext().saveSettingsDebounced();
+        saveSettings();
         // Refresh UI
         refreshOrderList();
         // Refresh delta panel
@@ -899,7 +912,7 @@ Rules:
                 delete extensionSettings[MODULE_NAME].blockOrder;
                 delete extensionSettings[MODULE_NAME].modules;
                 refreshOrderList();
-                ctx2.saveSettingsDebounced();
+                saveSettings();
 
                 // 3. Fetch sysprompt.txt and apply to ST Quick Prompt "Main"
                 const fileName = 'sysprompt.txt';
@@ -992,7 +1005,7 @@ Rules:
                 const idx = s.fullViewSections.indexOf(tag);
                 if (idx === -1) s.fullViewSections.push(tag);
                 else s.fullViewSections.splice(idx, 1);
-                SillyTavern.getContext().saveSettingsDebounced();
+                saveSettings();
                 refresh();
             });
         });
@@ -1299,7 +1312,7 @@ Rules:
                 const s = getSettings();
                 // Pause button only toggles the paused state, not the enabled state
                 s.paused = !s.paused;
-                SillyTavern.getContext().saveSettingsDebounced();
+                saveSettings();
                 updatePanelStatus();
             });
         }
@@ -1384,7 +1397,7 @@ Rules:
                 }
 
                 s.chatLinkEnabled = turningOn;
-                SillyTavern.getContext().saveSettingsDebounced();
+                saveSettings();
                 updateChatLinkUI();
             });
         }
@@ -1404,7 +1417,7 @@ Rules:
             syncQuestsFromMemo(newText);
 
             panel.querySelector('#rpg-tracker-count').textContent = `~${Math.round(settings.currentMemo.length / 2.62)} tokens`;
-            SillyTavern.getContext().saveSettingsDebounced();
+            saveSettings();
             // Refresh the rendered view live so changes are visible without toggling modes
             clearTimeout(_rawEditDebounce);
             _rawEditDebounce = setTimeout(refreshRenderedView, 400);
@@ -1442,7 +1455,7 @@ Rules:
             rngBtn.addEventListener('click', () => {
                 const s = getSettings();
                 s.rngEnabled = !s.rngEnabled;
-                SillyTavern.getContext().saveSettingsDebounced();
+                saveSettings();
                 syncFooterToggles();
                 toastr['info'](`RNG Queue ${s.rngEnabled ? 'Enabled' : 'Disabled'}.`, 'Fatbody Framework');
             });
@@ -1452,7 +1465,7 @@ Rules:
             diceToolBtn.addEventListener('click', () => {
                 const s = getSettings();
                 s.diceFunctionTool = !s.diceFunctionTool;
-                SillyTavern.getContext().saveSettingsDebounced();
+                saveSettings();
                 syncFooterToggles();
                 registerDiceFunctionTool();
                 toastr['info'](`Tool Call RNG ${s.diceFunctionTool ? 'Enabled' : 'Disabled'}.`, 'Fatbody Framework');
@@ -1493,7 +1506,7 @@ Rules:
         _viewBtn.addEventListener('click', () => {
             _renderedViewActive = !_renderedViewActive;
             settings.renderedViewActive = _renderedViewActive;
-            SillyTavern.getContext().saveSettingsDebounced();
+            saveSettings();
             applyViewState();
         });
 
@@ -1515,7 +1528,7 @@ Rules:
             settings.lastDelta = '';
             const dp = document.getElementById('rpg-tracker-delta-content');
             if (dp) dp.innerHTML = '<span class="delta-empty">Log cleared.</span>';
-            SillyTavern.getContext().saveSettingsDebounced();
+            saveSettings();
         });
 
         // Delta resize handle drag
@@ -1529,7 +1542,7 @@ Rules:
             if (settings.closeCount === 1 || settings.closeCount % 10 === 0) {
                 toastr['info']('Tracker hidden. You can reopen it at any time from the Extensions (Wand) Menu.', 'RPG Tracker');
             }
-            SillyTavern.getContext().saveSettingsDebounced();
+            saveSettings();
         });
 
         // Direct prompt toggle
@@ -1554,7 +1567,7 @@ Rules:
         });
         panel.querySelector('#rt-prompt-context-val').addEventListener('change', (e) => {
             settings.directPromptContext = parseInt(/** @type {HTMLInputElement} */(e.target).value) || 0;
-            SillyTavern.getContext().saveSettingsDebounced();
+            saveSettings();
         });
 
         // Manual update from panel button
@@ -1653,7 +1666,7 @@ Rules:
             s.memoHistory = s.memoHistory.slice(_historyViewIndex + 1);
             s.currentMemo = snapshot;
             _historyViewIndex = -1;
-            SillyTavern.getContext().saveSettingsDebounced();
+            saveSettings();
             syncMemoView();
         });
 
@@ -1666,7 +1679,7 @@ Rules:
                 settings.memoHistory = [];
                 settings.lastDelta = "";
                 _historyViewIndex = -1;
-                SillyTavern.getContext().saveSettingsDebounced();
+                saveSettings();
                 syncMemoView();
                 const dp = document.getElementById('rpg-tracker-delta-content');
                 if (dp) dp.innerHTML = '<span class="delta-empty">Log cleared.</span>';
@@ -2190,7 +2203,7 @@ Rules:
             delete field.renderType;
 
             overlay.remove();
-            SillyTavern.getContext().saveSettingsDebounced();
+            saveSettings();
             refreshOrderList();
             refreshRenderedView();
         };
@@ -2207,7 +2220,7 @@ Rules:
                     updateUIMemo(s.currentMemo);
                 }
                 overlay.remove();
-                SillyTavern.getContext().saveSettingsDebounced();
+                saveSettings();
                 refreshOrderList();
                 refreshRenderedView();
             }
@@ -2496,7 +2509,7 @@ Rules:
             return;
         }
 
-        SillyTavern.getContext().saveSettingsDebounced();
+        saveSettings();
         refreshOrderList();
         syncMemoView();
         toastr['success'](`Imported ${importedCount} custom module(s).`, 'Fatbody Framework');
@@ -2573,7 +2586,7 @@ Rules:
                 } else {
                     field.enabled = cb.checked;
                 }
-                SillyTavern.getContext().saveSettingsDebounced();
+                saveSettings();
                 refreshOrderList();
                 refreshRenderedView();
             };
@@ -2605,7 +2618,7 @@ Rules:
                         DEFAULT_STOCK_PROMPTS[mod],
                         (newVal) => {
                             s.stockPrompts[mod] = newVal;
-                            SillyTavern.getContext().saveSettingsDebounced();
+                            saveSettings();
                             toastr['success'](`[${tag}] prompt updated.`, 'RPG Tracker');
                         }
                     );
@@ -2624,7 +2637,7 @@ Rules:
                 const newOrder = [...order];
                 [newOrder[index - 1], newOrder[index]] = [newOrder[index], newOrder[index - 1]];
                 s.blockOrder = newOrder;
-                SillyTavern.getContext().saveSettingsDebounced();
+                saveSettings();
                 refreshOrderList();
                 refreshRenderedView();
             };
@@ -2638,7 +2651,7 @@ Rules:
                 const newOrder = [...order];
                 [newOrder[index + 1], newOrder[index]] = [newOrder[index], newOrder[index + 1]];
                 s.blockOrder = newOrder;
-                SillyTavern.getContext().saveSettingsDebounced();
+                saveSettings();
                 refreshOrderList();
                 refreshRenderedView();
             };
@@ -2700,24 +2713,24 @@ Rules:
                 if (settings.stockPrompts.quests.includes('JSON object with an "updates" array')) {
                     settings.stockPrompts.quests = DEFAULT_STOCK_PROMPTS.quests_legacy;
                     console.log('[RPG Tracker] Legacy Mode detected: Synchronized quest stock prompt to legacy version.');
-                    ctx.saveSettingsDebounced();
+                    saveSettings();
                 }
             }
 
             $('#rpg_tracker_enabled').prop('checked', settings.enabled).on('change', function () {
                 settings.enabled = !!$(this).prop('checked');
-                ctx.saveSettingsDebounced();
+                saveSettings();
                 updatePanelStatus();
             });
 
             $('#rpg_tracker_debug').prop('checked', settings.debugMode).on('change', function () {
                 settings.debugMode = !!$(this).prop('checked');
-                ctx.saveSettingsDebounced();
+                saveSettings();
             });
 
             $('#rpg_tracker_legacy_dice').prop('checked', settings.legacyDiceNaming).on('change', function () {
                 settings.legacyDiceNaming = !!$(this).prop('checked');
-                ctx.saveSettingsDebounced();
+                saveSettings();
                 registerDiceFunctionTool();
                 registerDiceSlashCommand();
                 toastr['info']("Dice logic updated.", "RPG Tracker");
@@ -2725,7 +2738,7 @@ Rules:
 
             $('#rpg_tracker_dice_function_tool').prop('checked', settings.diceFunctionTool).on('change', function () {
                 settings.diceFunctionTool = !!$(this).prop('checked');
-                ctx.saveSettingsDebounced();
+                saveSettings();
                 registerDiceFunctionTool();
             });
 
@@ -2736,7 +2749,7 @@ Rules:
                 // If we're turning it on from the settings menu, just simulate the button click logic
                 // but keep it simple here. The panel button is the primary toggle.
                 s.chatLinkEnabled = turningOn;
-                ctx.saveSettingsDebounced();
+                saveSettings();
                 updateChatLinkUI();
                 
                 if (turningOn && _currentChatId) {
@@ -2759,7 +2772,7 @@ Rules:
                 if (count === 0) return toastr['info']('No saved chat states to clear.', 'RPG Tracker');
                 if (confirm(`Clear ALL ${count} saved chat state(s)?\n\nThis removes the auto-saved tracker data for every chat. Your current live state is unaffected.\n\nProceed?`)) {
                     s.chatStates = {};
-                    ctx.saveSettingsDebounced();
+                    saveSettings();
                     toastr['success'](`Cleared ${count} chat state(s).`, 'RPG Tracker');
                 }
             });
@@ -2808,19 +2821,19 @@ Rules:
             sourceSelect.val(settings.connectionSource).on('change', function () {
                 settings.connectionSource = $(this).val();
                 updateConnectionPanels();
-                ctx.saveSettingsDebounced();
+                saveSettings();
             });
             updateConnectionPanels();
 
             // Ollama
             $('#rpg_tracker_ollama_url').val(settings.ollamaUrl).on('input', function () {
                 settings.ollamaUrl = $(this).val();
-                ctx.saveSettingsDebounced();
+                saveSettings();
             });
             const ollamaModelSelect = $('#rpg_tracker_ollama_model');
             ollamaModelSelect.val(settings.ollamaModel).on('change', function () {
                 settings.ollamaModel = $(this).val();
-                ctx.saveSettingsDebounced();
+                saveSettings();
             });
 
             async function refreshOllamaModelsList() {
@@ -2845,11 +2858,11 @@ Rules:
             // OpenAI
             $('#rpg_tracker_openai_url').val(settings.openaiUrl).on('input', function () {
                 settings.openaiUrl = $(this).val();
-                ctx.saveSettingsDebounced();
+                saveSettings();
             });
             $('#rpg_tracker_openai_key').val(settings.openaiKey).on('input', function () {
                 settings.openaiKey = $(this).val();
-                ctx.saveSettingsDebounced();
+                saveSettings();
             });
 
             const openaiModelSelect = $('#rpg_tracker_openai_model');
@@ -2872,7 +2885,7 @@ Rules:
                 } else {
                     settings.openaiModel = String(openaiModelManual.val() || '').trim() || '';
                 }
-                ctx.saveSettingsDebounced();
+                saveSettings();
             });
             openaiModelManual.on('input', function () {
                 const manual = String($(this).val() || '').trim();
@@ -2881,7 +2894,7 @@ Rules:
                     openaiModelSelect.val('');
                 }
                 settings.openaiModel = manual || openaiModelSelect.val() || '';
-                ctx.saveSettingsDebounced();
+                saveSettings();
             });
 
             async function refreshOpenAIModelsList() {
@@ -2933,7 +2946,7 @@ Rules:
 
             maxTokensInput.val(settings.maxTokens || "").on('input', function () {
                 settings.maxTokens = parseInt(/** @type {string} */($(this).val())) || 0;
-                ctx.saveSettingsDebounced();
+                saveSettings();
             });
 
             // Advanced Options
@@ -2941,14 +2954,14 @@ Rules:
             if (lookbackInput.length) {
                 lookbackInput.val(settings.lookbackMessages !== undefined ? settings.lookbackMessages : 2).on('input', function () {
                     settings.lookbackMessages = parseInt(/** @type {string} */($(this).val())) || 2;
-                    ctx.saveSettingsDebounced();
+                    saveSettings();
                 });
             }
             const historyCountInput = $('#rpg_tracker_history_count');
             if (historyCountInput.length) {
                 historyCountInput.val(settings.trackerHistoryCount !== undefined ? settings.trackerHistoryCount : 1).on('input', function () {
                     settings.trackerHistoryCount = parseInt(/** @type {string} */($(this).val())) || 1;
-                    ctx.saveSettingsDebounced();
+                    saveSettings();
                 });
             }
 
@@ -2989,7 +3002,7 @@ Rules:
                         } else {
                             settings.lorebookFilter = settings.lorebookFilter.filter(b => b !== book);
                         }
-                        ctx.saveSettingsDebounced();
+                        saveSettings();
                     });
                     $container.append($item);
                 });
@@ -2999,7 +3012,7 @@ Rules:
                 settings.ctxWorldInfo = !!$(this).prop('checked');
                 if (settings.ctxWorldInfo) await refreshLorebookList();
                 $('#rpg_tracker_lorebook_filter_group').toggle(settings.ctxWorldInfo);
-                ctx.saveSettingsDebounced();
+                saveSettings();
             }).trigger('change');
 
             $('#rpg_tracker_lorebook_list_refresh').on('click', async function () {
@@ -3035,7 +3048,7 @@ Rules:
             themeSelect.on('change', function () {
                 const newTheme = String($(this).val());
                 settings.trackerTheme = newTheme;
-                ctx.saveSettingsDebounced();
+                saveSettings();
                 showHideWizard(newTheme);
                 const panel = document.getElementById('rpg-tracker-panel');
                 if (panel) {
@@ -3060,7 +3073,7 @@ Rules:
                     }
                     if (!settings.savedThemes) settings.savedThemes = {};
                     settings.savedThemes[trimmedName] = JSON.parse(JSON.stringify(settings.customTheme));
-                    SillyTavern.getContext().saveSettingsDebounced();
+                    saveSettings();
                     refreshSavedThemesList();
                     toastr['success'](`Saved "${name}" to library.`, 'Theme Library');
                 }
@@ -3072,7 +3085,7 @@ Rules:
                 }
                 const prev = themeUndoStack.pop();
                 settings.customTheme = prev;
-                ctx.saveSettingsDebounced();
+                saveSettings();
                 applyCustomTheme(prev);
                 const statusEl = document.getElementById('rpg_tracker_theme_wizard_status');
                 if (statusEl) { 
@@ -3089,7 +3102,7 @@ Rules:
                 const val = parseInt(String($(this).val()));
                 if (isNaN(val) || val < 8 || val > 32) return;
                 settings.fontSize = val;
-                ctx.saveSettingsDebounced();
+                saveSettings();
                 updateTrackerFontSize(val);
             });
 
@@ -3108,7 +3121,7 @@ Rules:
             }
             profileSelect.on('change', function () {
                 settings.connectionProfileId = $(this).val();
-                ctx.saveSettingsDebounced();
+                saveSettings();
             });
 
             // Populate presets
@@ -3130,7 +3143,7 @@ Rules:
             }
             presetSelect.on('change', function () {
                 settings.completionPresetId = $(this).val();
-                ctx.saveSettingsDebounced();
+                saveSettings();
             });
 
             // Initial order list refresh
@@ -3156,7 +3169,7 @@ Rules:
                     enabled: true
                 });
                 refreshOrderList();
-                ctx.saveSettingsDebounced();
+                saveSettings();
             });
 
             $('#rpg_tracker_export_all_modules').on('click', () => {
@@ -3266,7 +3279,7 @@ Rules:
                         updateUIMemo(s.currentMemo);
                     }
 
-                    SillyTavern.getContext().saveSettingsDebounced();
+                    saveSettings();
                     refreshOrderList();
                     syncMemoView();
                     toastr['success']('All custom modules deleted.', 'RPG Tracker');
@@ -3275,7 +3288,7 @@ Rules:
 
             $('#rpg_tracker_core_prompt').val(settings.systemPromptTemplate).on('input', function () {
                 settings.systemPromptTemplate = $(this).val();
-                ctx.saveSettingsDebounced();
+                saveSettings();
             });
 
             $('#rpg_tracker_btn_reset_prompt').on('click', function () {
@@ -3285,7 +3298,7 @@ Rules:
                 delete extensionSettings[MODULE_NAME].systemPromptTemplate;
                 const freshSettings = getSettings(); // re-merges defaults
                 $('#rpg_tracker_core_prompt').val(freshSettings.systemPromptTemplate);
-                ctx.saveSettingsDebounced();
+                saveSettings();
                 toastr['success']('Core prompt reset to default.', 'RPG Tracker');
             });
 
@@ -3296,7 +3309,7 @@ Rules:
                 delete extensionSettings[MODULE_NAME].blockOrder;
                 delete extensionSettings[MODULE_NAME].modules;
                 refreshOrderList();
-                ctx.saveSettingsDebounced();
+                saveSettings();
                 toastr['success']('Stock modules, order, and prompts reset to factory defaults.', 'RPG Tracker');
             });
 
@@ -3324,7 +3337,7 @@ Rules:
                 }
                 
                 refreshOrderList();
-                ctx.saveSettingsDebounced();
+                saveSettings();
 
                 // 3. Fetch sysprompt and apply to ST Quick Prompt "Main"
                 const fileName = getSettings().questLegacyMode ? 'sysprompt_legacy.txt' : 'sysprompt.txt';
@@ -3395,7 +3408,7 @@ Rules:
                         registerLogQuestTool();
                     }
 
-                    ctx.saveSettingsDebounced();
+                    saveSettings();
                 });
             });
 
@@ -3419,7 +3432,7 @@ Rules:
                     }
                     refreshOrderList();
                     registerLogQuestTool();
-                    ctx.saveSettingsDebounced();
+                    saveSettings();
                 });
             }
 
@@ -3484,7 +3497,7 @@ Rules:
                     settings.prevMemo2 = "";
                     settings.memoHistory = [];
                     settings.lastDelta = "";
-                    ctx.saveSettingsDebounced();
+                    saveSettings();
                     updateUIMemo("");
                     const dp = document.getElementById('rpg-tracker-delta-content');
                     if (dp) dp.innerHTML = '<span class="delta-empty">Log cleared.</span>';
@@ -3498,7 +3511,7 @@ Rules:
                     delete extensionSettings[MODULE_NAME];
                     // Force re-initialization of defaults
                     getSettings();
-                    ctx.saveSettingsDebounced();
+                    saveSettings();
                     toastr['success']("Framework has been reset to factory defaults. Reloading in 2 seconds...", "RPG Tracker");
                     setTimeout(() => location.reload(), 2000);
                 }
