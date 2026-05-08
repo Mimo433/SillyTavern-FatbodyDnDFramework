@@ -2653,6 +2653,7 @@ Rules:
             content = content.replace(/ {2}· 1\.0 = Normal.*\n/g, '');
             content = content.replace(/ {2}· 3\.0 = Volatile.*\n/g, '');
             content = content.replace(/- The NPC Mood evolves continuously.*\n/g, '');
+            content = content.replace(/- If a quest is time-sensitive and the deadline passes.*\n/g, '');
             content = content.replace(/- Set auto_fail to true ONLY.*\n/g, '');
         }
 

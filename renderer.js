@@ -912,6 +912,7 @@ export function renderQuestLog(quests, currentTime, collapsed, detached, filterT
         let statusBadgeClass = 'rt-quest-badge-active';
         let statusLabel = 'Active';
         if (quest.status === 'completed') { statusBadgeClass = 'rt-quest-badge-completed'; statusLabel = 'Completed'; }
+        if (quest.status === 'past deadline') { statusBadgeClass = 'rt-quest-badge-failed'; statusLabel = 'Past Deadline'; }
         if (quest.status === 'failed')    { statusBadgeClass = 'rt-quest-badge-failed';    statusLabel = 'Failed'; }
 
         const objectives = (quest.objectives || []).map(obj => {

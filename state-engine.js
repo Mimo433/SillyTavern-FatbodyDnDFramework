@@ -167,7 +167,7 @@ export function mergeQuestUpdates(jsonText) {
         if (!quest) continue;
         if (quest.status === 'failed') continue;
 
-        if (update.status && ['active', 'completed'].includes(update.status)) {
+        if (update.status && ['active', 'completed', 'past deadline', 'failed'].includes(update.status)) {
             quest.status = update.status;
             changed = true;
         }
