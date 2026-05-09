@@ -116,14 +116,15 @@ import { registerLogQuestTool, checkQuestDeadlines } from './quests.js';
         if (saved.blockOrder)   s.blockOrder   = JSON.parse(JSON.stringify(saved.blockOrder));
         if (saved.stockPrompts) s.stockPrompts = JSON.parse(JSON.stringify(saved.stockPrompts));
         if (saved.customFields) s.customFields = JSON.parse(JSON.stringify(saved.customFields));
-        if (saved.quests)       s.quests       = JSON.parse(JSON.stringify(saved.quests));
-        else s.quests = [];
+        // quests are derived from currentMemo, do not load independently
+        s.quests = [];
         s.historyIndex = saved.historyIndex ?? -1;
 
         _historyViewIndex = -1;
         
-        // Ensure the [QUESTS] block is present in the memo for Raw View editing
-        syncQuestsToMemo();
+        // currentMemo is the source of truth for quest state.
+        // Derive settings.quests FROM it rather than injecting quests BACK INTO the memo.
+        syncQuestsFromMemo(s.currentMemo);
 
         const dp = document.getElementById('rpg-tracker-delta-content');
         if (dp) dp.innerHTML = s.lastDelta || '<span class="delta-empty">No changes yet.</span>';
