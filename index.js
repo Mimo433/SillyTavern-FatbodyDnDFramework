@@ -731,20 +731,18 @@ Rules:
                 if (settings.historyIndex !== undefined && settings.historyIndex !== -1) {
                     if (settings.debugMode) console.log(`[RPG Tracker] Splicing history at index ${settings.historyIndex} due to new update.`);
                     settings.memoHistory = settings.memoHistory.slice(settings.historyIndex);
-                    // Note: We slice from historyIndex because the stone AT historyIndex (the one we were at) 
-                    // will be replaced by the new unshift.
                 }
 
-                // 2. Ensure the state BEFORE this generation is preserved if it's the very first stone
-                if (settings.memoHistory.length === 0) {
-                    settings.memoHistory.push(sanitizedCurrent);
+                // 2. Archive the state BEFORE this generation to history
+                if (settings.memoHistory[0] !== sanitizedCurrent) {
+                    settings.memoHistory.unshift(sanitizedCurrent);
                 }
 
-                // 3. Unshift the NEW state as the latest stone
+                // 3. Archive the NEW state so it's always recoverable via navigation
                 settings.memoHistory.unshift(merged);
                 if (settings.memoHistory.length > 1000) settings.memoHistory.length = 1000;
 
-                // 4. Set pointer to the latest stone
+                // 4. Set pointer to the NEW state (the live stone)
                 settings.historyIndex = 0;
                 _historyViewIndex = -1;
 
@@ -884,8 +882,18 @@ Rules:
                 if (merged !== sanitizedCurrent) {
                     const delta = computeDelta(sanitizedCurrent, merged);
                     settings.lastDelta = delta;
-                    settings.memoHistory.unshift(sanitizedCurrent);
-                    if (settings.memoHistory.length > 5) settings.memoHistory.length = 5;
+
+                    // Linear Stone History Logic
+                    if (settings.historyIndex !== undefined && settings.historyIndex !== -1) {
+                        settings.memoHistory = settings.memoHistory.slice(settings.historyIndex);
+                    }
+                    if (settings.memoHistory[0] !== sanitizedCurrent) {
+                        settings.memoHistory.unshift(sanitizedCurrent);
+                    }
+                    settings.memoHistory.unshift(merged);
+                    if (settings.memoHistory.length > 1000) settings.memoHistory.length = 1000;
+                    settings.historyIndex = 0;
+                    _historyViewIndex = -1;
 
                     const dp = document.getElementById('rpg-tracker-delta-content');
                     if (dp) dp.innerHTML = delta;
@@ -1929,14 +1937,15 @@ Rules:
             const snapshot = s.memoHistory[_historyViewIndex];
             if (snapshot === undefined) return;
 
-            // Commit: set currentMemo to this snapshot and mark our point in history.
-            // Nothing is deleted until the NEXT state update actually overwrites it.
-            // Quests are automatically rolled back because they live IN the memo text.
+            // Simply move the live pointer to this snapshot.
+            // The history already contains all states — no need to archive currentMemo here.
+            // Direct Prompt and runStateModelPass handle archiving when they produce new states.
             s.currentMemo = snapshot;
             s.historyIndex = _historyViewIndex;
             _historyViewIndex = -1;
             saveSettings();
             syncMemoView();
+            toastr['success']('Historical state restored as LIVE.', 'RPG Tracker');
         });
 
         // Clear memo button
@@ -1946,6 +1955,7 @@ Rules:
                 settings.prevMemo1 = "";
                 settings.prevMemo2 = "";
                 settings.memoHistory = [];
+                settings.historyIndex = -1;
                 settings.lastDelta = "";
                 _historyViewIndex = -1;
                 saveSettings();
