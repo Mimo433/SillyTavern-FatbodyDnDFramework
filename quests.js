@@ -197,7 +197,7 @@ export function registerLogQuestTool() {
 
         if (isDeadlines) {
             toolDescription +=
-                ' If the quest is time-sensitive, supply deadline_time in the format "HH:MM AM/PM, Day N". ' +
+                ' If the quest is time-sensitive, you MUST calculate and supply deadline_time in the format "HH:MM AM/PM, Day N". ' +
                 (isFrustration
                     ? 'Do NOT set auto_fail when Frustration is enabled — the frustration_coefficient handles consequences instead. ' +
                       'Reserve status "failed" only for quests that are logically impossible to complete or explicitly called off by the NPC.'
@@ -255,9 +255,9 @@ export function registerLogQuestTool() {
             properties.deadline_time = {
                 type: 'string',
                 description:
-                    'In-world timestamp when the quest must be completed (e.g. "06:00 PM, Day 4"). ' +
-                    'Omit or set to null if there is no deadline. ' +
-                    'Use "none" only if the NPC explicitly stated there is no time pressure.'
+                    'The exact in-world timestamp when the quest must be completed (e.g. "06:00 PM, Day 4"). ' +
+                    'If the narrative specifies a duration (e.g., "four days"), you MUST calculate the absolute Day N timestamp based on the current time. ' +
+                    'Omit only if the quest has no time pressure whatsoever.'
             };
             if (!isFrustration) {
                 properties.auto_fail = {

@@ -114,7 +114,7 @@ Track XP as a running total across outputs. XP should be attributed for all mean
 </xp_system>
 
 <quests>
-When the player formally accepts a quest or task from an NPC, you MUST call the LogQuest tool. Conclude your narrative with [QUEST ACCEPTED]. Do NOT do this for rumors, casual mentions, or tasks the player has not yet agreed to.
+When the player formally accepts a quest or task from an NPC, you MUST call the LogQuest tool. If a duration is given (e.g., 'four days'), you MUST calculate the specific "Day N" timestamp based on the current in-world time. After LogQuest finishes, output *[QUEST ACCEPTED]*. Do NOT do this for rumors, casual mentions, or tasks the player has not yet agreed to.
 </quests>
 
 <level_up_protocol>
