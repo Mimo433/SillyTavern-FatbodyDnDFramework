@@ -100,41 +100,56 @@ export function checkQuestDeadlines() {
 
 /**
  * Generates the plain-text block injected into the narrative model context.
- * Only includes active quests.
+ * Only includes active (and past-deadline) quests.
  */
 export function renderQuestsAsPlainText(quests, currentTime) {
     if (!quests || !quests.length) return "";
     
-    const activeQuests = quests.filter(q => q.status === 'active');
-    if (activeQuests.length === 0) return "";
+    const settings = getSettings();
+    const showDeadlines   = !!settings.syspromptModules?.questsDeadlines;
+    const showFrustration = !!settings.syspromptModules?.questsFrustration;
+
+    const relevantQuests = quests.filter(q => q.status === 'active' || q.status === 'past deadline');
+    if (relevantQuests.length === 0) return "";
     
     let text = "### ACTIVE QUESTS\n";
-    for (const q of activeQuests) {
+    for (const q of relevantQuests) {
         text += `- **${q.title}** (Given by ${q.giver_name} at ${q.giver_location})\n`;
-        const settings = getSettings();
-        if (q.deadline_time && settings.isDeadlines) {
-            let moodInfo = '';
-            if (settings.isFrustration) {
-                const frust = computeFrustration(q, currentTime);
-                let moodLabel;
-                if (frust <= -0.5)       moodLabel = 'Very Pleased — NPC is optimistic you will make it';
-                else if (frust <= -0.1)  moodLabel = 'Pleased — on schedule';
-                else if (frust <=  0.1)  moodLabel = 'Neutral — at deadline';
-                else if (frust <=  0.5)  moodLabel = 'Mildly Frustrated — deadline missed';
-                else if (frust <=  1.0)  moodLabel = 'Frustrated — deadline missed';
-                else if (frust <=  1.5)  moodLabel = 'Very Frustrated — deadline passed long ago';
-                else                      moodLabel = 'Furious — NPC may withdraw the quest entirely';
-                moodInfo = ` (NPC Mood: ${moodLabel})`;
+
+        // Always show deadline/mood when data is available, regardless of module flags
+        if (q.deadline_time) {
+            const frust = computeFrustration(q, currentTime);
+            let moodLabel;
+            if (showFrustration) {
+                if (frust <= -0.5)      moodLabel = 'Very Pleased — NPC is optimistic you will make it';
+                else if (frust <= -0.1) moodLabel = 'Pleased — on schedule';
+                else if (frust <=  0.1) moodLabel = 'Neutral — at deadline';
+                else if (frust <=  0.5) moodLabel = 'Mildly Frustrated — deadline missed';
+                else if (frust <=  1.0) moodLabel = 'Frustrated — deadline missed';
+                else if (frust <=  1.5) moodLabel = 'Very Frustrated — deadline passed long ago';
+                else                    moodLabel = 'Furious — NPC may withdraw the quest entirely';
+            } else if (showDeadlines) {
+                if (frust <= 0)        moodLabel = 'Ahead of Schedule';
+                else if (frust <= 0.5) moodLabel = 'On Time';
+                else if (frust <= 1.0) moodLabel = 'Near Deadline';
+                else                   moodLabel = 'Overdue';
             }
+            const moodInfo = moodLabel ? ` — ${moodLabel}` : '';
             text += `  Deadline: ${q.deadline_time}${moodInfo}\n`;
+        } else if (q.accepted_time) {
+            // No deadline but frustration is on — still show mood based on elapsed time perception
+            // (no math possible without deadline, so skip label)
         }
+
         for (const obj of q.objectives) {
-            if (obj.status !== 'completed') {
-                text += `  - [ ] ${obj.text}${obj.required ? '' : ' (Optional)'}\n`;
-            } else {
-                text += `  - [x] ${obj.text}${obj.required ? '' : ' (Optional)'}\n`;
-            }
+            if (obj.status === 'completed') continue;
+            const progress = (typeof obj.progress === 'number' && typeof obj.total === 'number')
+                ? ` [${obj.progress}/${obj.total}]` : '';
+            const optional = obj.required ? '' : ' (Optional)';
+            const done = obj.status === 'completed';
+            text += `  - [${done ? 'x' : ' '}] ${obj.text}${progress}${optional}\n`;
         }
+
         if (q.rewards && q.rewards.length) {
             text += `  Rewards: ${q.rewards.join(', ')}\n`;
         }
