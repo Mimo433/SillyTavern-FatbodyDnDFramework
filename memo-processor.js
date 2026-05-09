@@ -591,7 +591,24 @@ export function buildModulesInstructionText(settings) {
     modulesText += "### CORE MODULES\n";
     for (const [key, prompt] of Object.entries(promptsMap)) {
         if (settings.modules[key]) {
-            modulesText += `- [${key.toUpperCase()}]: ${prompt}\n`;
+            let p = prompt;
+
+            // ── Dynamic prompt stripping for Legacy Quests ──────────────────
+            if (key === 'quests' && settings.questLegacyMode) {
+                const isDeadlines = !!settings.syspromptModules?.questsDeadlines;
+                const isFrustration = !!settings.syspromptModules?.questsFrustration;
+
+                if (!isDeadlines) {
+                    // Strip DEADLINE line
+                    p = p.replace(/\n\s*DEADLINE:.*?\n/g, '\n');
+                }
+                if (!isFrustration) {
+                    // Strip FRUSTRATION_COEFF line
+                    p = p.replace(/\n\s*FRUSTRATION_COEFF:.*?\n/g, '\n');
+                }
+            }
+
+            modulesText += `- [${key.toUpperCase()}]: ${p}\n`;
         }
     }
 
