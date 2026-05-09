@@ -2,6 +2,29 @@
 
 All notable changes to the **Fatbody D&D Framework** will be documented in this file.
 
+## [1.8.7] - 2026-05-09
+
+**Modular Pagination & History Persistence Refinements**  
+This update introduces granular UI controls for module pagination and resolves critical edge-cases in the state history architecture, particularly regarding "Direct Prompt" interventions and snapshot restoration.
+
+### Added
+- **Per-Module Pagination Thresholds**: You can now set independent pagination limits for every module (stock and custom).
+    - Added "Pagination Threshold" input to the **Custom Module Editor** and **Prompt Editor**.
+    - Changes update the UI in real-time as you type, allowing for instant layout fine-tuning.
+- **Robust "Linear Stone" History**: 
+    - **Dual-State Archiving**: Updates (both narrative and direct) now archive both the *old* and *new* states to history. This ensures that committing to a past state never permanently clobbers your most recent work.
+    - **Direct Prompt Persistence**: Fixed a bug where manual tracker updates via direct instructions were lost during history traversal.
+    - **Fluid Snapshot Restoration**: Clicking the nav label now restores a past state instantly without a confirmation popup, as the operation is now completely reversible.
+
+### Changed
+- **Unified History Depth**: Increased history limit for Direct Prompt updates from 5 to **1000 items** to match the narrative update cycle.
+- **UI Responsiveness**: Removed the requirement to save a module configuration to see pagination changes; the tracker now re-renders immediately upon input.
+
+### Fixed
+- **Infinite Snapshot Duplicate Bug**: Resolved a logic error where jumping between historical snapshots and the "Live" state would create redundant duplicates of the same state in the history stack.
+- **Clear State Pointer Bug**: Fixed a bug where clearing the tracker history didn't reset the internal state pointer, leading to incorrect history slicing on the next update.
+- **Empty State Archiving**: Fixed a guard condition that prevented archiving the very first state (empty) into history.
+
 
 ## [1.8.2] - 2026-05-05
 
