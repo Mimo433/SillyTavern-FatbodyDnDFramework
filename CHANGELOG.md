@@ -24,6 +24,7 @@ This update introduces granular UI controls for module pagination and resolves c
 - **Infinite Snapshot Duplicate Bug**: Resolved a logic error where jumping between historical snapshots and the "Live" state would create redundant duplicates of the same state in the history stack.
 - **Clear State Pointer Bug**: Fixed a bug where clearing the tracker history didn't reset the internal state pointer, leading to incorrect history slicing on the next update.
 - **Empty State Archiving**: Fixed a guard condition that prevented archiving the very first state (empty) into history.
+- **Quest Settings Persistence**: Fixed a regression where "Deadlines" and "Frustration Levels" toggles failed to persist across session reloads.
 
 
 ## [1.8.2] - 2026-05-05
