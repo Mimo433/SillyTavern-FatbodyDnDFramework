@@ -2915,17 +2915,25 @@ Rules:
             editBtn.innerHTML = '<i class="fa-solid fa-pen-to-square"></i>';
             editBtn.onclick = () => {
                 if (isStock) {
-                    const mod = tag.toLowerCase();
+                    let mod = tag.toLowerCase();
+                    let displayTag = tag;
+                    
+                    // Redirect QUESTS to quests_legacy if in legacy mode
+                    if (tag === 'QUESTS' && s.questLegacyMode) {
+                        mod = 'quests_legacy';
+                        displayTag = 'QUESTS (Legacy Mode)';
+                    }
+
                     if (!s.stockPrompts) s.stockPrompts = { ...DEFAULT_STOCK_PROMPTS };
                     openPromptEditor(
-                        tag,
-                        `Edit Default [${tag}] Prompt`,
-                        s.stockPrompts[mod],
+                        displayTag,
+                        `Edit Default [${displayTag}] Prompt`,
+                        s.stockPrompts[mod] || DEFAULT_STOCK_PROMPTS[mod],
                         DEFAULT_STOCK_PROMPTS[mod],
                         (newVal) => {
                             s.stockPrompts[mod] = newVal;
                             saveSettings();
-                            toastr['success'](`[${tag}] prompt updated.`, 'RPG Tracker');
+                            toastr['success'](`[${displayTag}] prompt updated.`, 'RPG Tracker');
                         }
                     );
                 } else {
@@ -2982,22 +2990,33 @@ Rules:
         if (!rawText) return "";
         const s = getSettings();
         const mods = s.syspromptModules || {};
+        
+        // 1. Tag-based module stripping and Quest mode swap
         let content = rawText
             .replace(/<(\w[\w_-]*)>([\s\S]*?)<\/\1>/g, (match, tag) => {
                 if (mods[tag] === false) return '';
                 // Inject correct instructions for quests based on legacy mode
                 if (tag === 'quests') {
-                    const instruction = s.questLegacyMode ? QUESTS_NARRATOR_LEGACY : QUESTS_NARRATOR_MODERN;
-                    return `<quests>\n${instruction}\n</quests>`;
+                    let instruction = s.questLegacyMode ? QUESTS_NARRATOR_LEGACY : QUESTS_NARRATOR_MODERN;
+                    // Strip Mood guidance if Frustration is off
+                    if (!mods.questsFrustration) {
+                        instruction = instruction.replace(/Use the MOOD field.*?\./g, '');
+                    }
+                    return `<quests>\n${instruction.trim()}\n</quests>`;
                 }
                 return match;
             });
 
-        // Handle Quests Hardcore rules stripping
+        // 2. Inject current module instructions
+        const modulesText = buildModulesInstructionText(s);
+        content = content.replace("{{modulesText}}", modulesText);
+
+        // 3. Handle Quests Hardcore rules stripping (Narrator guidance)
         if (!mods.questsDeadlines) {
             // Strip deadline assignment rule and auto_fail guidance
             content = content.replace(/- Assign an in-world Deadline.*\n/g, '');
             content = content.replace(/- Set auto_fail to true for quests.*\n/g, '');
+            content = content.replace(/- If a duration is given.* Day N.*\n/g, '');
         }
         if (!mods.questsFrustration) {
             // Strip frustration coefficient and mood rules
