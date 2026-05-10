@@ -274,6 +274,8 @@ export function registerLogQuestTool() {
             },
         };
 
+        const required = ['title', 'giver_name', 'giver_location', 'objectives'];
+
         if (isDifficulty) {
             properties.difficulty = {
                 type: 'string',
@@ -282,8 +284,6 @@ export function registerLogQuestTool() {
             };
             required.push('difficulty');
         }
-
-        const required = ['title', 'giver_name', 'giver_location', 'objectives'];
 
         if (isDeadlines) {
             properties.deadline_time = {

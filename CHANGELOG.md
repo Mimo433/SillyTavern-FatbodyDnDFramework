@@ -2,6 +2,14 @@
 
 All notable changes to the **Fatbody D&D Framework** will be documented in this file.
 
+## [1.8.19] - 2026-05-10
+
+**Fix: Tool Registration Bug**
+Fixed a `ReferenceError` that prevented the `LogQuest` tool from registering correctly when Difficulty was enabled.
+
+### Fixed
+- **Initialization Order**: Corrected the order of variable initialization in `quests.js` to ensure the `required` fields array is defined before being modified by the Difficulty logic.
+
 ## [1.8.18] - 2026-05-10
 
 **Enhancement: UI Consistency**
