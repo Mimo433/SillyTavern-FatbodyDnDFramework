@@ -476,6 +476,7 @@ export function parseQuestsFromText(text) {
             giver_location:         giverLoc,
             accepted_time:          getField('ACCEPTED'),
             deadline_time:          getField('DEADLINE'),
+            difficulty:             getField('DIFFICULTY'),
             frustration_coefficient: coeff !== null && !isNaN(coeff) ? coeff : undefined,
             objectives,
             rewards,
@@ -500,6 +501,7 @@ export function serializeQuestsToText(quests) {
         lines.push(`  GIVER: ${q.giver_name} @ ${q.giver_location}`);
         if (q.accepted_time)          lines.push(`  ACCEPTED: ${q.accepted_time}`);
         if (q.deadline_time)          lines.push(`  DEADLINE: ${q.deadline_time}`);
+        if (q.difficulty)             lines.push(`  DIFFICULTY: ${q.difficulty}`);
         if (q.frustration_coefficient != null)
                                       lines.push(`  FRUSTRATION_COEFF: ${q.frustration_coefficient}`);
 
@@ -764,16 +766,18 @@ export function buildModulesInstructionText(settings) {
             // ── Dynamic prompt swap for Legacy Quests ──────────────────────
             if (key === 'quests') {
                 const useLegacy = !!settings.questLegacyMode;
-                const promptType = useLegacy ? 'LEGACY' : 'MODERN/JSON';
-                console.log(`[RPG Tracker] buildModulesInstructionText: using ${promptType} quest prompt. (questLegacyMode=${useLegacy})`);
-                
                 if (useLegacy) {
                     const isDeadlines = !!settings.syspromptModules?.questsDeadlines;
                     const isFrustration = !!settings.syspromptModules?.questsFrustration;
+                    const isDifficulty = !!settings.syspromptModules?.questsDifficulty;
                     // Use the dedicated legacy format prompt
                     p = (promptsMap['quests_legacy'] || DEFAULT_STOCK_PROMPTS.quests_legacy);
                     if (!isDeadlines) p = p.replace(/\n\s*DEADLINE:.*?\n/g, '\n');
                     if (!isFrustration) p = p.replace(/\n\s*FRUSTRATION_COEFF:.*?\n/g, '\n');
+                    if (!isDifficulty) {
+                        p = p.replace(/\n\s*DIFFICULTY:.*?\n/g, '\n');
+                        p = p.replace(/\n- For difficulty, use the DIFFICULTY marker.*\n/g, '\n');
+                    }
                     console.log('[RPG Tracker] Quest prompt: using LEGACY format (questLegacyMode=true)');
                 } else {
                     console.log('[RPG Tracker] Quest prompt: using MODERN/JSON format (questLegacyMode=false)');

@@ -132,7 +132,8 @@ You may be asked to use Markers: ((PLS)), ((B)), ((XB)), ((BDG)), ((HGT)). These
             resting: true,
             quests: true,
             questsDeadlines: false,
-            questsFrustration: false
+            questsFrustration: false,
+            questsDifficulty: false
         }
     };
 

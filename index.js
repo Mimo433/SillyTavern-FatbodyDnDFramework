@@ -73,6 +73,10 @@ import { registerLogQuestTool, checkQuestDeadlines } from './quests.js';
         const frustration = /** @type {HTMLInputElement|null} */ (onboarding.querySelector('#rt_onboarding_quests_frustration'));
         if (frustration) frustration.checked = !!s.syspromptModules?.questsFrustration;
 
+        // Difficulty Sync
+        const difficulty = /** @type {HTMLInputElement|null} */ (onboarding.querySelector('#rt_onboarding_quests_difficulty'));
+        if (difficulty) difficulty.checked = !!s.syspromptModules?.questsDifficulty;
+
         // Quest Processing Mode Sync
         const qmStandard = /** @type {HTMLInputElement|null} */ (onboarding.querySelector('#rt_onboarding_quest_standard'));
         const qmLegacy = /** @type {HTMLInputElement|null} */ (onboarding.querySelector('#rt_onboarding_quest_legacy'));
@@ -117,6 +121,10 @@ import { registerLogQuestTool, checkQuestDeadlines } from './quests.js';
                 prompt = prompt.replace(/  MOOD:.*\n/g, '');
                 prompt = prompt.replace(/- The MOOD field.*\n/g, '');
             }
+        }
+        if (!s.syspromptModules?.questsDifficulty) {
+            prompt = prompt.replace(/  DIFFICULTY:.*\n/g, '');
+            prompt = prompt.replace(/- For difficulty, use the DIFFICULTY marker.*\n/g, '');
         }
         if (!s.stockPrompts) s.stockPrompts = {};
         // Write ONLY to the legacy slot — the runtime swap in buildModulesInstructionText
@@ -1123,6 +1131,8 @@ Rules:
             if (questsCb) questsCb.checked = fresh.syspromptModules?.quests !== false;
             if (deadlinesCb) deadlinesCb.checked = !!fresh.syspromptModules?.questsDeadlines;
             if (frustrationCb) frustrationCb.checked = !!fresh.syspromptModules?.questsFrustration;
+            const difficultyCb = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_quests_difficulty'));
+            if (difficultyCb) difficultyCb.checked = !!fresh.syspromptModules?.questsDifficulty;
             if (qmStandard && qmLegacy) {
                 qmStandard.checked = !fresh.questLegacyMode;
                 qmLegacy.checked = !!fresh.questLegacyMode;
@@ -1203,6 +1213,18 @@ Rules:
             });
         }
 
+        // Difficulty Sync
+        const onboardingDifficultyCb = el.querySelector('#rt_onboarding_quests_difficulty');
+        if (onboardingDifficultyCb) {
+            onboardingDifficultyCb.checked = !!s.syspromptModules?.questsDifficulty;
+            onboardingDifficultyCb.addEventListener('change', () => {
+                syncSettingsAndUI(settings => {
+                    if (!settings.syspromptModules) settings.syspromptModules = {};
+                    settings.syspromptModules.questsDifficulty = !!onboardingDifficultyCb.checked;
+                });
+            });
+        }
+
         // Quest Mode Sync
         const onboardingQuestModeInputs = el.querySelectorAll('input[name="rt_onboarding_quest_mode"]');
         onboardingQuestModeInputs.forEach(input => {
@@ -1262,6 +1284,11 @@ Rules:
                 if (frustrationCb) {
                     if (!s.syspromptModules) s.syspromptModules = {};
                     s.syspromptModules.questsFrustration = !!frustrationCb.checked;
+                }
+                const difficultyCb = /** @type {HTMLInputElement|null} */ (el.querySelector('#rt_onboarding_quests_difficulty'));
+                if (difficultyCb) {
+                    if (!s.syspromptModules) s.syspromptModules = {};
+                    s.syspromptModules.questsDifficulty = !!difficultyCb.checked;
                 }
                 const qmLegacy = /** @type {HTMLInputElement|null} */ (el.querySelector('#rt_onboarding_quest_legacy'));
                 if (qmLegacy) s.questLegacyMode = !!qmLegacy.checked;
@@ -3037,6 +3064,11 @@ Rules:
                     // Strip Mood guidance if Frustration is off
                     if (!mods.questsFrustration) {
                         instruction = instruction.replace(/Use the MOOD field.*?\./g, '');
+                    }
+                    // Strip Difficulty guidance if Difficulty is off
+                    if (!mods.questsDifficulty) {
+                        instruction = instruction.replace(/the difficulty \(Very Easy to Very Hard\), /g, '');
+                        instruction = instruction.replace(/Assign an appropriate difficulty \(Very Easy to Very Hard\) based on the narrative stakes\. /g, '');
                     }
                     return `<quests>\n${instruction.trim()}\n</quests>`;
                 }

@@ -692,6 +692,10 @@ import { BLOCK_ICONS, BLOCK_ORDER, PAGE_SIZE, NO_PAGINATE } from './constants.js
                                 <input type="checkbox" id="rt_onboarding_quests_frustration" />
                                 <span>Frustration levels</span>
                             </label>
+                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                <input type="checkbox" id="rt_onboarding_quests_difficulty" />
+                                <span>Difficulty</span>
+                            </label>
                             <div style="margin-top: 4px; display: flex; flex-direction: column; gap: 4px;">
                                 <div style="font-size: 0.75em; opacity: 0.6; text-transform: uppercase; font-weight: bold;">
                                     Processing Mode <i class="fa-solid fa-circle-question interactable" style="font-size: 0.9em; opacity: 0.7; margin-left: 4px;" title="Standard: AI manages quests via Tool Calls. Legacy: AI uses formatted text blocks."></i>
@@ -968,10 +972,22 @@ export function renderQuestLog(quests, currentTime, collapsed, detached, filterT
         if (quest.status !== 'active') cardClass += ' rt-quest-inactive';
         if (isFailed) cardClass += ' rt-quest-card-failed';
 
+        const diffColors = {
+            'Very Easy': '#a3e635', // Lime
+            'Easy': '#22c55e',      // Green
+            'Medium': '#f59e0b',    // Amber
+            'Hard': '#f97316',      // Orange
+            'Very Hard': '#ef4444'  // Red
+        };
+        const diffBadge = quest.difficulty ? `<span class="rt-quest-badge" style="background: ${diffColors[quest.difficulty] || 'rgba(255,255,255,0.1)'}; color: #000; font-weight: 800; border: none;">${quest.difficulty.toUpperCase()}</span>` : '';
+
         return `<div class="${cardClass}">
             <div class="rt-quest-header">
                 <span class="rt-quest-title">${escapeHtml(quest.title)}</span>
-                <span class="rt-quest-badge ${statusBadgeClass}">${statusLabel}</span>
+                <div style="display: flex; gap: 4px;">
+                    ${diffBadge}
+                    <span class="rt-quest-badge ${statusBadgeClass}">${statusLabel}</span>
+                </div>
             </div>
             <div class="rt-quest-giver">${escapeHtml(quest.giver_name)} · <em>${escapeHtml(quest.giver_location)}</em></div>
             <div class="rt-quest-objectives">${objectives}</div>

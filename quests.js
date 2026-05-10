@@ -201,6 +201,7 @@ export function registerLogQuestTool() {
 
         const isDeadlines = !!s.syspromptModules?.questsDeadlines;
         const isFrustration = !!s.syspromptModules?.questsFrustration;
+        const isDifficulty = !!s.syspromptModules?.questsDifficulty;
 
 
         // ── Build a dynamic tool description based on enabled features ──────────
@@ -223,6 +224,11 @@ export function registerLogQuestTool() {
             toolDescription +=
                 ' The NPC Mood evolves continuously based on frustration_coefficient. ' +
                 'Let this affect how the NPC speaks and acts whenever the player encounters them throughout the campaign.';
+        }
+
+        if (isDifficulty) {
+            toolDescription +=
+                ' Assign a difficulty (Very Easy, Easy, Medium, Hard, Very Hard) to the quest based on your assessment of the danger and complexity involved.';
         }
 
         // ── Build per-parameter descriptions ─────────────────────────────────
@@ -267,6 +273,15 @@ export function registerLogQuestTool() {
                 items: { type: 'string' },
             },
         };
+
+        if (isDifficulty) {
+            properties.difficulty = {
+                type: 'string',
+                enum: ['Very Easy', 'Easy', 'Medium', 'Hard', 'Very Hard'],
+                description: 'The estimated difficulty of the quest as established in the narrative.'
+            };
+            required.push('difficulty');
+        }
 
         const required = ['title', 'giver_name', 'giver_location', 'objectives'];
 
@@ -328,6 +343,7 @@ export function registerLogQuestTool() {
                         status: 'active'
                     })),
                     rewards: args.rewards || [],
+                    difficulty: isDifficulty ? (args.difficulty || 'Medium') : undefined,
                     deadline_time: isDeadlines ? (args.deadline_time || null) : undefined,
                     frustration_coefficient: isFrustration ? (args.frustration_coefficient || 1.0) : undefined,
                     auto_fail: (isDeadlines && !isFrustration),

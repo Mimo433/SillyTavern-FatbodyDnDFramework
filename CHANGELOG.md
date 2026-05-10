@@ -2,6 +2,17 @@
 
 All notable changes to the **Fatbody D&D Framework** will be documented in this file.
 
+## [1.8.17] - 2026-05-10
+
+**Feature: Quest Difficulty Tracking**
+Implemented an optional "Difficulty" system for quests, allowing the AI to assign and track challenge levels (Very Easy to Very Hard).
+
+### Added
+- **Difficulty Toggle**: New checkbox in the onboarding UI to enable/disable quest difficulty tracking.
+- **Legacy Difficulty**: Support for the `DIFFICULTY:` field in legacy text-block quests.
+- **Modern Difficulty**: Integrated `difficulty` parameter into the `LogQuest` tool and allowed difficulty updates in the JSON state tracker.
+- **Visual Feedback**: Added color-coded difficulty badges to quest cards in the UI (e.g., Green for Easy, Red for Very Hard).
+
 ## [1.8.16] - 2026-05-10
 
 **Fix: Hardened "Apply Sysprompt" Logic**
