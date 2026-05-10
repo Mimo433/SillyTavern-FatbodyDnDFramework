@@ -2,6 +2,14 @@
 
 All notable changes to the **Fatbody D&D Framework** will be documented in this file.
 
+## [1.8.14] - 2026-05-10
+
+**Enhanced Quest Mode Diagnostics**
+Added runtime logging to verify quest mode during state extraction.
+
+### Changed
+- **Runtime Diagnostics**: Added a log in `memo-processor.js` that fires every time the state model pass is built, showing exactly which quest prompt is being used.
+
 ## [1.8.13] - 2026-05-10
 
 **Fix: Legacy Quest Prompt Now Reliably Applied**

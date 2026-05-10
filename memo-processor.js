@@ -764,6 +764,9 @@ export function buildModulesInstructionText(settings) {
             // ── Dynamic prompt swap for Legacy Quests ──────────────────────
             if (key === 'quests') {
                 const useLegacy = !!settings.questLegacyMode;
+                const promptType = useLegacy ? 'LEGACY' : 'MODERN/JSON';
+                console.log(`[RPG Tracker] buildModulesInstructionText: using ${promptType} quest prompt. (questLegacyMode=${useLegacy})`);
+                
                 if (useLegacy) {
                     const isDeadlines = !!settings.syspromptModules?.questsDeadlines;
                     const isFrustration = !!settings.syspromptModules?.questsFrustration;
