@@ -997,7 +997,6 @@ export function renderQuestLog(quests, currentTime, collapsed, detached, filterT
             ${acceptedRow}
             ${deadlineRow}
         </div>`;
-        </div>`;
     };
 
     const activeQuests = allQuests.filter(q => q.status !== 'completed');

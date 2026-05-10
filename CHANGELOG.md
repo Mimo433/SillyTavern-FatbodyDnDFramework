@@ -2,6 +2,14 @@
 
 All notable changes to the **Fatbody D&D Framework** will be documented in this file.
 
+## [1.8.25] - 2026-05-10
+
+**Fix: Renderer Syntax Error**
+Resolved a syntax error in the quest renderer introduced in the previous update.
+
+### Fixed
+- **Renderer Stability**: Fixed an accidental duplicate closing tag that was causing the script to crash on load.
+
 ## [1.8.24] - 2026-05-10
 
 **Optimization: Completed Quest Filtering**
