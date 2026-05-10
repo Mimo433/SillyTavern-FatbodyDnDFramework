@@ -2,15 +2,22 @@
 
 All notable changes to the **Fatbody D&D Framework** will be documented in this file.
 
+## [1.8.23] - 2026-05-10
+
+**Refactor: Mood is Engine-Computed Only**
+Reverted AI-MOOD override from 1.8.22. The engine is the exclusive source of truth for NPC mood.
+
+### Changed
+- **Source of Truth**: `getQuestMood` is now purely deterministic — MOOD is always calculated from the frustration/deadline engine, never inferred from AI text.
+- **Parser Cleanup**: The `MOOD` field is no longer ingested from legacy text blocks. The AI may still write it for human readability, but the engine ignores it.
+
 ## [1.8.22] - 2026-05-10
 
-**Fix: Mood Sync Logic**
-Synchronized the visual mood indicator with the explicit `MOOD` field in the quest tracker.
+**Fix: Mood Calculation — No-Deadline Quests**
+Fixed the root cause of mood desync for deadline-free quests.
 
 ### Fixed
-- **Mood Prioritization**: The UI now prioritizes the explicit `MOOD` field provided by the AI narrator over the calculated frustration.
-- **Deadline-Free Frustration**: Quests without deadlines (`DEADLINE: None`) now correctly default to a "Very Pleased" state (`-1.0`) instead of "Neutral" (`0`).
-- **Parsing Robustness**: Added `MOOD` field parsing to the legacy quest block processor to ensure AI-specified emotional states are preserved across state updates.
+- **No-Deadline Baseline**: `computeFrustrationLocal` now returns `-1.0` ("Very Pleased") instead of `0.0` ("Neutral") when a quest has no deadline or `DEADLINE: None`. This ensures that pressure-free quests correctly show a positive NPC emotional state.
 
 ## [1.8.21] - 2026-05-10
 
