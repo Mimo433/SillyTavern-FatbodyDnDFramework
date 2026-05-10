@@ -336,8 +336,11 @@ export function writeQuestsToMemo(quests, memoText = null) {
     const pattern = new RegExp(`\\s*\\[${escapedTag}\\][\\s\\S]*?\\[\\/${escapedTag}\\]`, 'i');
     const blockExists = pattern.test(target);
 
-    // If no quests, remove the block if present — never insert an empty one
-    if (!quests || !quests.length) {
+    // Filter out completed quests to save AI context space
+    const activeQuests = quests.filter(q => q.status !== 'completed');
+
+    // If no active quests, remove the block if present — never insert an empty one
+    if (!activeQuests || !activeQuests.length) {
         const result = blockExists ? target.replace(pattern, '').trim() : target;
         if (memoText !== null) return result;
         settings.currentMemo = result;
@@ -345,8 +348,8 @@ export function writeQuestsToMemo(quests, memoText = null) {
     }
 
     const content = settings.questLegacyMode
-        ? serializeQuestsToText(quests)
-        : JSON.stringify(quests, null, 2);
+        ? serializeQuestsToText(activeQuests)
+        : JSON.stringify(activeQuests, null, 2);
 
     const block = `\n\n[${tag}]\n${content}\n[/${tag}]`;
 
@@ -566,18 +569,32 @@ export function parseQuestsFromMemo(memoText) {
 export function syncQuestsFromMemo(memoText) {
     const settings = getSettings();
     const quests = parseQuestsFromMemo(memoText);
+    const existingCompleted = (settings.quests || []).filter(q => q.status === 'completed');
     
     if (quests.length === 0) {
         const match = (memoText || '').match(/\[QUESTS\]([\s\S]*?)\[\/QUESTS\]/i);
         if (!match && settings.quests && settings.quests.length > 0) {
-            settings.quests = [];
-            if (settings.debugMode) console.log('[RPG Tracker] syncQuestsFromMemo: quests cleared because [QUESTS] block was removed.');
+            if (settings.quests.length !== existingCompleted.length && settings.debugMode) {
+                console.log('[RPG Tracker] syncQuestsFromMemo: active quests cleared because [QUESTS] block was removed.');
+            }
+            settings.quests = existingCompleted;
+        } else if (settings.quests && settings.quests.length > 0) {
+            settings.quests = existingCompleted;
         }
         return;
     }
 
-    settings.quests = quests;
-    if (settings.debugMode) console.log(`[RPG Tracker] syncQuestsFromMemo: updated internal state with ${quests.length} quest(s).`);
+    // Merge newly parsed quests (which are active/failed) with existing completed ones
+    const newIds = new Set(quests.map(q => q.id));
+    const merged = [...quests];
+    for (const eq of existingCompleted) {
+        if (!newIds.has(eq.id)) {
+            merged.push(eq);
+        }
+    }
+
+    settings.quests = merged;
+    if (settings.debugMode) console.log(`[RPG Tracker] syncQuestsFromMemo: updated internal state with ${merged.length} quest(s).`);
 }
 
 // ── Delta display ─────────────────────────────────────────────────────────────

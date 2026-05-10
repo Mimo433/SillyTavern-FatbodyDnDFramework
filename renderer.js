@@ -878,7 +878,7 @@ export function renderQuestLog(quests, currentTime, collapsed, detached, filterT
     const showFrustration = !!settings.syspromptModules?.questsFrustration;
     const showDeadlines = !!settings.syspromptModules?.questsDeadlines;
 
-    const cards = allQuests.map(quest => {
+    const renderQuestCard = (quest) => {
 
         const { getQuestMood } = /** @type {any} */ (globalThis.__rpgQuestUtils || {});
         const moodData = typeof getQuestMood === 'function' 
@@ -997,17 +997,41 @@ export function renderQuestLog(quests, currentTime, collapsed, detached, filterT
             ${acceptedRow}
             ${deadlineRow}
         </div>`;
-    }).join('');
+        </div>`;
+    };
+
+    const activeQuests = allQuests.filter(q => q.status !== 'completed');
+    const completedQuests = allQuests.filter(q => q.status === 'completed');
+
+    const activeCardsHtml = activeQuests.map(renderQuestCard).join('');
+    const completedCardsHtml = completedQuests.map(renderQuestCard).join('');
+
+    let bodyHtml = activeCardsHtml || '<div class="rt-card-line" style="opacity:0.6; padding: 10px;">No active quests.</div>';
+
+    if (completedQuests.length > 0) {
+        const isCompletedCollapsed = collapsed.has(TAG + '_COMPLETED');
+        bodyHtml += `
+        <div class="rt-section-card rt-sub-section${isCompletedCollapsed ? ' rt-collapsed' : ''}" data-tag="${TAG}_COMPLETED" style="margin-top: 10px; background: rgba(0,0,0,0.2); border-color: rgba(255,255,255,0.05); border-radius: 6px;">
+            <div class="rt-section-header" data-tag="${TAG}_COMPLETED" style="padding: 6px 10px; font-size: 0.9em; background: rgba(0,0,0,0.2); border-top-left-radius: 6px; border-top-right-radius: 6px;">
+                <span style="opacity:0.8;">✅ COMPLETED</span>
+                <div class="rt-section-header-right">
+                    <span class="rt-item-count" style="opacity:0.6;">${completedQuests.length} ${completedQuests.length === 1 ? 'entry' : 'entries'}</span>
+                    <span class="rt-collapse-icon" style="opacity:0.6;">${isCompletedCollapsed ? '&#9656;' : '&#9662;'}</span>
+                </div>
+            </div>
+            <div class="rt-section-body" style="padding: 5px;">${completedCardsHtml}</div>
+        </div>`;
+    }
 
     return `<div class="rt-section-card${isCollapsed ? ' rt-collapsed' : ''}" data-tag="${TAG}">
         <div class="rt-section-header" data-tag="${TAG}">
             <span>📋 QUESTS</span>
             <div class="rt-section-header-right">
                 ${detachBtn}
-                <span class="rt-item-count">${allQuests.length} ${allQuests.length === 1 ? 'entry' : 'entries'}</span>
+                <span class="rt-item-count">${activeQuests.length} active</span>
                 <span class="rt-collapse-icon">${isCollapsed ? '&#9656;' : '&#9662;'}</span>
             </div>
         </div>
-        <div class="rt-section-body">${cards}</div>
+        <div class="rt-section-body" style="padding-bottom: 5px;">${bodyHtml}</div>
     </div>`;
 }

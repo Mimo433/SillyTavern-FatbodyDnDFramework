@@ -2,6 +2,16 @@
 
 All notable changes to the **Fatbody D&D Framework** will be documented in this file.
 
+## [1.8.24] - 2026-05-10
+
+**Optimization: Completed Quest Filtering**
+Completed quests are now stripped from the AI context to save tokens, while remaining visible in the UI.
+
+### Added
+- **UI Sub-Section**: Completed quests are now visually separated into their own collapsible "✅ COMPLETED" sub-section at the bottom of the quest log.
+- **Context Pruning**: The serialization engine now filters out any quest with `STATUS: completed` before injecting the `[QUESTS]` block into the state memo, preventing resolved narrative threads from consuming valuable context window space.
+- **State Persistence**: The legacy text block parser was updated to intelligently merge incoming active quests with the locally stored completed quests, ensuring history isn't lost when the AI inevitably echoes back a block missing the completed entries.
+
 ## [1.8.23] - 2026-05-10
 
 **Refactor: Mood is Engine-Computed Only**
