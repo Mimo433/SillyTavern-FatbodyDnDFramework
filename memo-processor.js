@@ -686,9 +686,37 @@ export async function buildLorebookContext() {
     if (settings.ctxWorldInfo) {
         try {
             const allowedBooks = settings.lorebookFilter || [];
-            let booksToLoad = allowedBooks.length > 0
-                ? allowedBooks
-                : (await stCtx.getWorldInfoNames() || []);
+            let booksToLoad = [];
+
+            if (allowedBooks.length > 0) {
+                booksToLoad = allowedBooks;
+            } else {
+                // Try the in-memory list first
+                booksToLoad = stCtx.getWorldInfoNames?.() ?? [];
+
+                // If empty, force-refresh from backend and retry
+                if (!booksToLoad.length && stCtx.updateWorldInfoList) {
+                    await stCtx.updateWorldInfoList();
+                    booksToLoad = stCtx.getWorldInfoNames?.() ?? [];
+                }
+
+                // Final fallback: direct backend fetch
+                if (!booksToLoad.length) {
+                    try {
+                        const resp = await fetch('/api/settings/get', {
+                            method: 'POST',
+                            headers: stCtx.getRequestHeaders(),
+                            body: JSON.stringify({}),
+                        });
+                        if (resp.ok) {
+                            const data = await resp.json();
+                            booksToLoad = data.world_names ?? [];
+                        }
+                    } catch (fetchErr) {
+                        console.warn('[RPG Tracker] Direct world_names fetch failed:', fetchErr);
+                    }
+                }
+            }
 
             const entries = [];
             for (const bookName of booksToLoad) {

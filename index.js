@@ -3357,7 +3357,33 @@ Rules:
                 const stCtx = SillyTavern.getContext();
                 let worldNames = [];
                 try {
-                    worldNames = await stCtx.getWorldInfoNames() ?? [];
+                    worldNames = stCtx.getWorldInfoNames?.() ?? [];
+
+                    // If empty, the in-memory world_names may not be populated yet.
+                    // Force a backend refresh and retry.
+                    if (!worldNames.length && stCtx.updateWorldInfoList) {
+                        if (settings.debugMode) console.log('[RPG Tracker] world_names empty — forcing backend refresh…');
+                        await stCtx.updateWorldInfoList();
+                        worldNames = stCtx.getWorldInfoNames?.() ?? [];
+                    }
+
+                    // Final fallback: direct backend fetch (covers edge cases and older ST versions)
+                    if (!worldNames.length) {
+                        if (settings.debugMode) console.log('[RPG Tracker] world_names still empty — falling back to direct API fetch…');
+                        try {
+                            const resp = await fetch('/api/settings/get', {
+                                method: 'POST',
+                                headers: stCtx.getRequestHeaders(),
+                                body: JSON.stringify({}),
+                            });
+                            if (resp.ok) {
+                                const data = await resp.json();
+                                worldNames = data.world_names ?? [];
+                            }
+                        } catch (fetchErr) {
+                            console.warn('[RPG Tracker] Direct world_names fetch failed:', fetchErr);
+                        }
+                    }
                 } catch (e) {
                     console.warn('[RPG Tracker] getWorldInfoNames() failed:', e);
                 }
