@@ -226,11 +226,22 @@ Thought: I see a new NPC named Barnaby. I will record him.
             };
 
             if (settings.routerBasicMode) {
+                const thoughtMatch = response.match(/Thought:\s*([\s\S]*?)(?=\[\[|$)/i);
+                if (thoughtMatch) broadcastStep('thought', thoughtMatch[1].trim());
+
                 broadcastStep('thought', 'Parsing tags...');
                 const basicAction = parseBasicTags(response, archiveBooks);
-                if (basicAction.record.length > 0 || basicAction.update.length > 0 || basicAction.activate.length > 0) {
+                
+                if (basicAction.record.length > 0 || basicAction.update.length > 0 || basicAction.activate.length > 0 || basicAction.delete_ids?.length > 0) {
+                    const summaries = [];
+                    if (basicAction.record.length) summaries.push(`New: ${basicAction.record.length}`);
+                    if (basicAction.update.length) summaries.push(`Updates: ${basicAction.update.length}`);
+                    if (basicAction.activate.length) summaries.push(`Activations: ${basicAction.activate.length}`);
+                    
+                    basicAction.reason = (thoughtMatch ? thoughtMatch[1].trim() : "Tag-based update.") + ` (${summaries.join(', ')})`;
+                    
                     await applyAction(basicAction, archiveBooks);
-                    broadcastStep('finish', `Basic Mode: Processed ${basicAction.record.length} records, ${basicAction.update.length} updates, ${basicAction.activate.length} activations.`);
+                    broadcastStep('finish', `Basic Mode: ${summaries.join(', ')}`);
                 } else {
                     broadcastStep('finish', 'Basic Mode: No tags found.');
                 }
