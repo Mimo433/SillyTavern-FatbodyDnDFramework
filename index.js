@@ -26,6 +26,7 @@ import { runRouterPass, getLorebookManifest, deleteLorebookEntry } from './route
     let _currentChatId = null;
     let themeUndoStack = [];
     let _pillDeselectHandler = null;
+    let renderRouterUI = null;
 
     /**
      * Centralized save helper that handles both global settings and
@@ -2322,7 +2323,7 @@ Rules:
         const agentPanel = /** @type {HTMLElement} */ (panel.querySelector('#rpg-tracker-agent'));
         const agentCloseBtn = /** @type {HTMLElement} */ (panel.querySelector('#rpg-tracker-agent-close'));
         
-        async function renderRouterUI() {
+        renderRouterUI = async function() {
             const s = getSettings();
             const keysContainer = agentPanel.querySelector('#rt-agent-router-active-keys');
             const logContainer = agentPanel.querySelector('#rt-agent-router-log');
