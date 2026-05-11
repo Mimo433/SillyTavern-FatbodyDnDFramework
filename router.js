@@ -463,20 +463,8 @@ async function applyAction(action, allBooks = {}, currentTime = '', breadcrumb =
         bookQueue.get(targetBook).push(rec);
     }
 
-    // -- Phase B: For each book, load (or create) it, append all entries, save once --
-    async function createWorldInfoBook(name) {
-        try {
-            const res = await fetch('/api/worldinfo/create', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name })
-            });
-            return res.ok;
-        } catch (e) {
-            return false;
-        }
-    }
 
+    // -- Phase B: For each book, load existing entries, append new ones, save to disk via HTTP API --
     const knownBookNames = Object.keys(allBooks);
     for (const [targetBook, recs] of bookQueue.entries()) {
         if (settings.debugMode) console.log(`[RPG Tracker] Writing ${recs.length} entries to: ${targetBook}`);
@@ -530,26 +518,20 @@ async function applyAction(action, allBooks = {}, currentTime = '', breadcrumb =
             changed = true;
         }
 
-        // If the book doesn't exist in ST's registry, create it properly via the API first
-        if (!knownBookNames.includes(targetBook)) {
-            const success = await createWorldInfoBook(targetBook);
-            if (success) {
-                knownBookNames.push(targetBook);
-                if (settings.debugMode) console.log(`[RPG Tracker] Registered new lorebook: ${targetBook}`);
-                // Reload the freshly created (empty) book from server to get correct structure
-                const fresh = await ctx.loadWorldInfo(targetBook);
-                if (fresh) {
-                    // Merge our in-memory entries into the server's fresh structure
-                    Object.assign(fresh.entries, bookData.entries);
-                    bookData = fresh;
-                }
-            } else {
-                console.warn(`[RPG Tracker] Could not register ${targetBook} via API. Will attempt direct save.`);
-            }
+        // Always use the raw HTTP API to guarantee disk persistence.
+        // ctx.saveWorldInfo only flushes books already in ST's in-memory registry,
+        // silently dropping any new (unregistered) books. The /api/worldinfo/edit
+        // endpoint writes directly to disk with no registry requirement.
+        const saveRes = await fetch('/api/worldinfo/edit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: targetBook, data: bookData })
+        });
+        if (!saveRes.ok) {
+            console.error(`[RPG Tracker] Failed to save ${targetBook}: HTTP ${saveRes.status}`);
+        } else {
+            if (settings.debugMode) console.log(`[RPG Tracker] Saved ${recs.length} entries to ${targetBook}`);
         }
-
-        // Save the entire book once
-        await ctx.saveWorldInfo(targetBook, bookData);
     }
 
 
