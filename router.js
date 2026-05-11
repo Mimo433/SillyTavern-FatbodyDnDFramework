@@ -429,14 +429,28 @@ async function applyAction(action, allBooks = {}, currentTime = '', breadcrumb =
     const recordedIds = [];
     for (const rec of records) {
         // Map category to book name
-        let targetBook = prefix || 'World Chronicle';
+        const baseBook = prefix || 'World Chronicle';
+        let targetBook = baseBook;
         const cat = (rec.category || rec.comment || '').toUpperCase();
+        
         if (cat.includes('NPC')) targetBook = prefix ? `${prefix}_NPCs` : 'NPCs';
         else if (cat.includes('LOC')) targetBook = prefix ? `${prefix}_Locations` : 'Locations';
         else if (cat.includes('QUEST')) targetBook = prefix ? `${prefix}_Quests` : 'Quests';
         else if (cat.includes('FAC')) targetBook = prefix ? `${prefix}_Factions` : 'Factions';
-        else if (cat.includes('EVENT')) {
-            targetBook = prefix ? `${prefix}_Events` : 'Events';
+        else if (cat.includes('EVENT')) targetBook = prefix ? `${prefix}_Events` : 'Events';
+
+        // Fallback: If the specific book doesn't exist, use the base book or first available
+        if (!allBooks[targetBook]) {
+            if (allBooks[baseBook]) {
+                targetBook = baseBook;
+            } else {
+                // Last resort: pick the first available book in scope
+                const firstAvailable = Object.keys(allBooks)[0];
+                if (firstAvailable) targetBook = firstAvailable;
+            }
+        }
+
+        if (cat.includes('EVENT')) {
             if (currentTime && !rec.label.includes('[Day')) {
                 rec.label = `[${currentTime}] ${rec.label}`;
             }
