@@ -150,7 +150,10 @@ ${(settings.routerCustomTags || []).map(m => `- ${m.tag}: ${m.instruction}`).joi
 
         while (turns < maxTurns) {
             turns++;
-            const userPrompt = `## CURRENT STATE (Trackers/Clock)\n${settings.currentMemo || 'None'}\n\n## ACTIVE MEMORY (Lore)\n${activeEntriesFull.join('\n\n') || 'None'}\n\n## ARCHIVE INDEX\n${keyringText}\n\n## NARRATIVE\n${recentChat}\n\n${manualPrompt ? `## INSTRUCTION\n${manualPrompt}\n\n` : ''}${loopHistory.join('\n\n')}\n\nNext Step:`;
+            const timeMatch = settings.currentMemo?.match(/\[TIME\]([\s\S]*?)\[\/TIME\]/i);
+            const worldTime = timeMatch ? `[TIME]${timeMatch[1].trim()}[/TIME]` : 'Unknown';
+            
+            const userPrompt = `## WORLD CLOCK\n${worldTime}\n\n## ACTIVE MEMORY (Lore)\n${activeEntriesFull.join('\n\n') || 'None'}\n\n## ARCHIVE INDEX\n${keyringText}\n\n## NARRATIVE\n${recentChat}\n\n${manualPrompt ? `## INSTRUCTION\n${manualPrompt}\n\n` : ''}${loopHistory.join('\n\n')}\n\nNext Step:`;
 
             const routerSettings = {
                 ...settings,
