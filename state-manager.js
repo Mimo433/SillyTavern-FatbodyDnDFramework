@@ -155,8 +155,8 @@ You may be asked to use Markers: ((PLS)), ((B)), ((XB)), ((BDG)), ((HGT)). These
         routerDirectPrompt: "",
         routerBasicMode: false,
         routerModules: {
-            npc: { enabled: true, tag: 'NPC', format: 'Name | Description | Keywords', instruction: 'Use for NEW NPCs or updating ACTIVE ones.' },
-            loc: { enabled: true, tag: 'LOC', format: 'Name | Parent Location | Description | Keywords', instruction: 'Use for NEW Locations. ALWAYS specify the Parent Location (e.g., City if it is a building, Region if it is a city).' },
+            npc: { enabled: true, tag: 'NPC', format: 'Name | Description | Keywords', instruction: 'Use for NEW NPCs or updating ACTIVE ones. NEVER create a standalone NPC entry for the player character ({{user}}) — their state is in the State Memo. You may still mention them in EVENT or QUEST entries.' },
+            loc: { enabled: true, tag: 'LOC', format: 'Name | Parent Location | Description | Keywords', instruction: 'Use for NEW Locations. ALWAYS specify the Parent Location. Do NOT explicitly activate locations; they trigger via the footer. Record them with keywords matching the footer\'s location fragments (e.g. \'Khelt\', \'Third Tier\').' },
             fac: { enabled: true, tag: 'FAC', format: 'Name | Status | Keywords', instruction: 'Track faction reputation and standing.' },
             quest: { enabled: true, tag: 'QUEST', format: 'Name | Location | Description | Keywords', instruction: 'Record quests and where they were received.' },
             event: { enabled: true, tag: 'EVENT', format: 'Name | Details | Keywords', instruction: 'Record significant narrative events. ALWAYS include a timestamp (e.g., [Day 1, 14:00]) in the details so the chronology is preserved.' }
