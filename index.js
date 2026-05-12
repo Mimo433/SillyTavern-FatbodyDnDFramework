@@ -2680,12 +2680,16 @@ Rules:
                 });
             }
 
-            // Auto-link toggle
+            // Auto-link toggle (in-panel)
             const autoActivateCheck = /** @type {HTMLInputElement|null} */ (agentPanel.querySelector('#rt-agent-auto-activate'));
             if (autoActivateCheck) {
                 autoActivateCheck.checked = !!getSettings().routerAutoActivateBooks;
                 autoActivateCheck.addEventListener('change', () => {
-                    getSettings().routerAutoActivateBooks = autoActivateCheck.checked;
+                    const s = getSettings();
+                    s.routerAutoActivateBooks = autoActivateCheck.checked;
+                    // Keep in sync with the settings sidebar toggle
+                    const sidebarCheck = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_tracker_router_auto_activate'));
+                    if (sidebarCheck) sidebarCheck.checked = s.routerAutoActivateBooks;
                     saveSettings();
                 });
             }
@@ -5808,16 +5812,16 @@ Rules:
                     item.style.cssText = 'padding:6px 12px; cursor:pointer; font-size:0.9em; color:#ddd;';
                     item.addEventListener('mouseenter', () => { item.style.background = 'rgba(255,255,255,0.08)'; });
                     item.addEventListener('mouseleave', () => { item.style.background = ''; });
-                    item.addEventListener('click', () => {
+                    item.addEventListener('click', async () => {
                         const s = getSettings();
                         s.routerCampaignPrefix = r;
                         $('#rpg_tracker_router_campaign_prefix').val(r);
-                        const agentPrefixInput = /** @type {HTMLInputElement} */ (document.querySelector('#rpg_tracker_router_campaign_prefix'));
-                        if (agentPrefixInput) agentPrefixInput.value = r;
                         saveSettings();
                         if (s.chatLinkEnabled && _currentChatId) saveChatState(_currentChatId);
                         dropdown.remove();
-                        toastr['success'](`Campaign prefix set to "${r}"`, 'Lorebook Agent');
+                        // Immediately activate all lorebooks matching this prefix
+                        const count = await activateCampaignBooks();
+                        toastr['success'](`Prefix set to "${r}" — activated ${count} lorebook(s).`, 'Lorebook Agent');
                     });
                     dropdown.appendChild(item);
                 });
@@ -5835,6 +5839,18 @@ Rules:
                 };
                 setTimeout(() => document.addEventListener('click', closeOnOutsideClick, true), 0);
             });
+
+            // Auto-activate book stack toggle (settings sidebar)
+            $('#rpg_tracker_router_auto_activate')
+                .prop('checked', !!settings.routerAutoActivateBooks)
+                .on('change', function () {
+                    const s = getSettings();
+                    s.routerAutoActivateBooks = !!$(this).prop('checked');
+                    // Keep in sync with the in-panel Auto-link checkbox
+                    const inPanelCheck = /** @type {HTMLInputElement|null} */ (document.getElementById('rt-agent-auto-activate'));
+                    if (inPanelCheck) inPanelCheck.checked = s.routerAutoActivateBooks;
+                    saveSettings();
+                });
 
             // Router Ollama
             $('#rpg_tracker_router_ollama_url').val(settings.routerOllamaUrl).on('input', function () {
