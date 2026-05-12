@@ -186,11 +186,18 @@ To maintain control, proactively use [[DEACTIVATE]] on entities that are no long
 </basic_instructions>
 
 <formatting>
-The main label of a category entry should identify the entity clearly. Examples:
+When recording a new entry, keep the lorebook category separate from the entity label.
 
-- Main Category: Eldoria_Quests, single entry: QUEST: Clogged Vein. Giver: Overseer Harlen.
+- Use the "category" field for the type (NPC, LOC, FAC, QUEST, EVENT, or a custom tag).
+- Use the "label" field for the entity name only. Do NOT prefix labels with the category tag.
 
-- Main Category: Eldoria_NPCs, single entry: NPC: Overseer Harlen, an overseer for the Iron Syndicate
+Correct examples:
+- {"label": "Iron Syndicate", "category": "FAC"}
+- {"label": "Thalric Thorne", "category": "STATS"}
+
+Incorrect examples:
+- {"label": "FAC: Iron Syndicate", "category": "FAC"}
+- {"label": "STATS: Thalric Thorne", "category": "STATS"}
 </formatting>
 
 <quests>
@@ -232,6 +239,7 @@ Example: "[Day 1, 11:52] Character signed the contract with Brodrik."
     
     // ── MIGRATION: routerModules (v1.8.35+) ───────────────────────────────────
     const s = extensionSettings[MODULE_NAME];
+
     if (s.routerModules && typeof s.routerModules.npc === 'boolean') {
         const old = s.routerModules;
         s.routerModules = {
@@ -290,6 +298,12 @@ export function getBarBackground(barId, defaultBackground, pct = null) {
  */
 export function migrateCustomFields() {
     const s = getSettings();
+
+    // Strip placeholder NEW_TAG entries persisted from previous sessions (one-time cleanup at init)
+    if (Array.isArray(s.routerCustomTags)) {
+        s.routerCustomTags = s.routerCustomTags.filter(t => t.tag && t.tag !== 'NEW_TAG');
+    }
+
     (s.customFields || []).forEach(field => {
         // Migration 1: Convert single renderType to empty rows (old)
         if (field.renderType !== undefined && !field.rows && !field.template) {

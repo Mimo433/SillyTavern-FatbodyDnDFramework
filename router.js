@@ -157,7 +157,7 @@ export async function runRouterPass(narrativeOutput, manualPrompt = null, custom
 3. read_entry(uid): Read the full content of an archive entry.
 4. commit(activate, deactivate, record, update, delete_ids): Final action. Ends loop.
    - activate/deactivate: ["Book::UID", ...] (Toggles presence in active context)
-   - record: [{"label": "Title/Name", "keys": ["keyword1", ...], "content": "Description", "category": "NPC/LOC/QUEST"}]
+   - record: [{"label": "Name only — NO tag prefix (e.g. 'Iron Syndicate', NOT 'FAC: Iron Syndicate')", "keys": ["keyword1", ...], "content": "Description", "category": "NPC|LOC|QUEST|FAC|EVENT${(settings.routerCustomTags || []).length ? '|' + (settings.routerCustomTags || []).map(t => t.tag.toUpperCase()).join('|') : ''}"}]
    - update: [{"id": "Book::UID", "content": "Full new content"}]
    - delete_ids: ["Book::UID", ...] (Permanently REMOVES from lorebook)
 
@@ -193,7 +193,7 @@ Example Keywords: "scholarly, Khelt, Section Four" (Note: do not include the nam
 
 ## FIELD INSTRUCTIONS
 ${Object.values(settings.routerModules || {}).filter(m => m.enabled).map(m => `- ${m.tag}: ${m.instruction}`).join('\n')}
-${(settings.routerCustomTags || []).map(m => `- ${m.tag}: ${m.instruction}`).join('\n')}
+${(settings.routerCustomTags || []).length ? '\n### CUSTOM CATEGORIES\nUse these tag names as the "category" field in commit record calls. Each custom category is stored in its own lorebook.\n' + (settings.routerCustomTags || []).map(m => `- ${m.tag.toUpperCase()}: ${m.instruction}`).join('\n') : ''}
 `;
 
         while (turns < maxTurns) {
@@ -465,6 +465,11 @@ async function applyAction(action, allBooks = {}, currentTime = '', breadcrumb =
 
     // -- Phase A: Route each record to its target book --
     const catMap = { 'NPC': 'NPCs', 'LOC': 'Locations', 'QUEST': 'Quests', 'FAC': 'Factions', 'EVENT': 'Events' };
+    // Extend with user-defined custom tags so they get their own books (e.g. WEATHER → prefix_Weather)
+    for (const ct of (settings.routerCustomTags || [])) {
+        const t = ct.tag.toUpperCase();
+        if (!catMap[t]) catMap[t] = t.charAt(0) + t.slice(1).toLowerCase();
+    }
     /** @type {Map<string, Array>} */
     const bookQueue = new Map();
 
@@ -472,6 +477,12 @@ async function applyAction(action, allBooks = {}, currentTime = '', breadcrumb =
         const cat = (rec.category || rec.comment || '').toUpperCase();
         const catName = Object.keys(catMap).find(k => cat.includes(k));
         const targetBook = catName ? (prefix ? `${prefix}_${catMap[catName]}` : catMap[catName]) : baseBook;
+
+        // Strip any accidental "TAG: " prefix the model may have included in the label
+        // e.g. "FAC: Iron Syndicate" → "Iron Syndicate", "STATS: Thalric Thorne" → "Thalric Thorne"
+        if (rec.label) {
+            rec.label = rec.label.replace(/^[A-Z_]{2,10}:\s+/i, '').trim();
+        }
 
         // For LOC entries, auto-enrich the label with the breadcrumb hierarchy if not already set
         if (cat.includes('LOC') && breadcrumb && !rec.label.includes(' :: ')) {
@@ -791,7 +802,7 @@ function parseBasicTags(text, archiveBooks) {
     const settings = getSettings();
 
     const processMatch = (name, content, keywords, category) => {
-        name = name.trim();
+        name = name.trim().replace(/^[A-Z_]{2,10}:\s+/i, '').trim();
         content = content.trim();
         const keys = (keywords || '').split(',').map(k => k.trim());
 

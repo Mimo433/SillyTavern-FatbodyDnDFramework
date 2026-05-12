@@ -1833,12 +1833,10 @@ Rules:
         if (el) {
             let html = renderMemoAsCards(memo, null, _sectionPages);
 
-            // Append quest log section if module is enabled
+            // Append quest log section if module is enabled (always render, even when empty)
             if (s.modules?.quests) {
                 const snapshotQuests = parseQuestsFromMemo(memo);
-                if (snapshotQuests.length) {
-                    html += renderQuestLog(snapshotQuests, currentTime, collapsed, detached);
-                }
+                html += renderQuestLog(snapshotQuests, currentTime, collapsed, detached);
             }
 
             el.innerHTML = html;
@@ -2098,7 +2096,7 @@ Rules:
                             <div style="margin-bottom: 5px; font-weight: bold; opacity: 0.8; font-size: 0.846em;">Enabled Modules (Stock):</div>
                             <div id="rt-agent-stock-modules-list" style="margin-bottom: 10px;"></div>
 
-                            <div style="margin-bottom: 5px; font-weight: bold; opacity: 0.8; font-size: 0.846em;">Custom Tags (Basic Mode):</div>
+                            <div style="margin-bottom: 5px; font-weight: bold; opacity: 0.8; font-size: 0.846em;">Custom Tags:</div>
                             <div id="rt-agent-custom-tags-list"></div>
                             <button id="rt-agent-add-custom-tag" style="width: 100%; background: #333; border: 1px solid #444; color: #ddd; font-size: 0.769em; padding: 2px; border-radius: 3px; cursor: pointer; margin-top: 4px;">+ Add Custom Tag</button>
                         </div>
@@ -2150,12 +2148,6 @@ Rules:
                         </div>
                     </details>
 
-                    <details style="margin-top: 15px; border-top: 1px solid #444; padding-top: 10px;">
-                        <summary style="cursor: pointer; font-size: 0.846em; font-weight: bold; opacity: 0.8; color: #aaa;">Debug: Last Request Context</summary>
-                        <div id="rt-agent-debug-drawer" style="font-family: monospace; font-size: 0.769em; background: rgba(0,0,0,0.5); padding: 5px; margin-top: 5px; border-radius: 4px; color: #0f0; max-height: 200px; overflow-y: auto;">
-                            No request sent yet.
-                        </div>
-                    </details>
                     
 
                     <hr style="border-color: #333; margin: 10px 0;">
@@ -2649,7 +2641,7 @@ Rules:
             };
 
             const refreshBtn = agentPanel.querySelector('#rt-agent-manifest-refresh');
-            if (refreshBtn) refreshBtn.addEventListener('click', refreshManifest);
+            if (refreshBtn) refreshBtn.addEventListener('click', () => refreshManifest('manual-button'));
 
             // ⚡ Manual "Activate All Books" button
             const activateBtn = agentPanel.querySelector('#rt-agent-manifest-activate');
@@ -2658,10 +2650,9 @@ Rules:
                     activateBtn.querySelector('i')?.classList.add('fa-spin');
                     const count = await activateCampaignBooks();
                     activateBtn.querySelector('i')?.classList.remove('fa-spin');
-                    // @ts-ignore
                     count > 0
-                        ? toastr.success(`Activated ${count} lorebook${count > 1 ? 's' : ''}.`, 'Campaign Records')
-                        : toastr.info('No campaign lorebooks found to activate.', 'Campaign Records');
+                        ? toastr['success'](`Activated ${count} lorebook${count > 1 ? 's' : ''}.`, 'Campaign Records')
+                        : toastr['info']('No campaign lorebooks found to activate.', 'Campaign Records');
                 });
             }
 
@@ -2783,7 +2774,6 @@ Rules:
                 });
             }
             renderAgentCustomTags();
-            renderAgentDebug();
 
 
 
@@ -3150,43 +3140,14 @@ Rules:
             if (agentNavLabel) {
                 if (redoLen === 0) {
                     agentNavLabel.textContent = '[ LIVE ]';
-                    agentNavLabel.classList.remove('clickable');
-                    agentNavLabel.title = '';
+                    agentNavLabel.title = 'Lorebook is at current live state';
                 } else {
-                    agentNavLabel.textContent = `[ -${redoLen} \uD83D\uDD04 ]`;
-                    agentNavLabel.classList.add('clickable');
-                    agentNavLabel.title = 'Click to restore to current LIVE state';
+                    agentNavLabel.textContent = `[ -${redoLen} ]`;
+                    agentNavLabel.title = `Rolled back ${redoLen} agent pass${redoLen !== 1 ? 'es' : ''} — use → to redo`;
                 }
+                agentNavLabel.classList.remove('clickable');
             }
         };
-
-        // Label click: re-apply all redo entries at once to jump back to LIVE
-        if (agentNavLabel) {
-            agentNavLabel.addEventListener('click', async () => {
-                if (!_loreRedoStack.length) return;
-                if (agentNavBack) agentNavBack.disabled = true;
-                if (agentNavFwd)  agentNavFwd.disabled  = true;
-                agentNavLabel.classList.remove('clickable');
-                agentNavLabel.textContent = '[ … ]';
-
-                let failed = false;
-                while (_loreRedoStack.length) {
-                    const redoEntry = _loreRedoStack.pop();
-                    const ok = await reapplyRouterPass(redoEntry.prePassSnapshot, redoEntry.postPassState);
-                    if (!ok) {
-                        _loreRedoStack.push(redoEntry);
-                        failed = true;
-                        break;
-                    }
-                }
-
-                if (failed) {
-                    toastr['error']('Could not fully restore to LIVE state.', 'Lorebook Agent');
-                }
-                syncAgentNav();
-                await refreshManifest();
-            });
-        }
 
         /** Snapshot the current lorebook state for the books touched by the given history entry. */
         const captureCurrentLoreState = async (histEntry) => {
@@ -3269,7 +3230,6 @@ Rules:
                 try { await _ctx.updateWorldInfoList(); } catch (_) {}
             }
             await renderRouterUI();
-            renderAgentDebug();
             updateUndoLabel();
         });
 
@@ -6081,29 +6041,4 @@ Rules:
 /**
  * Renders the debug info into the Agent panel's debug drawer.
  */
-export function renderAgentDebug() {
-    const s = getSettings();
-    const drawer = document.getElementById('rt-agent-debug-drawer');
-    if (!drawer || !s.routerLastRequest) return;
-    
-    const req = s.routerLastRequest;
-    const esc = (str) => {
-        if (!str) return '';
-        return str.replace(/[&<>"']/g, m => ({
-            '&': '&amp;',
-            '<': '&lt;',
-            '>': '&gt;',
-            '"': '&quot;',
-            "'": '&#39;'
-        }[m]));
-    };
-
-    drawer.innerHTML = `
-        <div style="color: #0f0; margin-bottom: 5px; border-bottom: 1px solid #040;">EST. TOKENS: ${req.estTokens} (${req.chars} chars)</div>
-        <div style="color: #888; font-weight: bold;">[SYSTEM]</div>
-        <div style="white-space: pre-wrap; margin-bottom: 10px;">${esc(req.system)}</div>
-        <div style="color: #888; font-weight: bold;">[USER]</div>
-        <div style="white-space: pre-wrap;">${esc(req.user)}</div>
-    `;
-}
 
