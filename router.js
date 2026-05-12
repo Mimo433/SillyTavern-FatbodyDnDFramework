@@ -550,6 +550,13 @@ async function applyAction(action, allBooks = {}, currentTime = '', breadcrumb =
             // Force SillyTavern to re-index its list of world info books
             if (typeof ctx.updateWorldInfoList === 'function') await ctx.updateWorldInfoList();
             
+            // ── Cache bust: write bookData into ST's in-memory registry so that the
+            // subsequent renderRouterUI → loadWorldInfo call sees fresh entries immediately
+            // (the raw HTTP API bypasses the in-memory cache; this syncs them up).
+            if (typeof ctx.saveWorldInfo === 'function') {
+                try { await ctx.saveWorldInfo(targetBook, bookData); } catch (_) { /* non-fatal */ }
+            }
+
             // Auto-activate the lorebook so keywords work immediately
             if (typeof ctx.executeSlashCommandsWithOptions === 'function') {
                 await ctx.executeSlashCommandsWithOptions(`/world state=on silent=true "${targetBook}"`);
