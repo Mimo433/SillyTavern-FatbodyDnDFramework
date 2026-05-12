@@ -2163,7 +2163,10 @@ Rules:
                     <hr style="border-color: #333; margin: 10px 0;">
 
                     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px;">
-                        <div style="font-weight: bold; opacity: 0.8; font-size: 11px;">Active Lore Keys:</div>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <div style="font-weight: bold; opacity: 0.8; font-size: 11px;">Active Lore Keys:</div>
+                            <button id="rt-agent-keys-refresh" title="Refresh active keys from disk" style="background: none; border: none; color: var(--rt-accent); font-size: 10px; cursor: pointer; opacity: 0.6; padding: 0;" ><i class="fa-solid fa-arrows-rotate"></i></button>
+                        </div>
                         <button id="rt-agent-router-undo" title="Undo last agent pass" style="background: rgba(255,100,100,0.1); border: 1px solid rgba(255,100,100,0.25); color: #ff8888; font-size: 10px; border-radius: 4px; padding: 2px 8px; cursor: pointer; opacity: 0.8; display: flex; align-items: center; gap: 4px;"><i class="fa-solid fa-rotate-left"></i> <span id="rt-agent-undo-label">Undo</span></button>
                     </div>
                     <div id="rt-agent-router-active-keys" style="margin-bottom: 10px; display: flex; flex-wrap: wrap; gap: 4px; min-height: 24px;">
@@ -3045,6 +3048,20 @@ Rules:
                 updateUndoLabel();
             });
         }
+        // ── Active Keys Refresh Button ────────────────────────────────────────
+        const keysRefreshBtn = agentPanel.querySelector('#rt-agent-keys-refresh');
+        if (keysRefreshBtn) {
+            keysRefreshBtn.addEventListener('click', async () => {
+                keysRefreshBtn.querySelector('i')?.classList.add('fa-spin');
+                const _ctx = SillyTavern.getContext();
+                if (typeof _ctx.updateWorldInfoList === 'function') {
+                    try { await _ctx.updateWorldInfoList(); } catch (_) {}
+                }
+                await renderRouterUI();
+                keysRefreshBtn.querySelector('i')?.classList.remove('fa-spin');
+            });
+        }
+
         updateUndoLabel();
 
         document.addEventListener('rt_lore_agent_updated', async () => {
