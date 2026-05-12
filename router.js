@@ -451,12 +451,13 @@ async function applyAction(action, allBooks = {}, currentTime = '', breadcrumb =
             rec.content = timePrefix + rec.content;
         }
 
-        // Add hierarchy keyword if missing
-        if (!rec.keys?.some(k => k.startsWith('In:'))) {
+        // Add location hierarchy keywords (plain fragments, no 'In:' prefix)
+        // Matches status footer tokens for native ST keyword triggering.
+        {
             const parts = (breadcrumb || '').split(' :: ').filter(Boolean);
-            if (parts.length > 0) {
-                rec.keys = rec.keys || [];
-                rec.keys.push(`In: ${parts.join(', ')}`);
+            rec.keys = rec.keys || [];
+            for (const part of parts) {
+                if (!rec.keys.includes(part)) rec.keys.push(part);
             }
         }
         rec.keys = cleanKeys(rec.keys || []);
