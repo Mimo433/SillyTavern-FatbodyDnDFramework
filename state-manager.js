@@ -159,7 +159,7 @@ You may be asked to use Markers: ((PLS)), ((B)), ((XB)), ((BDG)), ((HGT)). These
             loc: { enabled: true, tag: 'LOC', format: 'Name | Parent Location | Description | Keywords', instruction: 'Use for NEW Locations. ALWAYS specify the Parent Location. Do NOT explicitly activate locations; they trigger via the footer. Record them with keywords matching the footer\'s location fragments (e.g. \'Khelt\', \'Third Tier\'). To update an active location, use the update tool with the ID value from the [ID:] stamp visible at the top of the injected entry — never copy the [ID:] line into your content. Provide only a timestamped delta.' },
             fac: { enabled: true, tag: 'FAC', format: 'Name | Status | Keywords', instruction: 'Track faction reputation and standing.' },
             quest: { enabled: true, tag: 'QUEST', format: 'Name | Location | Description | Keywords', instruction: 'Record quests and where they were received.' },
-            event: { enabled: true, tag: 'EVENT', format: 'Name | Details | Keywords', instruction: 'Record significant narrative events. ALWAYS include a timestamp (e.g., [Day 1, 14:00]) in the details so the chronology is preserved.' }
+            event: { enabled: true, tag: 'EVENT', format: 'Name | Details | Keywords', instruction: 'Record significant narrative events. The Name is a SHORT, STABLE arc identifier (e.g. "Calibration of Sensor 4") — no timestamps, no "Final"/"Update" suffixes. Put the timestamp in the Details pipe (e.g. [Day 1, 14:00]). If this event is ongoing or you are adding new information to an existing event, use the EXACT same Name as before — entries are chronicles that append automatically when the name matches.' }
         },
         routerCustomTags: [], 
         routerHistory: [],

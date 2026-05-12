@@ -63,8 +63,21 @@ export async function runRouterPass(narrativeOutput, manualPrompt = null, custom
         let basicSummary = '';
         
         async function fetchArchiveBooks() {
+            // Flush ST's in-memory registry so books written via HTTP API in prior passes are visible
+            if (typeof ctx.updateWorldInfoList === 'function') {
+                try { await ctx.updateWorldInfoList(); } catch (_) {}
+            }
             const allBookNames = await getWorldInfoNamesSafe();
-            const scoped = prefix ? allBookNames.filter(n => n.startsWith(prefix)) : allBookNames;
+            const scoped = new Set(prefix ? allBookNames.filter(n => n.startsWith(prefix)) : allBookNames);
+
+            // Also sweep books referenced in routerLog (catches books not yet formally indexed)
+            const logBookNames = (settings.routerLog || [])
+                .flatMap(e => [...(e.record || []), ...(e.activate || [])].map(id => id.split('::')[0]))
+                .filter(Boolean);
+            for (const n of logBookNames) {
+                if (!prefix || n.startsWith(prefix)) scoped.add(n);
+            }
+
             const books = {};
             for (const n of scoped) {
                 const b = await ctx.loadWorldInfo(n);
