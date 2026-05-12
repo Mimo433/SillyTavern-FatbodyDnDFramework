@@ -384,8 +384,8 @@ import { runRouterPass, rollbackRouterPass, reapplyRouterPass, getLorebookManife
             activateCampaignBooks().catch(() => {});
         }
 
-        // If agent is on, no stack is linked, and prompt toggle is on → show inline banner
-        if (s.routerEnabled && s.routerPromptForPrefix && !chatBooks?.length) {
+        // If agent is on, no stack is linked, no prefix is set, and prompt toggle is on → show inline banner
+        if (s.routerEnabled && s.routerPromptForPrefix && !chatBooks?.length && !(s.routerCampaignPrefix || '').trim()) {
             setTimeout(() => showPrefixPromptBanner(), 600);
         }
 
@@ -419,6 +419,21 @@ import { runRouterPass, rollbackRouterPass, reapplyRouterPass, getLorebookManife
             const s2 = getSettings();
             s2.routerCampaignPrefix = prefix;
             $('#rpg_tracker_router_campaign_prefix').val(prefix);
+            // Actually "link" this prefix to the current chat by storing campaignBooks.
+            if (_currentChatId) {
+                const ctx = SillyTavern.getContext();
+                if (typeof ctx.updateWorldInfoList === 'function') {
+                    try { await ctx.updateWorldInfoList(); } catch (_) {}
+                }
+                let allNames = [];
+                if (typeof ctx.getWorldInfoNames === 'function') {
+                    try { allNames = await ctx.getWorldInfoNames(); } catch (_) {}
+                }
+                const matchingBooks = allNames.filter(n => n.startsWith(prefix));
+                if (!s2.chatStates) s2.chatStates = {};
+                if (!s2.chatStates[_currentChatId]) s2.chatStates[_currentChatId] = {};
+                s2.chatStates[_currentChatId].campaignBooks = matchingBooks;
+            }
             saveSettings();
             if (s2.chatLinkEnabled && _currentChatId) saveChatState(_currentChatId);
             banner.remove();
