@@ -210,7 +210,8 @@ export function registerDiceSlashCommand() {
             }
             if (val === 'run' || val === 'research') {
                 const { chat } = SillyTavern.getContext();
-                const combinedNarrative = getNarrativeBlocks(chat, -1);
+                const s = getSettings();
+                const combinedNarrative = getNarrativeBlocks(chat, -1, !!s.routerIncludeHidden);
                 await runRouterPass(combinedNarrative, null, null, true);
                 return 'Research pass started.';
             }
@@ -302,7 +303,7 @@ export function installInterceptor() {
  * @param {any[]} chat
  * @param {number} limit  -1 = all since last user message; N = collect N blocks
  */
-export function getNarrativeBlocks(chat, limit = -1) {
+export function getNarrativeBlocks(chat, limit = -1, includeHidden = false) {
     if (!chat || chat.length === 0) return "";
     let narrativeBlocks = [];
     let foundCount = 0;
@@ -311,7 +312,8 @@ export function getNarrativeBlocks(chat, limit = -1) {
         const msg = chat[i];
         if (limit === -1 && msg.is_user) break;
         if (limit !== -1 && foundCount >= limit) break;
-        if (msg.is_system || /** @type {any} */ (msg).is_hidden) continue;
+        if (msg.is_system) continue;
+        if (!includeHidden && /** @type {any} */ (msg).is_hidden) continue;
 
         let mes = (msg.mes || '').trim();
         if (!mes) continue;
@@ -352,7 +354,7 @@ export async function onGenerationEnded() {
     if (!settings.enabled || settings.paused || isStateRunning) return;
 
     const { chat } = SillyTavern.getContext();
-    const combinedNarrative = getNarrativeBlocks(chat, -1);
+    const combinedNarrative = getNarrativeBlocks(chat, -1, !!settings.routerIncludeHidden);
     if (!combinedNarrative) return;
 
     if (settings.debugMode) console.log("[RPG Tracker] Assistant generation ended. Triggering State Model pass...", combinedNarrative);

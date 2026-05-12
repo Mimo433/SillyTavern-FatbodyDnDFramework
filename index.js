@@ -2132,7 +2132,7 @@ Rules:
                         <input type="checkbox" id="rt-agent-router-basic" ${settings.routerBasicMode ? 'checked' : ''}>
                     </label>
 
-                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
                         <div style="display: flex; align-items: center; gap: 6px; flex: 1;" title="Main Lookback: How many recent messages the agent analyzes during automatic passes.">
                             <span style="font-size: 0.769em; opacity: 0.7;">Lookback:</span>
                             <input type="number" id="rt-agent-router-lookback" value="${settings.routerLookback || 3}" min="1" max="100" style="width: 40px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); color: white; border-radius: 3px; text-align: center; font-size: 0.769em; padding: 1px;">
@@ -2144,6 +2144,10 @@ Rules:
                             <span style="font-size: 0.769em; opacity: 0.5;">msgs</span>
                         </div>
                     </div>
+                    <label style="display: flex; align-items: center; gap: 5px; margin-bottom: 10px; cursor: pointer; font-size: 0.769em; opacity: 0.75;" title="Include hidden messages (e.g. messages collapsed by a summarizer) in the agent's lookback window.">
+                        <input type="checkbox" id="rt-agent-router-include-hidden" ${settings.routerIncludeHidden ? 'checked' : ''}>
+                        <span>Include hidden msgs (summarizer)</span>
+                    </label>
 
                     <div style="display: flex; gap: 8px; margin-bottom: 10px;">
                         <div style="flex: 1;" title="Max Tokens: The maximum token limit for the agent's response. 0 = model default.">
@@ -2960,6 +2964,16 @@ Rules:
                 });
             }
 
+            // ── Include hidden messages ──
+            const includeHiddenCheck = /** @type {HTMLInputElement} */ (agentPanel.querySelector('#rt-agent-router-include-hidden'));
+            if (includeHiddenCheck) {
+                includeHiddenCheck.addEventListener('change', () => {
+                    const s = getSettings();
+                    s.routerIncludeHidden = includeHiddenCheck.checked;
+                    saveSettings();
+                });
+            }
+
             // ── Run-every counter ──
             const runEveryInput = /** @type {HTMLInputElement} */ (agentPanel.querySelector('#rt-agent-router-run-every'));
             if (runEveryInput) {
@@ -2999,7 +3013,7 @@ Rules:
                     const lookback = dlInput ? parseInt(dlInput.value) : (s.routerDirectLookback || 10);
                     
                     const { chat } = SillyTavern.getContext();
-                    const combinedNarrative = getNarrativeBlocks(chat, -1);
+                    const combinedNarrative = getNarrativeBlocks(chat, -1, !!s.routerIncludeHidden);
                     toastr['info'](prompt ? "Running agent with specific command..." : "Starting manual research pass...");
                     await runRouterPass(combinedNarrative, prompt, lookback, true);
                 });
@@ -3011,7 +3025,7 @@ Rules:
                     e.stopPropagation();
                     const s = getSettings();
                     const { chat } = SillyTavern.getContext();
-                    const combinedNarrative = getNarrativeBlocks(chat, -1);
+                    const combinedNarrative = getNarrativeBlocks(chat, -1, !!s.routerIncludeHidden);
                     toastr['info']("Starting manual research pass...");
                     await runRouterPass(combinedNarrative, null, s.routerLookback || 3, true);
                 });

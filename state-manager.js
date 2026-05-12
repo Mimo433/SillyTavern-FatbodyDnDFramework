@@ -167,6 +167,7 @@ You may be asked to use Markers: ((PLS)), ((B)), ((XB)), ((BDG)), ((HGT)). These
         routerBasicMode: false,
         routerPaused: false,
         routerRunEvery: 1,
+        routerIncludeHidden: false,
         routerAutoActivateBooks: false,
         routerPromptForPrefix: false,
         routerModules: JSON.parse(JSON.stringify(DEFAULT_MODULES)),
