@@ -1,5 +1,5 @@
 import { EXAMPLES, COLOR_EXAMPLES, DEFAULT_STOCK_PROMPTS, RT_PROMPTS, BLOCK_ICONS, BLOCK_ORDER, PAGE_SIZE, NO_PAGINATE, QUESTS_NARRATOR_MODERN, QUESTS_NARRATOR_LEGACY } from './constants.js';
-import { MODULE_NAME, getSettings, getBarBackground, migrateCustomFields, saveChatState, saveProfile, deleteProfile } from './state-manager.js';
+import { MODULE_NAME, DEFAULT_MODULES, getSettings, getBarBackground, migrateCustomFields, saveChatState, saveProfile, deleteProfile } from './state-manager.js';
 import { sendStateRequest, fetchOllamaModels, fetchOpenAIModels, testOpenAIConnection, getConnectionProfiles, getCurrentCompletionPreset, setCompletionPreset } from './llm-client.js';
 import { getDiceToolName, getDiceCommandName, getDiceCommandAliases, doDiceRoll, registerDiceFunctionTool, registerDiceSlashCommand, installInterceptor, getNarrativeBlocks, onGenerationEnded } from './narrative-hooks.js';
 import { deduplicateMemo, mergeMemo, computeDelta, escapeHtml, escapeRegex, highlightParens, cleanToolCallMessage, getLastUserAction, buildLorebookContext, buildModulesInstructionText, buildModuleFormatInstruction, parseQuestsFromMemo, syncQuestsFromMemo, syncQuestsToMemo, writeQuestsToMemo, getQuestMood } from './memo-processor.js';
@@ -2607,16 +2607,10 @@ Rules:
                         const id = (/** @type {HTMLElement} */ (e.currentTarget)).dataset.id;
                         if (confirm(`Reset ${id.toUpperCase()} module instructions to default?`)) {
                             const s = getSettings();
-                            // Default values from state-manager.js logic
-                            const defaults = {
-                                npc: 'Use for NEW NPCs or updating ACTIVE ones.',
-                                loc: 'Use for NEW Locations. ALWAYS specify the Parent Location (e.g., City if it is a building, Region if it is a city).',
-                                fac: 'Track faction reputation and standing.',
-                                quest: 'Record quests and where they were received.',
-                                event: 'Record significant narrative events. ALWAYS include a timestamp (e.g., [Day 1, 14:00]) in the details so the chronology is preserved.'
-                            };
+                            // Pull fresh defaults directly from the exported constant — single source of truth
+                            const defaults = DEFAULT_MODULES;
                             if (defaults[id]) {
-                                s.routerModules[id].instruction = defaults[id];
+                                s.routerModules[id].instruction = defaults[id].instruction;
                                 saveSettings();
                                 renderAgentModules();
                             }

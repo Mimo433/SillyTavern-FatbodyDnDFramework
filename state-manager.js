@@ -14,6 +14,15 @@ import { DEFAULT_STOCK_PROMPTS, BLOCK_ORDER } from './constants.js';
 // ── Module name (shared constant, settings key) ────────────────────────────────
 export const MODULE_NAME = 'rpg_tracker';
 
+// ── Default module definitions (single source of truth for reset logic) ─────────
+export const DEFAULT_MODULES = {
+    npc:   { enabled: true, tag: 'NPC',   format: 'Name | Description | Keywords',                    instruction: 'Use for NEW NPCs or updating ACTIVE ones. NEVER create a standalone NPC entry for the player character ({{user}}) — their state is in the State Memo. You may still mention them in EVENT or QUEST entries.' },
+    loc:   { enabled: true, tag: 'LOC',   format: 'Name | Parent Location | Description | Keywords',  instruction: 'Use for NEW Locations. ALWAYS specify the Parent Location. Do NOT explicitly activate locations; they trigger via the footer. Record them with keywords matching the footer\'s location fragments (e.g. \'Khelt\', \'Third Tier\'). To update an active location, use the update tool with the ID value from the [ID:] stamp visible at the top of the injected entry — never copy the [ID:] line into your content. Provide only a timestamped delta.' },
+    fac:   { enabled: true, tag: 'FAC',   format: 'Name | Status | Keywords',                         instruction: 'Track faction reputation and standing.' },
+    quest: { enabled: true, tag: 'QUEST', format: 'Name | Location | Description | Keywords',         instruction: 'Record quests and where they were received.' },
+    event: { enabled: true, tag: 'EVENT', format: 'Name | Details | Keywords',                        instruction: 'Record significant narrative events. The Name is a SHORT, STABLE arc identifier (e.g. "Calibration of Sensor 4") — no timestamps, no "Final"/"Update" suffixes. Put the timestamp in the Details pipe (e.g. [Day 1, 14:00]). If this event is ongoing or you are adding new information to an existing event, use the EXACT same Name as before — entries are chronicles that append automatically when the name matches.' }
+};
+
 // ── Core settings accessor ─────────────────────────────────────────────────────
 
 /**
@@ -154,13 +163,7 @@ You may be asked to use Markers: ((PLS)), ((B)), ((XB)), ((BDG)), ((HGT)). These
         routerDirectLookback: 10,
         routerDirectPrompt: "",
         routerBasicMode: false,
-        routerModules: {
-            npc: { enabled: true, tag: 'NPC', format: 'Name | Description | Keywords', instruction: 'Use for NEW NPCs or updating ACTIVE ones. NEVER create a standalone NPC entry for the player character ({{user}}) — their state is in the State Memo. You may still mention them in EVENT or QUEST entries.' },
-            loc: { enabled: true, tag: 'LOC', format: 'Name | Parent Location | Description | Keywords', instruction: 'Use for NEW Locations. ALWAYS specify the Parent Location. Do NOT explicitly activate locations; they trigger via the footer. Record them with keywords matching the footer\'s location fragments (e.g. \'Khelt\', \'Third Tier\'). To update an active location, use the update tool with the ID value from the [ID:] stamp visible at the top of the injected entry — never copy the [ID:] line into your content. Provide only a timestamped delta.' },
-            fac: { enabled: true, tag: 'FAC', format: 'Name | Status | Keywords', instruction: 'Track faction reputation and standing.' },
-            quest: { enabled: true, tag: 'QUEST', format: 'Name | Location | Description | Keywords', instruction: 'Record quests and where they were received.' },
-            event: { enabled: true, tag: 'EVENT', format: 'Name | Details | Keywords', instruction: 'Record significant narrative events. The Name is a SHORT, STABLE arc identifier (e.g. "Calibration of Sensor 4") — no timestamps, no "Final"/"Update" suffixes. Put the timestamp in the Details pipe (e.g. [Day 1, 14:00]). If this event is ongoing or you are adding new information to an existing event, use the EXACT same Name as before — entries are chronicles that append automatically when the name matches.' }
-        },
+        routerModules: JSON.parse(JSON.stringify(DEFAULT_MODULES)),
         routerCustomTags: [], 
         routerHistory: [],
         routerSystemPromptTemplate: `<basic_instructions>
