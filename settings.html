@@ -27,11 +27,18 @@
                                 title="When enabled, the tracker state (memo) is automatically saved and restored per chat ID. Switching chats will reload that specific campaign's state."></i>
                         </label>
 
-                        <button id="rpg_tracker_btn_reset_and_apply_sysprompt" class="menu_button interactable"
-                            style="margin-top: 8px; width: 100%; background: rgba(80, 140, 255, 0.18); border-color: #5588ff;"
-                            title="Resets ALL prompts and writes sysprompt.txt to Quick Prompt Main box.">
-                            <i class="fa-solid fa-rotate"></i> Reset All &amp; Apply Main Sysprompt
-                        </button>
+                        <div style="display: flex; gap: 6px; margin-top: 8px;">
+                            <button id="rpg_tracker_btn_update_sysprompt" class="menu_button interactable"
+                                style="flex: 1; background: rgba(0, 200, 140, 0.18); border-color: #00c88c;"
+                                title="Re-fetches the latest sysprompt.txt and writes it to your Quick Prompt Main box — without resetting any of your settings.">
+                                <i class="fa-solid fa-arrow-up-from-bracket"></i> Update Main Sysprompt
+                            </button>
+                            <button id="rpg_tracker_btn_reset_and_apply_sysprompt" class="menu_button interactable"
+                                style="flex: 1; background: rgba(80, 140, 255, 0.18); border-color: #5588ff;"
+                                title="Resets ALL prompts and writes sysprompt.txt to Quick Prompt Main box.">
+                                <i class="fa-solid fa-rotate"></i> Reset All &amp; Apply
+                            </button>
+                        </div>
 
                         <label class="checkbox_label" style="margin-top: 10px;">
                             <input id="rpg_tracker_custom_sysprompt" type="checkbox" />

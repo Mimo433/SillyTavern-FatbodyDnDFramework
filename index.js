@@ -5416,6 +5416,39 @@ Rules:
                 toastr['success']('Stock modules, order, and prompts reset to factory defaults.', 'RPG Tracker');
             });
 
+            $('#rpg_tracker_btn_update_sysprompt').on('click', async function () {
+                const fileName = getSettings().diceFunctionTool ? 'sysprompt.txt' : 'sysprompt_legacy.txt';
+                let content;
+                try {
+                    const response = await fetch(`/scripts/extensions/third-party/${FOLDER_NAME}/${fileName}`);
+                    if (response.ok) {
+                        content = await response.text();
+                    } else {
+                        throw new Error(`Server returned ${response.status}`);
+                    }
+                } catch (err) {
+                    console.warn(`[Fatbody Framework] Could not fetch ${fileName}, using hardcoded fallback:`, err);
+                    content = RT_PROMPTS[fileName];
+                }
+
+                if (!content) {
+                    toastr['error']('Could not load sysprompt.txt. Main prompt was NOT updated.', 'RPG Tracker');
+                    return;
+                }
+
+                content = buildSysprompt(content);
+
+                const mainTextarea = /** @type {HTMLTextAreaElement} */ (document.getElementById('main_prompt_quick_edit_textarea'));
+                if (mainTextarea) {
+                    mainTextarea.value = content;
+                    mainTextarea.dispatchEvent(new Event('blur', { bubbles: true }));
+                    toastr['success']('Main sysprompt updated! \u2705', 'RPG Tracker');
+                } else {
+                    await navigator.clipboard.writeText(content).catch(() => {});
+                    toastr['info']('Quick-edit textarea not found. Sysprompt copied to clipboard — paste it manually into your Main prompt.', 'RPG Tracker');
+                }
+            });
+
             $('#rpg_tracker_btn_reset_and_apply_sysprompt').on('click', async function () {
                 if (!confirm('This will:\n\n1. Reset the Core State Model prompt to built-in default\n2. Reset all Stock Module prompts, Active Modules, and Module Order to factory defaults\n3. Fetch the latest sysprompt.txt and write it directly into your Quick Prompt "Main" box\n\nYour custom modules will NOT be affected. Proceed?')) return;
 
