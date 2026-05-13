@@ -360,36 +360,44 @@ import { runRouterPass, rollbackRouterPass, reapplyRouterPass, getLorebookManife
                 })();
             }
         } else if (s.routerEnabled && newChatId) {
-            // No linked stack — auto-derive prefix from character name and link
+            // No linked stack — auto-derive a unique prefix from char name + date and link
             setTimeout(async () => {
                 const s2 = getSettings();
                 if (s2.chatStates?.[newChatId]?.campaignBooks?.length) return; // linked in the meantime
                 const ctx = SillyTavern.getContext();
-                const charName = (ctx.name2 || '').trim().replace(/[^a-zA-Z0-9_-]/g, '_');
-                if (!charName) {
-                    // No character loaded yet — fall back to prompt if enabled
-                    /* no manual prompt — auto-prefix handles it */
-                    return;
+
+                // Build prefix: "<CharName>_<YYYY>_<MM>_<DD>"
+                // Chat IDs look like: "Korgath Iron-Hide - 2026-05-13@03h39m38s064ms"
+                // Fall back to just the character name if the date can't be parsed.
+                let prefix = '';
+                const dateMatch = newChatId.match(/^(.+?) - (\d{4})-(\d{2})-(\d{2})@/);
+                if (dateMatch) {
+                    const charPart = dateMatch[1].trim().replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+                    prefix = `${charPart}_${dateMatch[2]}_${dateMatch[3]}_${dateMatch[4]}`;
+                } else {
+                    const charName = (ctx.name2 || '').trim().replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+                    prefix = charName;
                 }
-                // Set the prefix
-                s2.routerCampaignPrefix = charName;
+
+                if (!prefix) return;
+
+                s2.routerCampaignPrefix = prefix;
                 const prefixInput = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_tracker_router_campaign_prefix'));
-                if (prefixInput) prefixInput.value = charName;
-                // Link any existing books for this character
+                if (prefixInput) prefixInput.value = prefix;
+                // Link any existing lorebooks that match this unique prefix
                 if (typeof ctx.updateWorldInfoList === 'function') await ctx.updateWorldInfoList().catch(() => {});
                 let allNames = [];
                 if (typeof ctx.getWorldInfoNames === 'function') {
                     try { allNames = await ctx.getWorldInfoNames(); } catch (_) {}
                 }
-                const matchingBooks = allNames.filter(n => n.startsWith(charName));
+                const matchingBooks = allNames.filter(n => n.startsWith(prefix));
                 if (!s2.chatStates) s2.chatStates = {};
                 if (!s2.chatStates[newChatId]) s2.chatStates[newChatId] = {};
                 s2.chatStates[newChatId].campaignBooks = matchingBooks;
                 saveSettings();
                 if (s2.chatLinkEnabled && _currentChatId) saveChatState(_currentChatId);
-                // Activate matching books (deactivates other campaign stacks)
                 if (matchingBooks.length) activateCampaignBooks().catch(() => {});
-            }, 800); // small delay so ctx.name2 is populated after chat load
+            }, 800); // small delay so ctx.name2 and chatId are fully populated
         }
 
         if (!s.chatLinkEnabled) {
