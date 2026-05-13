@@ -350,9 +350,17 @@ export function getNarrativeBlocks(chat, limit = -1, includeHidden = false) {
 /** In-memory counter: how many generations have fired since the agent last ran. Resets on chat change. */
 let _routerAutoTick = 0;
 
-/** Call this whenever the active chat changes so the interval counter restarts. */
+/**
+ * Accumulates keyword-triggered entry IDs across throttled generations so the
+ * agent receives the full set (not just the current turn) when it finally fires.
+ * Reset whenever the agent runs or the chat changes.
+ */
+let _pendingKeywordTriggered = [];
+
+/** Call this whenever the active chat changes so the interval counter and accumulator restart. */
 export function resetRouterTick() {
     _routerAutoTick = 0;
+    _pendingKeywordTriggered = [];
 }
 
 /**
@@ -372,12 +380,17 @@ export async function onGenerationEnded() {
     if (settings.debugMode) console.log("[RPG Tracker] Assistant generation ended. Running keyword scanner...");
 
     // Step 1: Scan assistant output for entry keywords and activate matches immediately.
-    // Must run before the state model pass so the agent sees the full active set.
-    let newlyTriggered = [];
+    // Must run before the state model pass and on EVERY generation, regardless of throttle,
+    // so entries are never one turn behind the narrator even when the agent is skipped.
     if (settings.routerEnabled) {
-        newlyTriggered = await scanAssistantOutputForKeywords(combinedNarrative);
-        if (settings.debugMode && newlyTriggered.length > 0) {
-            console.log("[RPG Tracker] Keyword scanner activated entries:", newlyTriggered);
+        const thisGenTriggered = await scanAssistantOutputForKeywords(combinedNarrative);
+        if (thisGenTriggered.length > 0) {
+            // Accumulate across throttled turns — deduplicate so IDs are not repeated.
+            const accumulated = new Set([..._pendingKeywordTriggered, ...thisGenTriggered]);
+            _pendingKeywordTriggered = [...accumulated];
+            if (settings.debugMode) {
+                console.log("[RPG Tracker] Keyword scanner activated entries:", thisGenTriggered, "| Pending total:", _pendingKeywordTriggered.length);
+            }
         }
     }
 
@@ -394,6 +407,9 @@ export async function onGenerationEnded() {
     if (_routerAutoTick < runEvery) return;
     _routerAutoTick = 0;
 
-    // Step 4: Lorebook Agent pass — receives the newly triggered list so it can flag them.
-    await runRouterPass(combinedNarrative, null, null, false, newlyTriggered);
+    // Step 4: Lorebook Agent pass — passes the full accumulated set of keyword-triggered IDs
+    // from all throttled turns since the last agent run (not just the current generation).
+    const triggeredForAgent = [..._pendingKeywordTriggered];
+    _pendingKeywordTriggered = []; // reset accumulator now that the agent is about to process them
+    await runRouterPass(combinedNarrative, null, null, false, triggeredForAgent);
 }

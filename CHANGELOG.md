@@ -2,6 +2,11 @@
 
 All notable changes to the **Fatbody D&D Framework** will be documented in this file.
 
+## [2.2.1] - 2026-05-14
+
+### Fixed
+- **Keyword scan accumulator**: Keyword-triggered lorebook entries are now accumulated across throttled turns (`routerRunEvery > 1`). Previously entries triggered on skipped turns were silently dropped; now the full set since the last agent run is passed as `NEWLY ACTIVATED THIS TURN` when the agent fires.
+
 ## [2.2.0] - 2026-05-14
 
 ### Changed
