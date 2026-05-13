@@ -617,12 +617,13 @@ async function applyAction(action, allBooks = {}, currentTime = '', breadcrumb =
         if (book?.entries?.[uid]) {
             // Strip [ID:] stamp from anywhere in the delta (model sometimes echoes it)
             let delta = (up.content || '').replace(/\[ID:[^\]]+\]\n?/gi, '').trim();
-            if (timePrefix && !delta.includes('[Day')) {
-                delta = timePrefix.trim() + ' ' + delta;
-            }
             // Append delta to the existing chronicle
             const existing = (book.entries[uid].content || '').replace(/^\[ID:[^\]]+\]\n?/i, '').trimEnd();
-            book.entries[uid].content = existing ? `${existing}\n${delta}` : delta;
+            delta = deduplicateContent(existing, delta);
+            if (delta && timePrefix && !delta.includes('[Day')) {
+                delta = timePrefix.trim() + ' ' + delta;
+            }
+            book.entries[uid].content = existing && delta ? `${existing}\n${delta}` : (existing || delta);
             await ctx.saveWorldInfo(bookName, book);
             changed = true;
         }
@@ -717,7 +718,8 @@ async function applyAction(action, allBooks = {}, currentTime = '', breadcrumb =
                 // Strip [ID:] stamp from anywhere in the delta (model sometimes echoes it)
                 let delta = (rec.content || '').replace(/\[ID:[^\]]+\]\n?/gi, '').trim();
                 const existing = (bookData.entries[existingUid].content || '').replace(/^\[ID:[^\]]+\]\n?/i, '').trimEnd();
-                bookData.entries[existingUid].content = existing ? `${existing}\n${delta}` : delta;
+                delta = deduplicateContent(existing, delta);
+                bookData.entries[existingUid].content = existing && delta ? `${existing}\n${delta}` : (existing || delta);
                 const keys = bookData.entries[existingUid].key || [];
                 (rec.keys || []).forEach(k => { if (!keys.includes(k)) keys.push(k); });
                 bookData.entries[existingUid].key = cleanKeys(keys);
@@ -1267,4 +1269,23 @@ export async function deleteLorebookEntry(id) {
 function cleanKeys(keys) {
     if (!Array.isArray(keys)) return [];
     return [...new Set(keys.map(k => k?.trim()).filter(Boolean))];
+}
+
+/**
+ * Given existing lorebook content and a delta the model wants to append,
+ * strip any sentences/lines from the delta that are already present in the
+ * existing content (the model often echoes the full entry back).
+ * Returns only the truly-new content, or an empty string if nothing is new.
+ */
+function deduplicateContent(existing, delta) {
+    if (!existing || !delta) return delta || '';
+    const normExisting = existing.toLowerCase();
+    // Split delta on newlines; keep a line only if it's not already in existing
+    const newLines = delta.split('\n').filter(line => {
+        const norm = line.replace(/^\[.*?\]\s*/g, '').trim().toLowerCase();
+        // Short or empty fragments are kept as-is (timestamps, separators, etc.)
+        if (norm.length < 15) return true;
+        return !normExisting.includes(norm);
+    });
+    return newLines.join('\n').trim();
 }
