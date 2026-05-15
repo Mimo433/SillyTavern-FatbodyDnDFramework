@@ -2336,6 +2336,7 @@ Rules:
                         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
                             <div style="font-weight: bold; opacity: 0.8; font-size: 0.846em;">CAMPAIGN RECORDS</div>
                             <div style="display: flex; align-items: center; gap: 6px;">
+                                <button class="rpg-tracker-icon-btn" id="rt-agent-activate-books" title="Activate campaign lorebooks now" style="font-size: 0.769em; opacity: 0.5;"><i class="fa-solid fa-book-open"></i></button>
                                 <button class="rpg-tracker-icon-btn" id="rt-agent-manifest-refresh" title="Refresh Manifest" style="font-size: 0.769em; opacity: 0.5;"><i class="fa-solid fa-arrows-rotate"></i></button>
                             </div>
                         </div>
@@ -3057,6 +3058,22 @@ Rules:
 
             const refreshBtn = agentPanel.querySelector('#rt-agent-manifest-refresh');
             if (refreshBtn) refreshBtn.addEventListener('click', () => refreshManifest('manual-button'));
+
+            const activateBooksBtn = agentPanel.querySelector('#rt-agent-activate-books');
+            if (activateBooksBtn) activateBooksBtn.addEventListener('click', async () => {
+                activateBooksBtn.disabled = true;
+                const origOpacity = activateBooksBtn.style.opacity;
+                activateBooksBtn.style.opacity = '1';
+                try {
+                    const count = await activateCampaignBooks();
+                    toastr['success'](`Activated ${count} campaign lorebook${count === 1 ? '' : 's'}.`);
+                } catch (e) {
+                    toastr['error']('Failed to activate campaign lorebooks.');
+                } finally {
+                    activateBooksBtn.disabled = false;
+                    activateBooksBtn.style.opacity = origOpacity;
+                }
+            });
 
             // Initial load so the list is populated without needing a manual click
             refreshManifest();
@@ -6293,6 +6310,19 @@ Rules:
             // Prefix display (read-only — auto-derived from chat name)
             const prefixDisplayEl = document.getElementById('rpg_tracker_router_prefix_display');
             if (prefixDisplayEl) prefixDisplayEl.textContent = settings.routerCampaignPrefix || '—';
+
+            $('#rpg_tracker_activate_books_btn').on('click', async function () {
+                const btn = $(this);
+                btn.prop('disabled', true);
+                try {
+                    const count = await activateCampaignBooks();
+                    toastr['success'](`Activated ${count} campaign lorebook${count === 1 ? '' : 's'}.`);
+                } catch (e) {
+                    toastr['error']('Failed to activate campaign lorebooks.');
+                } finally {
+                    btn.prop('disabled', false);
+                }
+            });
 
             // Router Ollama
             $('#rpg_tracker_router_ollama_url').val(settings.routerOllamaUrl).on('input', function () {
