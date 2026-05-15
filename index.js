@@ -86,7 +86,7 @@ import { getRequestHeaders } from '../../../../script.js';
      * @param {{ maxAttempts?: number, delayMs?: number }} [opts]
      */
     async function refreshWorldInfoRegistry(opts = {}) {
-        const maxAttempts = opts.maxAttempts ?? 3;
+        const maxAttempts = opts.maxAttempts ?? 1;
         const delayMs = opts.delayMs ?? 160;
         const ctx = SillyTavern.getContext();
         const attempts = [];
@@ -771,28 +771,29 @@ import { getRequestHeaders } from '../../../../script.js';
                 })();
             }
         } else if (s.routerEnabled && newChatId) {
-            // Auto-Prefix Path: No linked stack yet.
-            // Immediately kill the old stack so it doesn't bleed into the new context during the 800ms wait.
-            if (oldChatId) {
-                const _oldBooksB = s.chatStates?.[oldChatId]?.campaignBooks || [];
-                if (_oldBooksB.length && typeof SillyTavern.getContext().executeSlashCommandsWithOptions === 'function') {
-                    (async () => {
-                        const _ctxB = SillyTavern.getContext();
-                        for (const name of _oldBooksB) {
-                            await _ctxB.executeSlashCommandsWithOptions(`/world state=off silent=true "${name}"`).catch(() => {});
-                        }
-                    })();
-                }
-            }
+            // No linked stack yet for the arriving chat.
+            // Capture the departing chat's book list NOW (before any async gap).
+            const _oldBooksDeferred = s.chatStates?.[oldChatId]?.campaignBooks || [];
 
-            // Cancel any pending prefix-derivation from a previous CHAT_CHANGED
-            // so a transient chat ID (e.g. mid-rename) can't sneak through.
+            // Cancel any pending derivation from a previous CHAT_CHANGED.
             if (_prefixDeriveTimer) clearTimeout(_prefixDeriveTimer);
             _prefixDeriveTimer = setTimeout(async () => {
                 _prefixDeriveTimer = null;
-                // Bail if a newer chat change has come in while we were waiting.
                 if (newChatId !== _currentChatId) return;
 
+                // Step 1: Deactivate the old stack FIRST — same logic as the Fast Path.
+                // Runs inside the timeout so ST has settled its own chat-init before we
+                // issue /world commands, eliminating the race condition that let old books
+                // survive until the registry scan finished (~90s on bloated installs).
+                const _ctx = SillyTavern.getContext();
+                if (_oldBooksDeferred.length && typeof _ctx.executeSlashCommandsWithOptions === 'function') {
+                    for (const name of _oldBooksDeferred) {
+                        await _ctx.executeSlashCommandsWithOptions(`/world state=off silent=true "${name}"`).catch(() => {});
+                    }
+                }
+
+                // Step 2: Discover if the new chat actually has any linked books.
+                // (This is the only part that needs the registry scan.)
                 await syncCampaignPrefixAndWorldsForChat(newChatId, 'CHAT_CHANGED(debounced)');
             }, 800);
         }
