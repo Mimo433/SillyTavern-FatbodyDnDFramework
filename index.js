@@ -2585,7 +2585,7 @@ Rules:
                     </label>
 
                     <label style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; cursor: pointer; opacity: 0.8; font-size: 0.846em;" title="Automatically roll back both the State Tracker memo and Lorebook Agent lore to their pre-generation snapshots when you swipe right (regenerate the last AI message).">
-                        Auto-Rollback on Swipe
+                        Auto-Rollback on Swipe (State Tracker & Lorebook Agent)
                         <input type="checkbox" id="rt-agent-router-auto-rollback" ${settings.routerAutoRollbackOnSwipe ? 'checked' : ''}>
                     </label>
 
