@@ -2,7 +2,26 @@
 
 All notable changes to the **Fatbody D&D Framework** will be documented in this file.
 
-## [2.2.8] - 2026-05-14
+## [2.3.5] - 2026-05-16
+
+### Added
+- **Atmospheric Time Tracker**: [TIME] block text now dynamically changes color based on the hour of day (Dawn, Midday, Sunset, Night) to match the existing emoji logic.
+
+### Changed
+- **UI Modernization & Cleanup**:
+    - Removed redundant **Max Tokens** field from all UI sections.
+    - Renamed **Max Turns** to **Max Agent Turns** and **Max Active** to **Max Active Keys**.
+    - Removed bullet points from [TIME] block card items for a cleaner look.
+    - Relocated **Reset Stock Modules** button to the Modules section for better grouping.
+    - Renamed reset buttons to **Reset Core Prompt** and **Reset Stock Modules**.
+- **Hardened Lorebook Injection**: Implemented a third-pass injection in the narrative interceptor to ensure Agent-owned active entries (grey pills) are correctly included in the AI context.
+- **System Prompt Hardening**: Updated the template with a strict "NEVER ignore a module" directive to improve instruction following.
+- **Module Optimization**: Removed "Location" from the [TIME] module prompt (now exclusively handled by the status footer).
+
+### Fixed
+- **Scenario Profiles**: Restored the missing **Delete** button for scenario profiles.
+
+
 
 ### Fixed
 - **Lorebook deactivation on chat switch**: replaced fragile `_Letters` name-pattern heuristic with an exact lookup against the canonical `campaignBooks` lists stored per chat in `chatStates`. Only books the extension itself recorded as managed are ever deactivated — user-created lorebooks with any name are never touched.
