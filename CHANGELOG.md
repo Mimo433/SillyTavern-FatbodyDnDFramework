@@ -2,7 +2,12 @@
 
 All notable changes to the **Fatbody D&D Framework** will be documented in this file.
 
-## [2.3.5] - 2026-05-16
+## [2.3.6] - 2026-05-16
+
+### Fixed
+- **Keyword Persistence**: Corrected an ordering bug in `onChatChanged` where switching chats would wipe the departing chat's keyword-activated lore (yellow pills) before it could be saved.
+
+
 
 ### Added
 - **Atmospheric Time Tracker**: [TIME] block text now dynamically changes color based on the hour of day (Dawn, Midday, Sunset, Night) to match the existing emoji logic.
