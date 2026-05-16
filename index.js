@@ -755,6 +755,12 @@ import { getRequestHeaders } from '../../../../script.js';
         const oldChatId = _currentChatId;
         _currentChatId  = newChatId || null;
 
+        // Snapshot the departing chat's state BEFORE resetRouterTick mutates shared pools.
+        // resetRouterTick(true) zeroes keywordActivatedKeys in-place; if saveChatState ran
+        // after that, the yellow-pill keyword state for the departing chat would be lost.
+        // Guard matches the later chatLinkEnabled block so we only persist when linking is on.
+        if (s.chatLinkEnabled && oldChatId) saveChatState(oldChatId);
+
         // Reset the run-every tick so the agent fires promptly on the first generation of each chat.
         // Only clear keyword-activated lore when actually switching to a different chat.
         // Same-chat reloads (swipe, regenerate) must preserve the keyword pool.
@@ -829,7 +835,7 @@ import { getRequestHeaders } from '../../../../script.js';
             return;
         }
 
-        if (oldChatId) saveChatState(oldChatId);
+        // saveChatState(oldChatId) already called above, before resetRouterTick.
 
         const found = loadChatState(newChatId);
         if (!found) {
