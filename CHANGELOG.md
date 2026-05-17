@@ -2,6 +2,17 @@
 
 All notable changes to the **Fatbody D&D Framework** will be documented in this file.
 
+## [2.4.0] - 2026-05-17
+
+### Added
+- **Lorebook Agent Cleanup Mode**: Implemented a comprehensive cleanup mode pass to consolidate bloated lorebook entries.
+  - **Tool-call actions**: Support for `rewrite` (single entry compression) and `consolidate` (many-to-one merge + delete) operations.
+  - **Custom directives**: Manual global and per-entry cleanups prompt for custom instructions (e.g. "Preserve history, condense mechanics").
+  - **Auto-cleanup settings**: Toggles for automatic background runs every N turns and custom token size thresholds.
+  - **Bypassing controls**: Added "Use Token Threshold" checkbox to selectively include or exclude the size barrier.
+- **Estimated Token Displays**: Real-time token estimators next to category titles, entry list items, and active keys to monitor budget consumption at a glance.
+- **Event Isolation**: Fixed interactive controls getting stuck in draggable panels by selective event propagation filters.
+
 ## [2.3.8] - 2026-05-17
 
 ### Added
