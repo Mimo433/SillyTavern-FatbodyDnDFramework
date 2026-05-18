@@ -2,6 +2,11 @@
 
 All notable changes to the **Fatbody D&D Framework** will be documented in this file.
 
+## [2.4.1] - 2026-05-18
+
+### Fixed
+- **Rollback Data Safety**: Patched a critical bug in `rollbackRouterPass` where an empty or missing campaign prefix would fall back to the entire SillyTavern library, deleting or clearing unrelated lorebooks. The deletion step now safely ignores empty scopes when no campaign prefix is active.
+
 ## [2.4.0] - 2026-05-17
 
 ### Added
