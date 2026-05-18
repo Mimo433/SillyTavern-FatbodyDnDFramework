@@ -2,6 +2,11 @@
 
 All notable changes to the **Fatbody D&D Framework** will be documented in this file.
 
+## [2.4.2] - 2026-05-18
+
+### Fixed
+- **Keyword Scanner Latency**: Eliminated a critical 5-second prompt compilation and message delay by removing the expensive, synchronous `updateWorldInfoList` disk-reindexing call from the scanner's fallback path. The read-only keyword scanner now operates purely in-memory, relying on the already-current registry and an in-memory `routerLog` backup for instant performance.
+
 ## [2.4.1] - 2026-05-18
 
 ### Fixed

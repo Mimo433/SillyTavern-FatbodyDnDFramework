@@ -1865,10 +1865,14 @@ export async function scanAssistantOutputForKeywords(narrativeText, opts = {}) {
         // We know exactly which books belong to this campaign — no registry scan needed.
         booksToScan = [...knownBooks];
     } else {
-        // Fallback for first-time chats: need to discover books via registry scan.
-        if (typeof ctx.updateWorldInfoList === 'function') {
-            try { await ctx.updateWorldInfoList(); } catch (_) {}
-        }
+        // Fallback for first-time chats: discover books via in-memory registry.
+        // updateWorldInfoList() is intentionally NOT called here — it triggers a
+        // full disk re-index on every message send, causing multi-second latency
+        // for users whose chatStates.campaignBooks is empty (new campaigns, no
+        // lorebook entries yet). The routerLog fallback below already catches any
+        // books not yet visible in the in-memory registry at zero I/O cost.
+        // runRouterPass calls updateWorldInfoList() after actual book writes (line ~1298),
+        // so the registry is already current by the time the next scan fires.
         const allNames = await getWorldInfoNamesSafe();
         const scoped = allNames.filter(n => bookBelongsToPrefix(n, prefix));
 
