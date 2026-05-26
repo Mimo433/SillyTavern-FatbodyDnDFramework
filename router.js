@@ -27,8 +27,10 @@ function getLivePrefix() {
  */
 function bookBelongsToPrefix(bookName, prefix) {
     if (!prefix) return false;
-    if (bookName === prefix) return true;
-    const rest = bookName.startsWith(prefix + '_') ? bookName.slice(prefix.length + 1) : null;
+    const lowerBook = String(bookName).toLowerCase();
+    const lowerPref = String(prefix).toLowerCase();
+    if (lowerBook === lowerPref) return true;
+    const rest = lowerBook.startsWith(lowerPref + '_') ? lowerBook.slice(lowerPref.length + 1) : null;
     return rest !== null && !rest.includes('_');
 }
 
@@ -97,15 +99,45 @@ function broadcastStep(type, content, metadata = {}) {
  */
 async function getWorldInfoNamesSafe() {
     const ctx = SillyTavern.getContext();
+    const namesSet = new Set();
+    
+    // 1. Check frontend registry (may be stale or incomplete if books aren't linked yet)
     if (typeof ctx.getWorldInfoNames === 'function') {
-        return await ctx.getWorldInfoNames();
+        const res = await ctx.getWorldInfoNames();
+        if (Array.isArray(res)) res.forEach(n => namesSet.add(n));
+    } else if (typeof ctx.getLorebookList === 'function') {
+        const res = await ctx.getLorebookList();
+        if (Array.isArray(res)) res.forEach(n => namesSet.add(n));
     }
-    // Fallback for older versions
-    if (typeof ctx.getLorebookList === 'function') {
-        return await ctx.getLorebookList();
-    }
-    // Deep fallback
-    return [];
+
+    // 2. Unconditionally probe the backend API (ground truth of what exists on disk).
+    // This prevents the agent from missing newly cloned books if the frontend hasn't refreshed.
+    try {
+        const r = await fetch('/api/settings/get', { 
+            method: 'POST', 
+            headers: getRequestHeaders(),
+            body: JSON.stringify({})
+        });
+        if (r.ok) {
+            const j = await r.json();
+            if (Array.isArray(j?.world_names)) {
+                j.world_names.forEach(n => namesSet.add(n));
+            }
+        }
+    } catch (_) {}
+
+    // 3. Fallback for older ST versions
+    try {
+        const r = await fetch('/api/worldinfo/get', { method: 'POST', headers: getRequestHeaders() });
+        if (r.ok) {
+            const j = await r.json();
+            if (typeof j === 'object' && j !== null && !j.error) {
+                Object.keys(j).forEach(n => namesSet.add(n));
+            }
+        }
+    } catch (_) {}
+
+    return [...namesSet];
 }
 
 /**
@@ -632,27 +664,28 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
             formatLines.push(`- [[DEACTIVATE: Name]] (Remove from active memory)`);
             formatLines.push(`- [[DELETE: Name]] (Permanently remove an entry)`);
 
+            const formatLinesStr = formatLines.join('\n');
+            let modularPrompt = settings.routerModularPromptTemplate || '';
+            modularPrompt = modularPrompt.replace(/\{\{formatLines\}\}/g, formatLinesStr);
+
+            // Handle World engine template logic
+            const dayMatch = recentChat.match(/Day\s+(\d+)/i);
+            const currentDay = dayMatch ? parseInt(dayMatch[1], 10) : 'Unknown';
+            const dayStr = currentDay !== 'Unknown' ? currentDay : 'X';
+            const prevDay = currentDay !== 'Unknown' ? Math.max(1, currentDay - 1) : 'X-1';
+
+            if (settings.routerModules?.world?.enabled) {
+                modularPrompt = modularPrompt.replace(/\{\{#if_world\}\}/g, '')
+                                             .replace(/\{\{\/if_world\}\}/g, '')
+                                             .replace(/\{\{dayStr\}\}/g, dayStr)
+                                             .replace(/\{\{prevDay\}\}/g, prevDay);
+            } else {
+                modularPrompt = modularPrompt.replace(/\{\{#if_world\}\}[\s\S]*?\{\{\/if_world\}\}/g, '');
+            }
+
             const basicSystemPrompt = `You are the Research Assistant. Your task is to identify and record important narrative entities and events.
 
-## FORMAT
-Use these tags in your response:
-${formatLines.join('\n')}
-
-## HIERARCHY CONVENTION (CRITICAL FOR LOCATIONS)
-For LOC entries, the Name field MUST be the FULL hierarchical path using " :: " (space, colon, colon, space) as the separator.
-The current scene's location stack is shown above as "CURRENT LOCATION". Prepend it to any sub-location you record.
-
-Examples:
-  CURRENT LOCATION: Khelt :: Rust-Lantern District
-  --> [[LOC: Khelt :: Rust-Lantern District :: Marrow-Deep Mines Office | A squat iron building managing mining contracts. | mines, contracts, Khelt, Rust-Lantern]]
-  --> [[LOC: Khelt :: Rust-Lantern District :: The Guilded Anvil Tavern | A noisy tavern with a job bulletin board. | tavern, jobs, Khelt, Rust-Lantern]]
-
-Also include each ancestor name (Khelt, Rust-Lantern District) as a plain keyword in the Keywords field.
-
-NPC / FAC / QUEST / EVENT labels: Name only ? NO " :: " hierarchy, NO tag prefix.
-Example: [[FAC: Iron Syndicate | ...]]  NOT  [[FAC: Khelt :: Iron Syndicate | ...]]  and  NOT  [[FAC: FAC: Iron Syndicate | ...]]
-
-**FAC** uses four fields: \`Name | Status | Description | Keywords\`. Put a concise current-state line in **Status** (standing, conflicts, recent changes); put history, ideology, schemes, and members in **Description**.
+${modularPrompt}
 
 ## ATTENTION & MEMORY
 1. **NEWLY ACTIVATED THIS TURN**: Entries whose keywords appeared in the latest narrator output are pre-loaded here with full content. You do not need to activate them again — they are already active.
@@ -674,12 +707,14 @@ Thought: I see a new NPC named Barnaby in Khelt's Rust-Lantern District. I will 
 [[LOC: Khelt :: Rust-Lantern District :: Barnaby's Forge | Barnaby's old workshop, still smelling of soot. | forge, Khelt, Rust-Lantern]]
 [[FAC: Iron Syndicate | Wary of outsiders after the forge raid; still dominant in the industrial quarter. | Founded by ex-mercenaries forty years ago; controls scrap tariffs and smuggling. Lieutenant Marna Voss handles street enforcement. | Iron Syndicate, Khelt, faction, smuggling]]`;
 
+            const finalBasicSystemPrompt = basicSystemPrompt;
+
             const questMatchB = settings.currentMemo?.match(/\[QUESTS\]([\s\S]*?)\[\/QUESTS\]/i);
             const questBlockB = questMatchB ? `[QUESTS]${questMatchB[1].trim()}[/QUESTS]` : 'None';
             const basicUserPrompt = `## BUDGET STATUS\n${budgetLine}${overflowInstruction}\n\n## NEWLY ACTIVATED THIS TURN\n${newlyTriggeredFull.join('\n\n') || 'None.'}\n\n## ACTIVE MEMORY (Lore)\n${activeEntriesFull.join('\n\n') || 'None.'}\n\n## ARCHIVE INDEX\n${keyringText || 'Empty.'}\n\n## CURRENT LOCATION\n${currentHierarchy || 'Unknown'}\n\n## ACTIVE QUESTS\n${questBlockB}\n\n## NARRATIVE\n${recentChat}\n\n${manualPrompt ? `## INSTRUCTION\n${manualPrompt}\n\n` : ''}`;
 
             broadcastStep('thought', 'Thinking...');
-            const basicResp = await sendStateRequest(routerSettings, basicSystemPrompt, basicUserPrompt);
+            const basicResp = await sendStateRequest(routerSettings, finalBasicSystemPrompt, basicUserPrompt);
 
             const thoughtMatchB = basicResp.match(/Thought:\s*([\s\S]*?)(?=\[\[|$)/i);
             if (thoughtMatchB) broadcastStep('thought', thoughtMatchB[1].trim());
@@ -1156,7 +1191,7 @@ async function applyAction(action, allBooks = {}, currentTime = '', breadcrumb =
     const recordedIds = [];
 
     // -- Phase A: Route each record to its target book --
-    const catMap = { 'NPC': 'NPCs', 'LOC': 'Locations', 'QUEST': 'Quests', 'FAC': 'Factions', 'EVENT': 'Events' };
+    const catMap = { 'NPC': 'NPCs', 'LOC': 'Locations', 'QUEST': 'Quests', 'FAC': 'Factions', 'EVENT': 'Events', 'WORLD': 'World' };
     // Extend with user-defined custom tags so they get their own books (e.g. WEATHER ? prefix_Weather)
     for (const ct of (settings.routerCustomTags || [])) {
         const t = ct.tag.toUpperCase();
@@ -1165,10 +1200,20 @@ async function applyAction(action, allBooks = {}, currentTime = '', breadcrumb =
     /** @type {Map<string, Array>} */
     const bookQueue = new Map();
 
+    const knownBookNames = Object.keys(allBooks);
     for (const rec of records) {
         const cat = (rec.category || rec.comment || '').toUpperCase();
         const catName = Object.keys(catMap).find(k => cat.includes(k));
-        const targetBook = catName ? (prefix ? `${prefix}_${catMap[catName]}` : catMap[catName]) : baseBook;
+        const idealTargetBook = catName ? (prefix ? `${prefix}_${catMap[catName]}` : catMap[catName]) : baseBook;
+        
+        let targetBook = idealTargetBook;
+        const idealLower = idealTargetBook.toLowerCase();
+        for (const known of knownBookNames) {
+            if (known.toLowerCase() === idealLower) {
+                targetBook = known;
+                break;
+            }
+        }
 
         // Strip any accidental "TAG: " prefix the model may have included in the label
         // e.g. "FAC: Iron Syndicate" ? "Iron Syndicate", "STATS: Thalric Thorne" ? "Thalric Thorne"
@@ -1208,16 +1253,32 @@ async function applyAction(action, allBooks = {}, currentTime = '', breadcrumb =
 
 
     // -- Phase B: For each book, load existing entries, append new ones, save to disk via HTTP API --
-    const knownBookNames = Object.keys(allBooks);
     /** @type {Set<string>} books written this pass that need activation */
     const booksWritten = new Set();
     for (const [targetBook, recs] of bookQueue.entries()) {
         if (settings.debugMode) console.log(`[RPG Tracker] Writing ${recs.length} entries to: ${targetBook}`);
 
-        // Load existing book or initialize a new one
-        let bookData = knownBookNames.includes(targetBook)
-            ? await ctx.loadWorldInfo(targetBook)
-            : null;
+        // Attempt to load existing book directly from backend (prevents wiping un-cached books)
+        let bookData = null;
+        try {
+            bookData = await ctx.loadWorldInfo(targetBook);
+        } catch (_) { }
+
+        if (!bookData) {
+            try {
+                const res = await fetch('/api/worldinfo/get', {
+                    method: 'POST',
+                    headers: getRequestHeaders(),
+                    body: JSON.stringify({ name: targetBook })
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data && typeof data === 'object' && data.entries) {
+                        bookData = data;
+                    }
+                }
+            } catch (_) {}
+        }
 
         if (!bookData) {
             bookData = { entries: {}, name: targetBook, scan_depth: 4, token_budget: 400, recursive: false, extensions: {} };
@@ -1559,7 +1620,7 @@ function parseBasicTags(text, archiveBooks) {
     };
 
     // Generic tag parser: [[TAG: ...]]
-    const tagRegex = /\[\[(\w+):\s*((?:(?!\]\]).)+?)\]\]/gi;
+    const tagRegex = /\[\[(\w+):\s*([\s\S]*?)\]\]/gi;
     let match;
 
     while ((match = tagRegex.exec(text)) !== null) {
@@ -1603,10 +1664,29 @@ function parseBasicTags(text, archiveBooks) {
 async function addLorebookEntry(lorebookName, entryData, allNames) {
     const ctx = SillyTavern.getContext();
     if (!allNames) allNames = await getWorldInfoNamesSafe();
+    
     let bookData = null;
     if (allNames.includes(lorebookName)) {
-        bookData = await ctx.loadWorldInfo(lorebookName);
-    } else {
+        try { bookData = await ctx.loadWorldInfo(lorebookName); } catch (_) {}
+    }
+    
+    if (!bookData) {
+        try {
+            const res = await fetch('/api/worldinfo/get', {
+                method: 'POST',
+                headers: getRequestHeaders(),
+                body: JSON.stringify({ name: lorebookName })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                if (data && typeof data === 'object' && data.entries) {
+                    bookData = data;
+                }
+            }
+        } catch (_) {}
+    }
+
+    if (!bookData) {
         if (getSettings().debugMode) console.log(`[RPG Tracker] Initializing new lorebook: ${lorebookName}`);
         bookData = { 
             entries: {},
@@ -1620,7 +1700,7 @@ async function addLorebookEntry(lorebookName, entryData, allNames) {
 
     // Always reload fresh from disk to get accurate existing UIDs
     // (avoids uid:0 collision when multiple entries are written to a new book in one pass)
-    const freshData = allNames.includes(lorebookName) ? await ctx.loadWorldInfo(lorebookName) : bookData;
+    const freshData = bookData;
     const existingUids = Object.keys(freshData?.entries || {}).map(Number).filter(n => !isNaN(n));
     const nextUid = existingUids.length > 0 ? Math.max(...existingUids) + 1 : 0;
     

@@ -323,6 +323,13 @@
                         <textarea id="rpg_tracker_router_prompt" class="text_pole autoSetHeight" rows="5"></textarea>
                         <button id="rpg_tracker_router_btn_reset_prompt" class="menu_button interactable" style="width: 100%; margin-top: 4px; font-size: 11px;"><i class="fa-solid fa-arrow-rotate-left"></i> Reset Agent Prompt</button>
 
+                        <div style="margin-top: 10px;">
+                            <b>Modular Agent Instruction</b>
+                            <div style="font-size: 10px; opacity: 0.7; margin-bottom: 4px; line-height: 1.3;">Controls formatting and module-specific rules (LOC, FAC, WORLD, etc). Use <span style="font-family: monospace;">{{formatLines}}</span> to inject the dynamically enabled modules.</div>
+                            <textarea id="rpg_tracker_router_modular_prompt" class="text_pole autoSetHeight" rows="5"></textarea>
+                            <button id="rpg_tracker_router_btn_reset_modular_prompt" class="menu_button interactable" style="width: 100%; margin-top: 4px; font-size: 11px;"><i class="fa-solid fa-arrow-rotate-left"></i> Reset Modular Prompt</button>
+                        </div>
+
                         <details id="rpg_tracker_lore_activation_debug_wrap" style="margin-top: 12px; opacity: 0.55;">
                             <summary style="cursor: pointer; user-select: none; font-size: 10px; color: inherit; list-style: none;" title="Prefix matching, ST APIs, and /world slash diagnostics">Lore activation debug</summary>
                             <div style="margin-top: 8px; font-size: 10px; line-height: 1.35;">

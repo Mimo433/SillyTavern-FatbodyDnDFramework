@@ -20,7 +20,8 @@ export const DEFAULT_MODULES = {
     loc:   { enabled: true, tag: 'LOC',   format: 'Name | Description | Keywords',                    instruction: 'Named places. The Name MUST be the full hierarchical path using " :: " as the separator (e.g. "Khelt :: Rust-Lantern District :: Marrow-Deep Mines Office"). Include each ancestor name as a keyword (e.g. "Khelt, Rust-Lantern District, mines").' },
     fac:   { enabled: true, tag: 'FAC',   format: 'Name | Status | Description | Keywords',           instruction: 'Named factions, guilds, organisations. **Status**: short current-state line (standing with the party, active conflicts, what changed recently). **Description**: longer narrative (history, ideology, schemes, notable members). **Keywords**: comma-separated terms for discovery.' },
     quest: { enabled: true, tag: 'QUEST', format: 'Name | Location | Description | Keywords',         instruction: 'ONLY record a quest when the player explicitly accepts it. A quest being mentioned or offered is NOT enough.' },
-    event: { enabled: true, tag: 'EVENT', format: 'Name | Details | Keywords',                        instruction: 'Significant narrative events. The Name is a SHORT, STABLE identifier (e.g. "Siege of Ashford") — no timestamps in the name, no "Final"/"Update" suffixes. Put timestamps in the Details field. Reuse the exact same Name when adding new information — entries are chronicles that accumulate automatically.' }
+    event: { enabled: true, tag: 'EVENT', format: 'Name | Details | Keywords',                        instruction: 'Significant narrative events. The Name is a SHORT, STABLE identifier (e.g. "Siege of Ashford") — no timestamps in the name, no "Final"/"Update" suffixes. Put timestamps in the Details field. Reuse the exact same Name when adding new information — entries are chronicles that accumulate automatically.' },
+    world: { enabled: false, tag: 'WORLD', format: 'Name | Details | Keywords',                       instruction: 'World Engine reports tracking off-screen NPC actions and events. Name must be the time period (e.g. "Day 1", "Week 1 (Days 1-7)").' }
 };
 
 // ── Core settings accessor ─────────────────────────────────────────────────────
@@ -256,6 +257,37 @@ Example: "[Day 1, 11:52] Character signed the contract with Brodrik."
 <bravery>
 Don't be afraid to hit the budget exactly. It's better to lean towards activating too much than too little.
 </bravery>`,
+        routerModularPromptTemplate: `## FORMAT
+Use these tags in your response:
+{{formatLines}}
+
+## HIERARCHY CONVENTION (CRITICAL FOR LOCATIONS)
+For LOC entries, the Name field MUST be the FULL hierarchical path using " :: " (space, colon, colon, space) as the separator.
+The current scene's location stack is shown above as "CURRENT LOCATION". Prepend it to any sub-location you record.
+
+Examples:
+  CURRENT LOCATION: Khelt :: Rust-Lantern District
+  --> [[LOC: Khelt :: Rust-Lantern District :: Marrow-Deep Mines Office | A squat iron building managing mining contracts. | mines, contracts, Khelt, Rust-Lantern]]
+  --> [[LOC: Khelt :: Rust-Lantern District :: The Guilded Anvil Tavern | A noisy tavern with a job bulletin board. | tavern, jobs, Khelt, Rust-Lantern]]
+
+Also include each ancestor name (Khelt, Rust-Lantern District) as a plain keyword in the Keywords field.
+
+NPC / FAC / QUEST / EVENT labels: Name only — NO " :: " hierarchy, NO tag prefix.
+Example: [[FAC: Iron Syndicate | ...]]  NOT  [[FAC: Khelt :: Iron Syndicate | ...]]  and  NOT  [[FAC: FAC: Iron Syndicate | ...]]
+
+**FAC** uses four fields: \`Name | Status | Description | Keywords\`. Put a concise current-state line in **Status** (standing, conflicts, recent changes); put history, ideology, schemes, and members in **Description**.
+
+{{#if_world}}
+## WORLD ENGINE (BACKGROUND EVENTS)
+Current Day is: Day {{dayStr}}.
+CRITICAL INSTRUCTION: You MUST backfill missing World Engine day reports. Your absolute top priority in this pass is to check the ARCHIVE INDEX for "Day {{prevDay}}".
+- If "Day {{prevDay}}" is NOT in the archive, you MUST generate it right now using the WORLD tag: \`[[WORLD: Day {{prevDay}} | <content> | day {{prevDay}}, world engine ]]\`. Do not make excuses. It is your job to generate the missing Day {{prevDay}} report immediately.
+- DO NOT write a report for the current ongoing day (Day {{dayStr}}). You only write reports for past days.
+- TIMESKIPS: If there is a massive gap in days, generate a single entry for the missing period (e.g., \`[[WORLD: Week 1 (Days 1-7) | ... ]]\`).
+- MASSIVE DETAIL REQUIRED: The WORLD entry <content> MUST be a highly detailed, extensive multi-paragraph report (at least 500-800+ words).
+- LIVING WORLD SIMULATION: Do NOT focus on the player character or their immediate party. The player is NOT the center of the universe. Do NOT just echo the player's recent events. Instead, simulate a living, breathing world. Invent rich, dynamic, off-screen actions for other factions, named NPCs, guilds, and regions. What political scheming happened today? Did rival adventurers complete a quest? Did monsters migrate or weather ruin crops? Provide deep, specific updates on NPC-to-NPC interactions that the player is completely unaware of. Use bullet points or bold names to structure the massive report.
+- CONTEXT MANAGEMENT: You MUST \`[[ACTIVATE: Day {{prevDay}}]]\` (and the 2 days prior if they exist). You MUST \`[[DEACTIVATE]]\` any older WORLD reports.
+{{/if_world}}`,
         categoryRenderOptions: {},
     };
 
@@ -287,7 +319,8 @@ Don't be afraid to hit the budget exactly. It's better to lean towards activatin
             loc: { enabled: !!old.loc, tag: 'LOC', format: 'Name | Description | Keywords', instruction: 'Named places. Name MUST be the full hierarchical path using " :: " as the separator (e.g. "Khelt :: Rust-Lantern District :: Marrow-Deep Mines Office"). Include each ancestor as a keyword.' },
             fac: { enabled: !!old.fac, tag: 'FAC', format: 'Name | Status | Description | Keywords', instruction: 'Named factions, guilds, organisations. **Status**: short current-state line. **Description**: longer narrative (history, schemes, members). **Keywords**: comma-separated terms.' },
             quest: { enabled: !!old.quest, tag: 'QUEST', format: 'Name | Location | Description | Keywords', instruction: 'ONLY record a quest when the player explicitly accepts it. A quest being mentioned or offered is NOT enough.' },
-            event: { enabled: !!old.event, tag: 'EVENT', format: 'Name | Details | Keywords', instruction: 'Significant narrative events. Use a SHORT, STABLE Name — no timestamps in the name. Reuse the exact same Name when adding new information.' }
+            event: { enabled: !!old.event, tag: 'EVENT', format: 'Name | Details | Keywords', instruction: 'Significant narrative events. Use a SHORT, STABLE Name — no timestamps in the name. Reuse the exact same Name when adding new information.' },
+            world: { enabled: !!old.world, tag: 'WORLD', format: 'Name | Details | Keywords', instruction: DEFAULT_MODULES.world.instruction }
         };
     }
 
