@@ -7552,6 +7552,11 @@ Rules:
                 settings.routerSystemPromptTemplate = String($(this).val() || '');
                 saveSettings();
             });
+
+            $('#rpg_tracker_router_modular_prompt').val(settings.routerModularPromptTemplate).on('input', function () {
+                settings.routerModularPromptTemplate = String($(this).val() || '');
+                saveSettings();
+            });
             $('#rpg_tracker_router_btn_reset_prompt').on('click', function () {
                 if (!confirm('Reset Router Agent prompt to default?')) return;
 
@@ -7577,6 +7582,29 @@ Rules:
                 toastr['success']('Router prompt reset to default.', 'RPG Tracker');
             });
 
+            $('#rpg_tracker_router_btn_reset_modular_prompt').on('click', function () {
+                if (!confirm('Reset Modular Agent instruction to default?')) return;
+
+                const { extensionSettings } = SillyTavern.getContext();
+                if (extensionSettings[MODULE_NAME]) {
+                    delete extensionSettings[MODULE_NAME].routerModularPromptTemplate;
+                }
+                const freshDefault = getSettings().routerModularPromptTemplate;
+
+                const s = getSettings();
+                s.routerModularPromptTemplate = freshDefault;
+
+                const $el = $('#rpg_tracker_router_modular_prompt');
+                $el.val(freshDefault);
+                $el.trigger('input');
+
+                if (typeof (/** @type {any} */ ($el)).trigger === 'function') {
+                    (/** @type {any} */ ($el)).trigger('autosize.resize');
+                }
+
+                saveSettings();
+                toastr['success']('Modular instructions reset to default.', 'RPG Tracker');
+            });
             // Custom Sysprompt Mode toggle
             const customSyspromptCb = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_tracker_custom_sysprompt'));
             const narratorConfigBlock = document.getElementById('rpg_narrator_config_block');

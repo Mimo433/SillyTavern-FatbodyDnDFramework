@@ -666,27 +666,28 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
             formatLines.push(`- [[DEACTIVATE: Name]] (Remove from active memory)`);
             formatLines.push(`- [[DELETE: Name]] (Permanently remove an entry)`);
 
+            const formatLinesStr = formatLines.join('\n');
+            let modularPrompt = settings.routerModularPromptTemplate || '';
+            modularPrompt = modularPrompt.replace(/\{\{formatLines\}\}/g, formatLinesStr);
+
+            // Handle World engine template logic
+            const dayMatch = recentChat.match(/Day\s+(\d+)/i);
+            const currentDay = dayMatch ? parseInt(dayMatch[1], 10) : 'Unknown';
+            const dayStr = currentDay !== 'Unknown' ? currentDay : 'X';
+            const prevDay = currentDay !== 'Unknown' ? Math.max(1, currentDay - 1) : 'X-1';
+
+            if (settings.routerModules?.world?.enabled) {
+                modularPrompt = modularPrompt.replace(/\{\{#if_world\}\}/g, '')
+                                             .replace(/\{\{\/if_world\}\}/g, '')
+                                             .replace(/\{\{dayStr\}\}/g, dayStr)
+                                             .replace(/\{\{prevDay\}\}/g, prevDay);
+            } else {
+                modularPrompt = modularPrompt.replace(/\{\{#if_world\}\}[\s\S]*?\{\{\/if_world\}\}/g, '');
+            }
+
             const basicSystemPrompt = `You are the Research Assistant. Your task is to identify and record important narrative entities and events.
 
-## FORMAT
-Use these tags in your response:
-${formatLines.join('\n')}
-
-## HIERARCHY CONVENTION (CRITICAL FOR LOCATIONS)
-For LOC entries, the Name field MUST be the FULL hierarchical path using " :: " (space, colon, colon, space) as the separator.
-The current scene's location stack is shown above as "CURRENT LOCATION". Prepend it to any sub-location you record.
-
-Examples:
-  CURRENT LOCATION: Khelt :: Rust-Lantern District
-  --> [[LOC: Khelt :: Rust-Lantern District :: Marrow-Deep Mines Office | A squat iron building managing mining contracts. | mines, contracts, Khelt, Rust-Lantern]]
-  --> [[LOC: Khelt :: Rust-Lantern District :: The Guilded Anvil Tavern | A noisy tavern with a job bulletin board. | tavern, jobs, Khelt, Rust-Lantern]]
-
-Also include each ancestor name (Khelt, Rust-Lantern District) as a plain keyword in the Keywords field.
-
-NPC / FAC / QUEST / EVENT labels: Name only ? NO " :: " hierarchy, NO tag prefix.
-Example: [[FAC: Iron Syndicate | ...]]  NOT  [[FAC: Khelt :: Iron Syndicate | ...]]  and  NOT  [[FAC: FAC: Iron Syndicate | ...]]
-
-**FAC** uses four fields: \`Name | Status | Description | Keywords\`. Put a concise current-state line in **Status** (standing, conflicts, recent changes); put history, ideology, schemes, and members in **Description**.
+${modularPrompt}
 
 ## ATTENTION & MEMORY
 1. **NEWLY ACTIVATED THIS TURN**: Entries whose keywords appeared in the latest narrator output are pre-loaded here with full content. You do not need to activate them again — they are already active.
@@ -708,12 +709,14 @@ Thought: I see a new NPC named Barnaby in Khelt's Rust-Lantern District. I will 
 [[LOC: Khelt :: Rust-Lantern District :: Barnaby's Forge | Barnaby's old workshop, still smelling of soot. | forge, Khelt, Rust-Lantern]]
 [[FAC: Iron Syndicate | Wary of outsiders after the forge raid; still dominant in the industrial quarter. | Founded by ex-mercenaries forty years ago; controls scrap tariffs and smuggling. Lieutenant Marna Voss handles street enforcement. | Iron Syndicate, Khelt, faction, smuggling]]`;
 
+            const finalBasicSystemPrompt = basicSystemPrompt;
+
             const questMatchB = settings.currentMemo?.match(/\[QUESTS\]([\s\S]*?)\[\/QUESTS\]/i);
             const questBlockB = questMatchB ? `[QUESTS]${questMatchB[1].trim()}[/QUESTS]` : 'None';
             const basicUserPrompt = `## BUDGET STATUS\n${budgetLine}${overflowInstruction}\n\n## NEWLY ACTIVATED THIS TURN\n${newlyTriggeredFull.join('\n\n') || 'None.'}\n\n## ACTIVE MEMORY (Lore)\n${activeEntriesFull.join('\n\n') || 'None.'}\n\n## ARCHIVE INDEX\n${keyringText || 'Empty.'}\n\n## CURRENT LOCATION\n${currentHierarchy || 'Unknown'}\n\n## ACTIVE QUESTS\n${questBlockB}\n\n## NARRATIVE\n${recentChat}\n\n${manualPrompt ? `## INSTRUCTION\n${manualPrompt}\n\n` : ''}`;
 
             broadcastStep('thought', 'Thinking...');
-            const basicResp = await sendStateRequest(routerSettings, basicSystemPrompt, basicUserPrompt);
+            const basicResp = await sendStateRequest(routerSettings, finalBasicSystemPrompt, basicUserPrompt);
 
             const thoughtMatchB = basicResp.match(/Thought:\s*([\s\S]*?)(?=\[\[|$)/i);
             if (thoughtMatchB) broadcastStep('thought', thoughtMatchB[1].trim());
@@ -1190,7 +1193,7 @@ async function applyAction(action, allBooks = {}, currentTime = '', breadcrumb =
     const recordedIds = [];
 
     // -- Phase A: Route each record to its target book --
-    const catMap = { 'NPC': 'NPCs', 'LOC': 'Locations', 'QUEST': 'Quests', 'FAC': 'Factions', 'EVENT': 'Events' };
+    const catMap = { 'NPC': 'NPCs', 'LOC': 'Locations', 'QUEST': 'Quests', 'FAC': 'Factions', 'EVENT': 'Events', 'WORLD': 'World' };
     // Extend with user-defined custom tags so they get their own books (e.g. WEATHER ? prefix_Weather)
     for (const ct of (settings.routerCustomTags || [])) {
         const t = ct.tag.toUpperCase();

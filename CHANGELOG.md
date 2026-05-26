@@ -2,19 +2,17 @@
 
 All notable changes to the **Fatbody D&D Framework** will be documented in this file.
 
-## [2.4.4] - 2026-06-04
+## [2.5.0] - 2026-05-26
 
-### Changed
-- **XP Block Icon**: Replaced the regional indicator XP flag icon (`🇽🇵`) with a glowing star emoji (`🌟`) to avoid rendering "XP" twice in the header.
+### Added
+- **Automated World Engine**: Implemented a comprehensive "World Engine" simulation block in the Lorebook Agent. The agent now tracks the passage of time and automatically generates missing daily background reports for off-screen NPC actions and faction events, creating a persistent, living world that evolves independently of the player.
+- **Editable Modular Agent Instructions**: Exposed all Lorebook Agent formatting rules and module-specific logic (LOC, FAC, WORLD, Custom Tags) into a single, unified text area in the settings UI. Advanced users can now fully customize or rewrite the internal logic and formatting rules of the Lorebook Agent.
 
 ### Fixed
-- **Custom Resizer Alignment & Consistency**:
-  - Fixed a vertical offset drift bug on nested, right-anchored absolute panels (such as the attached Lorebook Agent panel) by skipping viewport-relative `top` coordinate overrides during top-right resizing.
-  - Resolved parent boundary clipping by adding the `rt-agent-open` class to the main tracker panel when the agent panel is shown, applying `overflow: visible` dynamically.
-  - Upgraded detached sub-panels and the Context Debugger window from browser-native CSS `resize: both` to custom-styled top-right and bottom-right resize handles with pointer events, bounding checks, and persistent geometry saves.
+- **Tag Parsing Robustness**: Fixed a critical parser bug where multi-line or multi-paragraph entries (like the new verbose WORLD reports) were being truncated. The generic tag parser now safely captures tags spanning across newlines.
+- **Legacy Constraints**: Backported the `<world_engine>` narrative constraint to `sysprompt_legacy.txt` to prevent NPCs in legacy mode from spontaneously blurting out background world events that the player shouldn't know about.
 
 ## [2.4.2] - 2026-05-18
-
 ### Fixed
 - **Keyword Scanner Latency**: Eliminated a critical 5-second prompt compilation and message delay by removing the expensive, synchronous `updateWorldInfoList` disk-reindexing call from the scanner's fallback path. The read-only keyword scanner now operates purely in-memory, relying on the already-current registry and an in-memory `routerLog` backup for instant performance.
 
