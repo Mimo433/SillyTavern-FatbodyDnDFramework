@@ -2,6 +2,17 @@
 
 All notable changes to the **Fatbody D&D Framework** will be documented in this file.
 
+## [2.4.4] - 2026-06-04
+
+### Changed
+- **XP Block Icon**: Replaced the regional indicator XP flag icon (`🇽🇵`) with a glowing star emoji (`🌟`) to avoid rendering "XP" twice in the header.
+
+### Fixed
+- **Custom Resizer Alignment & Consistency**:
+  - Fixed a vertical offset drift bug on nested, right-anchored absolute panels (such as the attached Lorebook Agent panel) by skipping viewport-relative `top` coordinate overrides during top-right resizing.
+  - Resolved parent boundary clipping by adding the `rt-agent-open` class to the main tracker panel when the agent panel is shown, applying `overflow: visible` dynamically.
+  - Upgraded detached sub-panels and the Context Debugger window from browser-native CSS `resize: both` to custom-styled top-right and bottom-right resize handles with pointer events, bounding checks, and persistent geometry saves.
+
 ## [2.4.2] - 2026-05-18
 
 ### Fixed

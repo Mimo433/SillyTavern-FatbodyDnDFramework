@@ -221,8 +221,11 @@
     font-family: var(--rt-font);
     font-size: var(--rt-base-size);
     overflow: hidden;
-    resize: both;
     container-type: inline-size;
+}
+
+.rpg-tracker-panel.rt-agent-open {
+    overflow: visible !important;
 }
 
 .rt-resizer-tr {
@@ -243,6 +246,30 @@
 .rt-resizer-tr:hover {
     opacity: 1;
     border-color: var(--rt-accent);
+}
+
+.rt-resizer-br {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 16px;
+    height: 16px;
+    cursor: se-resize;
+    z-index: 2005;
+    background-image: repeating-linear-gradient(
+        -45deg,
+        transparent,
+        transparent 2px,
+        rgba(255, 255, 255, 0.4) 2px,
+        rgba(255, 255, 255, 0.4) 3px
+    );
+    clip-path: polygon(100% 0, 100% 100%, 0 100%);
+    opacity: 0.45;
+    transition: opacity 0.2s;
+}
+
+.rt-resizer-br:hover {
+    opacity: 1;
 }
 
 /* Disabled via the settings checkbox — full transparency */
@@ -1283,7 +1310,6 @@
     min-width: 250px;
     height: auto;
     max-height: 80vh;
-    resize: both;
     overflow: hidden;
 }
 
@@ -1969,7 +1995,6 @@
     color: #eee;
     font-family: 'Consolas', 'Monaco', monospace;
     overflow: hidden;
-    resize: both;
 }
 
 .rpg-debug-header {
@@ -2194,10 +2219,35 @@
 .rpg-tracker-panel.rt-panel-collapsed .rpg-tracker-content,
 .rpg-tracker-panel.rt-panel-collapsed .rpg-tracker-delta-panel,
 .rpg-tracker-panel.rt-panel-collapsed .rpg-tracker-delta-resize-handle,
-.rpg-tracker-panel.rt-panel-collapsed .rt-resizer-tr,
 .rpg-tracker-panel.rt-panel-collapsed .rpg-tracker-footer {
     display: none !important;
 }
+
+/* When collapsed, both resizers stay visible but signal horizontal-only resize */
+.rpg-tracker-panel.rt-panel-collapsed .rt-resizer-tr,
+.rpg-tracker-panel.rt-panel-collapsed .rt-resizer-br {
+    cursor: ew-resize;
+}
+
+/* When collapsed, replace the diagonal-stripe triangle on the BR handle with a
+   solid corner-bracket so it survives overflow:hidden + border-radius clipping */
+.rpg-tracker-panel.rt-panel-collapsed .rt-resizer-br {
+    width: 12px;
+    height: 12px;
+    background-image: none;
+    clip-path: none;
+    border-bottom: 2px solid var(--rt-accent-dim);
+    border-right: 2px solid var(--rt-accent-dim);
+    border-bottom-right-radius: 6px;
+    opacity: 0.4;
+    transition: opacity 0.2s, border-color 0.2s;
+}
+
+.rpg-tracker-panel.rt-panel-collapsed .rt-resizer-br:hover {
+    opacity: 1;
+    border-color: var(--rt-accent);
+}
+
 
 /* Override high-specificity ID-based block rules in `#rpg-tracker-agent` when collapsed */
 #rpg-tracker-agent.rt-panel-collapsed .rpg-tracker-content {

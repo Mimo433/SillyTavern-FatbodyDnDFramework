@@ -560,7 +560,7 @@ Declare their COMBAT PROFILE immediately:
 // ── Renderer / block layout constants ─────────────────────────────────────────
 
 export const BLOCK_ICONS = {
-    TIME: '🕒', XP: '🇽🇵', CHARACTER: '🧙', PARTY: '👥',
+    TIME: '🕒', XP: '🌟', CHARACTER: '🧙', PARTY: '👥',
     COMBAT: '⚔️', INVENTORY: '🎒', ABILITIES: '✨', SPELLS: '📖',
     QUESTS: '📋',
 };

@@ -19,6 +19,8 @@ export function initializeDebugViewer() {
     
     // Aesthetic structure
     debugPanel.innerHTML = `
+        <div class="rt-resizer-tr" id="rt-debug-resizer-tr" title="Resize from top-right"></div>
+        <div class="rt-resizer-br" id="rt-debug-resizer-br" title="Resize from bottom-right"></div>
         <div class="rpg-debug-header">
             <div class="rpg-debug-header-left">
                 <span class="rpg-debug-icon">🛠️</span>
@@ -36,6 +38,30 @@ export function initializeDebugViewer() {
     
     document.body.appendChild(debugPanel);
     
+    // Geometry Key
+    const GEO_KEY = 'rpg_tracker_geometry_debug_viewer';
+
+    // Restore geometry
+    try {
+        const saved = JSON.parse(localStorage.getItem(GEO_KEY));
+        if (saved && saved.left !== undefined) {
+            const left = Math.max(0, Math.min(window.innerWidth - 50, saved.left));
+            const top = Math.max(0, Math.min(window.innerHeight - 50, saved.top));
+            debugPanel.style.left = left + 'px';
+            debugPanel.style.top = top + 'px';
+            if (saved.width) debugPanel.style.width = saved.width + 'px';
+            if (saved.height) debugPanel.style.height = saved.height + 'px';
+        }
+    } catch (_) {}
+
+    const saveGeometry = () => {
+        const rect = debugPanel.getBoundingClientRect();
+        localStorage.setItem(GEO_KEY, JSON.stringify({
+            left: rect.left, top: rect.top,
+            width: rect.width, height: rect.height
+        }));
+    };
+
     // Events
     debugPanel.querySelector('#rpg-debug-close').onclick = () => toggleDebugViewer(false);
     debugPanel.querySelector('#rpg-debug-clear').onclick = () => {
@@ -43,23 +69,114 @@ export function initializeDebugViewer() {
         renderTransactions();
     };
     
-    // Draggable (simple implementation)
+    // Draggable (using pointer events)
     const header = debugPanel.querySelector('.rpg-debug-header');
     let isDragging = false;
-    let offset = [0, 0];
-    
-    header.onmousedown = (e) => {
+    let dragStartX, dragStartY, dragStartLeft, dragStartTop;
+
+    header.onpointerdown = (e) => {
+        if (e.button !== 0) return;
+        if (e.target.closest('button')) return; // Avoid drag on button click
         isDragging = true;
-        offset = [debugPanel.offsetLeft - e.clientX, debugPanel.offsetTop - e.clientY];
+        header.setPointerCapture(e.pointerId);
+        dragStartX = e.clientX;
+        dragStartY = e.clientY;
+        const rect = debugPanel.getBoundingClientRect();
+        dragStartLeft = rect.left;
+        dragStartTop = rect.top;
+        
+        e.preventDefault();
     };
-    
-    document.onmousemove = (e) => {
+
+    header.onpointermove = (e) => {
         if (!isDragging) return;
-        debugPanel.style.left = (e.clientX + offset[0]) + 'px';
-        debugPanel.style.top = (e.clientY + offset[1]) + 'px';
+        const dx = e.clientX - dragStartX;
+        const dy = e.clientY - dragStartY;
+        debugPanel.style.left = (dragStartLeft + dx) + 'px';
+        debugPanel.style.top = (dragStartTop + dy) + 'px';
     };
-    
-    document.onmouseup = () => isDragging = false;
+
+    const stopDrag = (e) => {
+        if (!isDragging) return;
+        isDragging = false;
+        if (e) {
+            try { header.releasePointerCapture(e.pointerId); } catch (_) {}
+        }
+        saveGeometry();
+    };
+
+    header.onpointerup = stopDrag;
+    header.onpointercancel = stopDrag;
+
+    // Resizable Setup
+    const resizerTR = debugPanel.querySelector('#rt-debug-resizer-tr');
+    const resizerBR = debugPanel.querySelector('#rt-debug-resizer-br');
+
+    const setupResizer = (handle, type) => {
+        let isResizing = false;
+        let startX, startY, startWidth, startHeight, startTop, startLeft;
+
+        const stopResize = (e) => {
+            if (!isResizing) return;
+            isResizing = false;
+            if (e) {
+                try { handle.releasePointerCapture(e.pointerId); } catch (_) {}
+            }
+            saveGeometry();
+        };
+
+        handle.onpointerdown = (e) => {
+            if (e.button !== 0) return;
+            isResizing = true;
+            handle.setPointerCapture(e.pointerId);
+            const rect = debugPanel.getBoundingClientRect();
+            startX = e.clientX;
+            startY = e.clientY;
+            startWidth = rect.width;
+            startHeight = rect.height;
+            startTop = rect.top;
+            startLeft = rect.left;
+
+            // Lock positioning variables to styles
+            debugPanel.style.left = startLeft + 'px';
+            debugPanel.style.top = startTop + 'px';
+
+            e.preventDefault();
+            e.stopPropagation();
+        };
+
+        handle.onpointermove = (e) => {
+            if (!isResizing) return;
+            if (e.buttons === 0) {
+                stopResize(e);
+                return;
+            }
+            const dx = e.clientX - startX;
+            const dy = e.clientY - startY;
+
+            if (type === 'TR') {
+                const newWidth = Math.max(300, startWidth + dx);
+                const newHeight = Math.max(200, startHeight - dy);
+                const newTop = startTop + dy;
+                debugPanel.style.width = newWidth + 'px';
+                if (newHeight > 200) {
+                    debugPanel.style.height = newHeight + 'px';
+                    debugPanel.style.top = newTop + 'px';
+                }
+            } else if (type === 'BR') {
+                const newWidth = Math.max(300, startWidth + dx);
+                const newHeight = Math.max(200, startHeight + dy);
+                debugPanel.style.width = newWidth + 'px';
+                debugPanel.style.height = newHeight + 'px';
+            }
+        };
+
+        handle.onpointerup = stopResize;
+        handle.onpointercancel = stopResize;
+    };
+
+    if (resizerTR) setupResizer(resizerTR, 'TR');
+    if (resizerBR) setupResizer(resizerBR, 'BR');
 }
 
 export function toggleDebugViewer(force) {

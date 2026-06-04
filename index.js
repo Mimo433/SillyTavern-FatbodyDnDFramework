@@ -1974,7 +1974,7 @@ Rules:
 
         localStorage.setItem(GEOMETRY_KEY, JSON.stringify({
             left: rect.left, top: rect.top,
-            width: isCollapsed ? (savedGeo.width || rect.width) : rect.width,
+            width: rect.width,
             height: isCollapsed ? (savedGeo.height || rect.height) : rect.height
         }));
     }
@@ -2570,6 +2570,8 @@ Rules:
         panel.id = `rt-detached-panel-${tag}`;
         panel.className = `rpg-tracker-panel rpg-tracker-detached-panel ${settings.trackerTheme || 'rt-theme-native'}`;
         panel.innerHTML = `
+            <div class="rt-resizer-tr" id="rt-detached-resizer-tr-${tag}" title="Resize from top-right"></div>
+            <div class="rt-resizer-br" id="rt-detached-resizer-br-${tag}" title="Resize from bottom-right"></div>
             <div class="rpg-tracker-header rt-detached-header">
                 <div class="rpg-tracker-header-left">
                     <span>${icon} ${displayName}</span>
@@ -2590,8 +2592,23 @@ Rules:
             makeDraggable(panel, header, `rpg_tracker_geometry_${tag}`);
         }
 
-        // Setup specialized geometry keys
         const geoKey = `rpg_tracker_geometry_${tag}`;
+        const saveDetachedGeo = (p) => {
+            const rect = p.getBoundingClientRect();
+            localStorage.setItem(geoKey, JSON.stringify({
+                left: rect.left, top: rect.top,
+                width: rect.width, height: rect.height
+            }));
+        };
+
+        const resizerTR = panel.querySelector(`#rt-detached-resizer-tr-${tag}`);
+        if (resizerTR instanceof HTMLElement) {
+            makeResizableTR(panel, resizerTR, saveDetachedGeo);
+        }
+        const resizerBR = panel.querySelector(`#rt-detached-resizer-br-${tag}`);
+        if (resizerBR instanceof HTMLElement) {
+            makeResizableBR(panel, resizerBR, saveDetachedGeo);
+        }
 
         try {
             const saved = JSON.parse(localStorage.getItem(geoKey));
@@ -2665,6 +2682,7 @@ Rules:
         panel.style.setProperty('--rt-base-size', (settings.fontSize || 13) + 'px');
         panel.innerHTML = `
             <div class="rt-resizer-tr" id="rt-resizer-tr" title="Resize from top-right"></div>
+            <div class="rt-resizer-br" id="rt-resizer-br" title="Resize from bottom-right"></div>
             <div class="rpg-tracker-header" id="rpg-tracker-header">
                 <div class="rpg-tracker-header-left">
                     <span>Fatbody D&D Framework</span>
@@ -2699,6 +2717,8 @@ Rules:
                 <div id="rpg-tracker-delta-content">${settings.lastDelta || '<span class="delta-empty">No changes yet.</span>'}</div>
             </div>
             <div class="rpg-tracker-panel rpg-tracker-agent-panel ${settings.agentCollapsed ? 'rt-panel-collapsed ' : ''}${settings.trackerTheme || 'rt-theme-native'}" id="rpg-tracker-agent" style="display:none; position: absolute; right: 0; top: 30px; width: 300px; max-height: calc(100% - 30px); z-index: 1000; flex-direction: column;">
+                <div class="rt-resizer-tr" id="rt-agent-resizer-tr" title="Resize width"></div>
+                <div class="rt-resizer-br" id="rt-agent-resizer-br" title="Resize width"></div>
                 <div class="rpg-tracker-header" style="cursor: default;">
                     <span class="rpg-tracker-header-left"><i class="fa-solid fa-robot"></i> <span>Lorebook Agent</span></span>
                     <div class="rpg-tracker-header-center" id="rt-agent-pause-banner" style="color:#ffa500; font-size:0.7em; font-weight:bold; letter-spacing:0.04em;">${settings.routerPaused ? 'AGENT PAUSED' : ''}</div>
@@ -2943,6 +2963,52 @@ Rules:
         const resizerTR = panel.querySelector('#rt-resizer-tr');
         if (resizerTR instanceof HTMLElement) {
             makeResizableTR(/** @type {HTMLElement} */(panel), resizerTR);
+        }
+
+        const resizerBR = panel.querySelector('#rt-resizer-br');
+        if (resizerBR instanceof HTMLElement) {
+            makeResizableBR(/** @type {HTMLElement} */(panel), resizerBR);
+        }
+
+        const _agentPanelEl = panel.querySelector('#rpg-tracker-agent');
+        const agentResizerTR = _agentPanelEl?.querySelector('#rt-agent-resizer-tr');
+        const agentResizerBR = _agentPanelEl?.querySelector('#rt-agent-resizer-br');
+        if (_agentPanelEl instanceof HTMLElement) {
+            // For the attached agent panel, save width to its own key so it doesn't clobber the main panel geometry.
+            // When detached, save full geometry (left, top, width, height) to the detached geometry key.
+            const AGENT_ATTACHED_WIDTH_KEY = 'rpg_tracker_agent_attached_width';
+            const AGENT_GEO_KEY = 'rpg_tracker_geometry_lorebook_agent';
+            const agentSave = (p) => {
+                const isDetachedNow = p.classList.contains('rt-detached-panel');
+                if (isDetachedNow) {
+                    const r = p.getBoundingClientRect();
+                    const isCollapsed = p.classList.contains('rt-panel-collapsed');
+                    let savedGeo = {};
+                    try {
+                        const savedStr = localStorage.getItem(AGENT_GEO_KEY);
+                        if (savedStr) savedGeo = JSON.parse(savedStr) || {};
+                    } catch {}
+                    localStorage.setItem(AGENT_GEO_KEY, JSON.stringify({
+                        left: r.left, top: r.top,
+                        width: isCollapsed ? (savedGeo.width || r.width) : r.width,
+                        height: isCollapsed ? (savedGeo.height || r.height) : r.height
+                    }));
+                } else {
+                    const w = p.getBoundingClientRect().width;
+                    localStorage.setItem(AGENT_ATTACHED_WIDTH_KEY, String(w));
+                }
+            };
+            if (agentResizerTR instanceof HTMLElement) {
+                makeResizableTR(_agentPanelEl, agentResizerTR, agentSave);
+            }
+            if (agentResizerBR instanceof HTMLElement) {
+                makeResizableBR(_agentPanelEl, agentResizerBR, agentSave);
+            }
+            // Restore saved width if any
+            try {
+                const savedW = parseFloat(localStorage.getItem(AGENT_ATTACHED_WIDTH_KEY));
+                if (savedW >= 220) _agentPanelEl.style.width = savedW + 'px';
+            } catch {}
         }
 
         const stopBtn = panel.querySelector('#rpg-tracker-stop-btn');
@@ -3191,6 +3257,7 @@ Rules:
                 const isHidden = (/** @type {HTMLElement} */ (agentPanel)).style.display === 'none';
                 (/** @type {HTMLElement} */ (agentPanel)).style.display = isHidden ? 'flex' : 'none';
                 if (isHidden) {
+                    panel.classList.add('rt-agent-open');
                     // Auto-expand the main tracker if it's collapsed; agent panel is an absolute
                     // child, so overflow:hidden on the main panel would clip it otherwise.
                     const s = getSettings();
@@ -3204,10 +3271,13 @@ Rules:
                     syncRouterPrefixDisplays(getSettings().routerCampaignPrefix || '');
                     renderRouterUI();
                     refreshManifest();
+                } else {
+                    panel.classList.remove('rt-agent-open');
                 }
             });
             agentCloseBtn.addEventListener('click', () => {
                 (/** @type {HTMLElement} */ (agentPanel)).style.display = 'none';
+                panel.classList.remove('rt-agent-open');
             });
             const helpBtn = agentPanel.querySelector('#rt-agent-help-btn');
             if (helpBtn) {
@@ -4272,6 +4342,7 @@ Rules:
                     agentPanel.classList.add('rt-detached-panel');
                     agentPanel.style.display = 'flex'; // Force visibility if detached
                     document.body.appendChild(agentPanel);
+                    panel.classList.remove('rt-agent-open');
                     syncRouterPrefixDisplays(getSettings().routerCampaignPrefix || '');
                     renderRouterUI(); // Ensure it's populated
                     refreshManifest();
@@ -4327,6 +4398,11 @@ Rules:
                     panel.appendChild(agentPanel);
                     agentPanel.style.left = ''; agentPanel.style.top = '30px'; agentPanel.style.right = '0';
                     agentPanel.style.width = '300px'; agentPanel.style.height = '';
+                    if (agentPanel.style.display !== 'none') {
+                        panel.classList.add('rt-agent-open');
+                    } else {
+                        panel.classList.remove('rt-agent-open');
+                    }
                     detachBtn.innerHTML = '⧉';
                     detachBtn.title = 'Detach Lorebook Agent';
                 }
@@ -5030,6 +5106,11 @@ Rules:
 
         const onPointerMove = (e) => {
             if (!isDragging) return;
+            if (e.buttons === 0) {
+                // Defensive check if mouseup was missed (especially on Firefox)
+                onPointerUp(e);
+                return;
+            }
             const left = startLeft + (e.clientX - startX);
             const top = startTop + (e.clientY - startY);
 
@@ -5041,9 +5122,14 @@ Rules:
             panel.style.top = boundedTop + 'px';
         };
 
-        const onPointerUp = () => {
+        const onPointerUp = (e) => {
             if (isDragging) {
                 isDragging = false;
+                if (e) {
+                    try {
+                        handle.releasePointerCapture(e.pointerId);
+                    } catch (err) {}
+                }
                 if (customKey) {
                     const rect = panel.getBoundingClientRect();
                     const isCollapsed = panel.classList.contains('rt-panel-collapsed');
@@ -5064,29 +5150,58 @@ Rules:
             }
         };
 
+        const onPointerCancel = (e) => {
+            if (isDragging) {
+                isDragging = false;
+                if (e) {
+                    try {
+                        handle.releasePointerCapture(e.pointerId);
+                    } catch (err) {}
+                }
+            }
+        };
+
         handle.addEventListener('pointerdown', onPointerDown);
         handle.addEventListener('pointermove', onPointerMove);
         handle.addEventListener('pointerup', onPointerUp);
-        handle.addEventListener('pointercancel', () => { isDragging = false; });
+        handle.addEventListener('pointercancel', onPointerCancel);
 
         return () => {
             isDragging = false;
             handle.removeEventListener('pointerdown', onPointerDown);
             handle.removeEventListener('pointermove', onPointerMove);
             handle.removeEventListener('pointerup', onPointerUp);
+            handle.removeEventListener('pointercancel', onPointerCancel);
         };
     }
 
     /**
      * Top-Right corner resizer logic
-     * @param {HTMLElement} panel 
-     * @param {HTMLElement} handle 
+     * @param {HTMLElement} panel
+     * @param {HTMLElement} handle
+     * @param {((panel: HTMLElement) => void) | null} [saveCallback] - optional override for geometry saving
      */
-    function makeResizableTR(panel, handle) {
+    function makeResizableTR(panel, handle, saveCallback = null) {
+        let isResizing = false;
         let startX, startY, startWidth, startHeight, startTop, startLeft;
+
+        const stopResize = (e) => {
+            if (!isResizing) return;
+            isResizing = false;
+            window.removeEventListener('mouseup', onWindowMouseUp);
+            if (e) {
+                try { handle.releasePointerCapture(e.pointerId); } catch (_) {}
+            }
+            if (saveCallback) saveCallback(panel);
+            else savePanelGeometry(panel);
+        };
+
+        // Safety net: catch any mouseup the pointer events miss (Firefox quirk)
+        const onWindowMouseUp = () => stopResize(null);
 
         handle.addEventListener('pointerdown', (e) => {
             if (e.button !== 0) return;
+            isResizing = true;
             handle.setPointerCapture(e.pointerId);
             const rect = panel.getBoundingClientRect();
             startX = e.clientX;
@@ -5096,38 +5211,115 @@ Rules:
             startTop = rect.top;
             startLeft = rect.left;
 
-            panel.style.left = startLeft + 'px';
-            panel.style.top = startTop + 'px';
-            panel.style.right = 'auto';
-            panel.style.bottom = 'auto';
+            // Only lock position for freely-positioned panels (not right-anchored agent panel)
+            if (!panel.style.right || panel.style.right === 'auto') {
+                panel.style.left = startLeft + 'px';
+                panel.style.top = startTop + 'px';
+                panel.style.right = 'auto';
+                panel.style.bottom = 'auto';
+            }
+
+            window.addEventListener('mouseup', onWindowMouseUp, { once: true });
 
             e.preventDefault();
             e.stopPropagation();
         });
 
         handle.addEventListener('pointermove', (e) => {
-            if (!handle.hasPointerCapture(e.pointerId)) return;
+            if (!isResizing) return;
+            if (e.buttons === 0) {
+                stopResize(e);
+                return;
+            }
+            const isCollapsed = panel.classList.contains('rt-panel-collapsed');
             const dx = e.clientX - startX;
             const dy = e.clientY - startY;
 
             const newWidth = Math.max(220, startWidth + dx);
-            const newHeight = Math.max(200, startHeight - dy);
-            const newTop = startTop + dy;
-
             panel.style.width = newWidth + 'px';
-            if (newHeight > 200) {
+
+            if (!isCollapsed) {
+                const newHeight = Math.max(200, startHeight - dy);
+                if (newHeight > 200) {
+                    panel.style.height = newHeight + 'px';
+                    if (!panel.style.right || panel.style.right === 'auto') {
+                        const newTop = startTop + dy;
+                        panel.style.top = newTop + 'px';
+                    }
+                }
+            }
+        });
+
+        handle.addEventListener('pointerup', stopResize);
+        handle.addEventListener('pointercancel', stopResize);
+    }
+
+    /**
+     * Bottom-Right corner resizer logic
+     * @param {HTMLElement} panel
+     * @param {HTMLElement} handle
+     * @param {((panel: HTMLElement) => void) | null} [saveCallback] - optional override for geometry saving
+     */
+    function makeResizableBR(panel, handle, saveCallback = null) {
+        let isResizing = false;
+        let startX, startY, startWidth, startHeight, startTop, startLeft;
+
+        const stopResize = (e) => {
+            if (!isResizing) return;
+            isResizing = false;
+            window.removeEventListener('mouseup', onWindowMouseUp);
+            if (e) {
+                try { handle.releasePointerCapture(e.pointerId); } catch (_) {}
+            }
+            if (saveCallback) saveCallback(panel);
+            else savePanelGeometry(panel);
+        };
+
+        // Safety net: catch any mouseup the pointer events miss (Firefox quirk)
+        const onWindowMouseUp = () => stopResize(null);
+
+        handle.addEventListener('pointerdown', (e) => {
+            if (e.button !== 0) return;
+            isResizing = true;
+            handle.setPointerCapture(e.pointerId);
+            const rect = panel.getBoundingClientRect();
+            startX = e.clientX;
+            startY = e.clientY;
+            startWidth = rect.width;
+            startHeight = rect.height;
+            startTop = rect.top;
+            startLeft = rect.left;
+
+            // Lock position so freely-positioned panels resize from the correct corner
+            if (!panel.style.right || panel.style.right === 'auto') {
+                panel.style.left = startLeft + 'px';
+                panel.style.top = startTop + 'px';
+                panel.style.right = 'auto';
+                panel.style.bottom = 'auto';
+            }
+
+            window.addEventListener('mouseup', onWindowMouseUp, { once: true });
+            e.preventDefault();
+            e.stopPropagation();
+        });
+
+        handle.addEventListener('pointermove', (e) => {
+            if (!isResizing) return;
+            if (e.buttons === 0) {
+                stopResize(e);
+                return;
+            }
+            const isCollapsed = panel.classList.contains('rt-panel-collapsed');
+            const newWidth = Math.max(220, startWidth + (e.clientX - startX));
+            panel.style.width = newWidth + 'px';
+            if (!isCollapsed) {
+                const newHeight = Math.max(200, startHeight + (e.clientY - startY));
                 panel.style.height = newHeight + 'px';
-                panel.style.top = newTop + 'px';
             }
         });
 
-        handle.addEventListener('pointerup', (e) => {
-            if (handle.hasPointerCapture(e.pointerId)) {
-                savePanelGeometry(panel);
-            }
-        });
-
-        handle.addEventListener('pointercancel', () => {});
+        handle.addEventListener('pointerup', stopResize);
+        handle.addEventListener('pointercancel', stopResize);
     }
 
     function setupResizeObserver(panel) {
@@ -5143,28 +5335,42 @@ Rules:
     function setupDeltaResize(panel) {
         const handle = /** @type {HTMLElement} */ (panel.querySelector('#rpg-tracker-delta-handle'));
         const deltaEl = /** @type {HTMLElement} */ (panel.querySelector('#rpg-tracker-delta'));
+        let isDeltaResizing = false;
         let startY, startH;
 
+        const stopDeltaResize = (e) => {
+            if (!isDeltaResizing) return;
+            isDeltaResizing = false;
+            if (e) {
+                try { handle.releasePointerCapture(e.pointerId); } catch (_) {}
+            }
+            saveDeltaHeight(deltaEl.offsetHeight);
+        };
+
+        // Safety net: catch any mouseup the pointer events miss (Firefox quirk)
+        const onWindowMouseUp = () => stopDeltaResize(null);
+
         handle.addEventListener('pointerdown', (e) => {
+            isDeltaResizing = true;
             startY = e.clientY;
             startH = deltaEl.offsetHeight;
             handle.setPointerCapture(e.pointerId);
+            window.addEventListener('mouseup', onWindowMouseUp, { once: true });
             e.preventDefault();
         });
 
         handle.addEventListener('pointermove', (e) => {
-            if (!handle.hasPointerCapture(e.pointerId)) return;
+            if (!isDeltaResizing) return;
+            if (e.buttons === 0) {
+                stopDeltaResize(e);
+                return;
+            }
             const newH = Math.max(40, startH - (e.clientY - startY));
             deltaEl.style.height = newH + 'px';
         });
 
-        handle.addEventListener('pointerup', (e) => {
-            if (handle.hasPointerCapture(e.pointerId)) {
-                saveDeltaHeight(deltaEl.offsetHeight);
-            }
-        });
-
-        handle.addEventListener('pointercancel', () => {});
+        handle.addEventListener('pointerup', stopDeltaResize);
+        handle.addEventListener('pointercancel', stopDeltaResize);
     }
 
     function updateUIMemo(text) {
@@ -6084,10 +6290,27 @@ Rules:
                 e.stopPropagation();
                 const drawer = $(this).closest('.inline-drawer');
                 const content = drawer.find('> .inline-drawer-content');
+                const isOpening = !drawer.hasClass('open');
                 drawer.toggleClass('open');
-                content.stop(true, true).slideToggle(200);
+                content.stop(true, true).slideToggle(200, function() {
+                    // After the animation completes, recalculate autoSetHeight textareas so
+                    // they expand to their content height (avoids collapsed/zero-height bug)
+                    if (isOpening) {
+                        content.find('textarea.autoSetHeight').each(function() {
+                            $(this).css('height', '0px');
+                            $(this).css('height', ($(this).prop('scrollHeight') + 3) + 'px');
+                        });
+                    }
+                });
                 $(this).find('.inline-drawer-icon').toggleClass('down');
             });
+
+            // Live auto-grow for autoSetHeight textareas inside our settings
+            $('.rpg-tracker-settings').on('input', 'textarea.autoSetHeight', function() {
+                $(this).css('height', '0px');
+                $(this).css('height', ($(this).prop('scrollHeight') + 3) + 'px');
+            });
+
 
             const settings = getSettings();
 
@@ -7345,10 +7568,10 @@ Rules:
                 const $el = $('#rpg_tracker_router_prompt');
                 $el.val(freshDefault);
                 $el.trigger('input');
+                // Recalculate scroll height so the textarea expands to fit the reset content
+                $el.css('height', '0px');
+                $el.css('height', ($el.prop('scrollHeight') + 3) + 'px');
 
-                if (typeof (/** @type {any} */ ($el)).trigger === 'function') {
-                    (/** @type {any} */ ($el)).trigger('autosize.resize');
-                }
 
                 saveSettings();
                 toastr['success']('Router prompt reset to default.', 'RPG Tracker');
