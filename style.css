@@ -221,7 +221,17 @@
     font-family: var(--rt-font);
     font-size: var(--rt-base-size);
     overflow: hidden;
+    resize: none !important;
     container-type: inline-size;
+}
+
+#rpg-tracker-agent {
+    resize: none !important;
+}
+
+.rpg-tracker-panel *,
+#rpg-tracker-agent * {
+    resize: none !important;
 }
 
 .rpg-tracker-panel.rt-agent-open {

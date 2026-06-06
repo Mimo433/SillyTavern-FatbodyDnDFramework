@@ -2841,7 +2841,7 @@ function createPanel() {
                 </div>
                 <div id="rpg-tracker-delta-content">${settings.lastDelta || '<span class="delta-empty">No changes yet.</span>'}</div>
             </div>
-            <div class="rpg-tracker-panel rpg-tracker-agent-panel ${settings.agentCollapsed ? 'rt-panel-collapsed ' : ''}${settings.trackerTheme || 'rt-theme-native'}" id="rpg-tracker-agent" style="display:none; position: absolute; right: 0; top: 30px; width: 300px; max-height: calc(100% - 30px); z-index: 1000; flex-direction: column;">
+            <div class="rpg-tracker-panel rpg-tracker-agent-panel ${settings.agentCollapsed ? 'rt-panel-collapsed ' : ''}${settings.trackerTheme || 'rt-theme-native'}" id="rpg-tracker-agent" style="display:none; position: absolute; right: 0; top: 30px; width: 300px; max-height: calc(100% - 30px); z-index: 1000; flex-direction: column; resize: none !important;">
                 <div class="rpg-tracker-header" style="cursor: default;">
                     <span class="rpg-tracker-header-left"><i class="fa-solid fa-robot"></i> <span>Lorebook Agent</span></span>
                     <div class="rpg-tracker-header-center" id="rt-agent-pause-banner" style="color:#ffa500; font-size:0.7em; font-weight:bold; letter-spacing:0.04em;">${settings.routerPaused ? 'AGENT PAUSED' : ''}</div>
@@ -2875,7 +2875,7 @@ function createPanel() {
                         <button class="rpg-tracker-icon-btn" id="rpg-tracker-agent-close" title="Close">✕</button>
                     </div>
                 </div>
-                <div class="rpg-tracker-content" style="flex: 1; overflow-y: auto; padding: 10px; color: var(--rt-text);">
+                <div class="rpg-tracker-content" style="flex: 1; overflow-y: auto; resize: none; padding: 10px; color: var(--rt-text);">
                     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
                         <div style="font-weight: bold; opacity: 0.9; font-size: 0.923em; color: var(--rt-accent, #3498db);">AUTONOMOUS RESEARCHER</div>
                         <button id="rt-agent-help-btn" style="background: var(--rt-accent-bg); border: 1px solid var(--rt-accent-dim); color: var(--rt-accent); border-radius: 12px; width: 20px; height: 20px; font-size: 0.846em; cursor: pointer; display: flex; align-items: center; justify-content: center;" title="What is the Lorebook Agent?">?</button>
@@ -5266,9 +5266,8 @@ function makeResizableTR(panel, handle) {
     });
 
     handle.addEventListener('pointerup', (e) => {
-        if (handle.hasPointerCapture(e.pointerId)) {
-            savePanelGeometry(panel);
-        }
+        try { handle.releasePointerCapture(e.pointerId); } catch(err){}
+        savePanelGeometry(panel);
     });
 
     handle.addEventListener('pointercancel', () => { });
