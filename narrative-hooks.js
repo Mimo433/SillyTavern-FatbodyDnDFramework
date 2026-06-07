@@ -14,7 +14,7 @@
 
 import { getSettings } from './state-manager.js';
 import { parseQuestsFromMemo } from './memo-processor.js';
-import { runRouterPass, saveSceneToLorebook, scanAssistantOutputForKeywords } from './router.js';
+import { runRouterPass, saveSceneToLorebook, scanAssistantOutputForKeywords, parseInWorldMinutes, runWorldProgressionPass } from './router.js';
 import { logTransaction } from './debug-viewer.js';
 
 // ── Dice naming helpers ────────────────────────────────────────────────────────
@@ -607,15 +607,54 @@ export async function onGenerationEnded() {
         if (settings.debugMode) console.log(`[RPG Tracker] State Tracker skipped (tick ${_stateTrackerAutoTick}/${stateRunEvery}).`);
     }
 
-    // Step 3: Run-every throttle — only fire the Lorebook Agent every N auto-generations.
+    // Step 3: World Progression deterministic check — runs AFTER the State Tracker has updated
+    // currentMemo, so the [TIME] block reflects the current in-world clock.
+    await maybeRunWorldProgression();
+
+    // Step 4: Run-every throttle — only fire the Lorebook Agent every N auto-generations.
     _routerAutoTick++;
     const runEvery = settings.routerRunEvery || 1;
     if (_routerAutoTick < runEvery) return;
     _routerAutoTick = 0;
 
-    // Step 4: Lorebook Agent pass — passes the full accumulated set of keyword-triggered IDs
+    // Step 5: Lorebook Agent pass — passes the full accumulated set of keyword-triggered IDs
     // from all throttled turns since the last agent run (not just the current generation).
     const triggeredForAgent = [..._pendingKeywordTriggered];
     _pendingKeywordTriggered = []; // reset accumulator now that the agent is about to process them
     await runRouterPass(combinedNarrative, null, null, false, triggeredForAgent);
+}
+
+// ── World Progression deterministic trigger ─────────────────────────────────────────
+
+/**
+ * Checks whether the World Progression system should fire based on the in-world clock
+ * stored in settings.currentMemo. Fires at most once per interval, never twice for the
+ * same period. Called after every State Tracker pass.
+ */
+async function maybeRunWorldProgression() {
+    const settings = getSettings();
+    if (!settings.worldProgressionEnabled || !settings.routerEnabled) return;
+    if (!settings.currentMemo) return;
+
+    // Extract time string from the [TIME] block
+    const timeMatch = settings.currentMemo.match(/\[TIME\]([\s\S]*?)\[\/TIME\]/i);
+    const timeStr = timeMatch?.[1]?.split('\n').filter(Boolean)[0]?.trim();
+    const currentMinutes = parseInWorldMinutes(timeStr);
+    if (currentMinutes < 0) return; // can't parse time → skip
+
+    const lastFired = settings.worldProgressionLastFiredAtMinutes ?? -1;
+    const intervalMinutes = (settings.worldProgressionIntervalHours || 24) * 60;
+
+    // On first-ever firing: don't fire unless we've actually passed at least one full interval.
+    // This prevents a spurious Day 0 report on the very first turn of a brand-new campaign.
+    if (lastFired < 0 && currentMinutes < intervalMinutes) return;
+
+    const elapsed = lastFired < 0 ? intervalMinutes : currentMinutes - lastFired;
+    if (elapsed < intervalMinutes) return;
+
+    // Guard: don't start a World Progression pass while the Lorebook Agent is already running
+    const { isRouterRunning } = await import('./router.js');
+    if (isRouterRunning()) return;
+
+    await runWorldProgressionPass(timeStr, currentMinutes);
 }

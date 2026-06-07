@@ -348,7 +348,100 @@
                 </div>
             </div>
 
-            <!-- SUB-DRAWER 4: EXPERIMENTAL FEATURES -->
+            <!-- SUB-DRAWER 4: WORLD PROGRESSION -->
+            <div class="inline-drawer">
+                <div class="inline-drawer-toggle inline-drawer-header">
+                    <i class="fa-solid fa-globe" style="margin-right: 8px; opacity: 0.7;"></i>
+                    <b>World Progression</b>
+                    <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+                </div>
+                <div class="inline-drawer-content">
+                    <div class="flex-container flexFlowColumn gap-1">
+                        <div style="font-size: 0.8em; opacity: 0.65; line-height: 1.4; margin-bottom: 8px; border: 1px solid rgba(100,160,255,0.2); border-radius: 6px; padding: 8px 10px; background: rgba(100,160,255,0.04);">
+                            World Progression automatically generates off-screen world simulation reports at a fixed in-world time interval.
+                            Reports are written by a standalone LLM pass and stored in the <code style="font-size:0.9em;">{prefix}_World</code> lorebook.
+                            The trigger is <b>deterministic</b> — JavaScript checks the <code>[TIME]</code> block after every State Tracker update;
+                            the AI only writes the report, never decides whether to generate one.
+                        </div>
+
+                        <label class="checkbox_label">
+                            <input id="rpg_world_progression_enabled" type="checkbox" />
+                            <span>Enable World Progression</span>
+                            <i class="fa-solid fa-circle-question interactable" style="font-size: 0.85em; opacity: 0.7; margin-left: 4px;" title="When enabled, World Progression fires automatically after State Tracker updates whenever the in-world interval has elapsed. Requires the Lorebook Agent to be enabled and a valid campaign prefix set."></i>
+                        </label>
+
+                        <hr style="margin: 4px 0;">
+
+                        <label style="font-size: 0.85em; font-weight: bold; opacity: 0.8;">Interval (in-world hours)
+                            <i class="fa-solid fa-circle-question interactable" style="font-size: 0.85em; opacity: 0.7; margin-left: 4px;" title="How many in-world hours must pass before a new report is generated. 24 = once per day, 12 = twice per day, 8 = three times per day. Sub-day intervals produce entries like 'Day 3, 06:00–12:00'."></i>
+                        </label>
+                        <input id="rpg_world_progression_interval" type="text" inputmode="numeric" pattern="[0-9]*" class="text_pole" value="24" style="max-width: 100px;" title="In-world hours between World Progression reports (24 = daily)" />
+                        <div style="font-size: 0.75em; opacity: 0.55; margin-top: -2px;">e.g. 24 = daily, 12 = twice/day, 8 = 3×/day</div>
+
+                        <label style="font-size: 0.85em; font-weight: bold; opacity: 0.8; margin-top: 4px;">Rolling Window (active reports)
+                            <i class="fa-solid fa-circle-question interactable" style="font-size: 0.85em; opacity: 0.7; margin-left: 4px;" title="How many of the most recent World Progression reports remain active (injected into context). Older reports are automatically deactivated."></i>
+                        </label>
+                        <input id="rpg_world_progression_keep_active" type="text" inputmode="numeric" pattern="[0-9]*" class="text_pole" value="3" style="max-width: 100px;" title="Number of recent World Progression reports kept active in context" />
+
+                        <label style="font-size: 0.85em; font-weight: bold; opacity: 0.8; margin-top: 4px;">Report Word Target</label>
+                        <input id="rpg_world_progression_word_target" type="text" inputmode="numeric" pattern="[0-9]*" class="text_pole" value="600" style="max-width: 100px;" title="Minimum word count to aim for in the generated report. The LLM's own max-token limit is NOT overridden — set that in your preset." />
+                        <div style="font-size: 0.75em; opacity: 0.55; margin-top: -2px;">The LLM's max-token limit comes from your preset — this only guides the prompt wording.</div>
+
+                        <hr style="margin: 6px 0;">
+
+                        <div style="display:flex; align-items:center; gap:6px; margin-bottom: 2px;">
+                            <label style="font-size: 0.85em; font-weight: bold; opacity: 0.8; flex:1; margin:0;">System Prompt
+                                <i class="fa-solid fa-circle-question interactable" style="font-size: 0.85em; opacity: 0.7; margin-left: 4px;" title="The system prompt sent to the LLM for every World Progression report. Tokens: {periodLabel} is replaced with the period label (e.g. 'Day 3'), {wordTarget} is replaced with the word target number."></i>
+                            </label>
+                            <button id="rpg_world_progression_btn_reset_prompt" class="menu_button interactable" style="font-size:0.75em; padding:2px 8px;" title="Reset to default prompt">
+                                <i class="fa-solid fa-arrow-rotate-left"></i> Reset
+                            </button>
+                        </div>
+                        <div style="font-size: 0.72em; opacity: 0.5; margin-bottom: 3px;">Available tokens: <code>{periodLabel}</code> (e.g. "Day 3"), <code>{wordTarget}</code> (e.g. "600")</div>
+                        <textarea id="rpg_world_progression_system_prompt" class="text_pole" rows="10" style="width:100%; font-size:0.78em; font-family:monospace; resize:vertical; background:rgba(0,0,0,0.3); color:var(--SmartThemeBodyColor); border:1px solid rgba(255,255,255,0.1); border-radius:4px; padding:6px; box-sizing:border-box;" placeholder="System prompt for the World Progression LLM pass…"></textarea>
+
+                        <hr style="margin: 4px 0;">
+
+                        <div style="font-size: 0.8em; opacity: 0.6; line-height: 1.4;">
+                            <b>Last generated:</b>
+                            <span id="rpg_world_progression_last_fired" style="font-family: monospace; opacity: 0.9;">—</span>
+                        </div>
+
+                        <button id="rpg_world_progression_generate_now" class="menu_button interactable" style="margin-top: 6px; background: rgba(100, 200, 100, 0.15); border-color: rgba(100, 200, 100, 0.4);">
+                            <i class="fa-solid fa-globe"></i> Generate Now (current period)
+                        </button>
+                        <div style="font-size: 0.75em; opacity: 0.55; margin-top: -2px;">Generates a report immediately, regardless of interval. Use for manual catch-up.</div>
+
+                        <hr style="margin: 10px 0;">
+
+                        <!-- World Skeleton sub-section -->
+                        <div style="font-size: 0.85em; font-weight: bold; opacity: 0.8; margin-bottom: 4px;">
+                            <i class="fa-solid fa-skull" style="opacity: 0.7; margin-right: 5px;"></i>World Skeleton
+                            <i class="fa-solid fa-circle-question interactable" style="font-size: 0.85em; opacity: 0.7; margin-left: 4px;" title="The World Skeleton is a hidden lorebook of undiscovered factions, locations, NPCs, and conflicts. It is fed to the World Progression engine as a 'Day 0 Baseline' so the engine can generate off-screen activity for entities the player has never encountered. The Skeleton is never injected into the main narrative context."></i>
+                        </div>
+                        <div style="font-size: 0.75em; opacity: 0.55; line-height: 1.4; margin-bottom: 6px;">
+                            Describe the setting, themes, and tone of your world. The LLM will generate a set of hidden background entities (factions, locations, NPCs, conflicts) that the World Progression engine will use to simulate off-screen activity.
+                        </div>
+
+                        <label style="font-size: 0.85em; font-weight: bold; opacity: 0.8;">World Theme / Seed</label>
+                        <textarea id="rpg_world_progression_skeleton_theme" class="text_pole" rows="4" style="width:100%; font-size:0.8em; resize:vertical; background:rgba(0,0,0,0.3); color:var(--SmartThemeBodyColor); border:1px solid rgba(255,255,255,0.1); border-radius:4px; padding:6px; box-sizing:border-box; margin-bottom: 6px;" placeholder="e.g. 'A dark fantasy empire on the brink of civil war. Magic is forbidden. Three rival noble houses are scheming for the throne. The player starts as a low-level mercenary in the capital.'"></textarea>
+
+                        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                            <button id="rpg_world_progression_btn_generate_skeleton" class="menu_button interactable" style="background: rgba(180, 100, 255, 0.15); border-color: rgba(180, 100, 255, 0.4);">
+                                <i class="fa-solid fa-wand-magic-sparkles"></i> Generate Skeleton
+                            </button>
+                            <div id="rpg_world_progression_skeleton_status" style="font-size: 0.78em; opacity: 0.6; font-family: monospace;">
+                                No skeleton generated.
+                            </div>
+                        </div>
+                        <div style="font-size: 0.72em; opacity: 0.5; margin-top: 4px; color: #ffa000;">
+                            <i class="fa-solid fa-triangle-exclamation"></i> Generating a new skeleton will overwrite the existing <code>_Skeleton</code> lorebook for this campaign.
+                        </div>
+
+                    </div><!-- /.flex-container -->
+                </div><!-- /.inline-drawer-content -->
+            </div><!-- /.inline-drawer (World Progression) -->
+
             <div class="inline-drawer">
                 <div class="inline-drawer-toggle inline-drawer-header">
                     <i class="fa-solid fa-flask" style="margin-right: 8px; opacity: 0.7;"></i>

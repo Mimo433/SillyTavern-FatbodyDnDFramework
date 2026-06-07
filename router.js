@@ -1,4 +1,4 @@
-import { getSettings, getEffectiveRouterCampaignPrefix } from './state-manager.js';
+﻿import { getSettings, getEffectiveRouterCampaignPrefix } from './state-manager.js';
 import { sendStateRequest, sendAgentTurn } from './llm-client.js';
 import { getRequestHeaders } from '../../../../script.js';
 
@@ -690,20 +690,10 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
             let modularPrompt = settings.routerModularPromptTemplate || '';
             modularPrompt = modularPrompt.replace(/\{\{formatLines\}\}/g, formatLinesStr);
 
-            // Handle World engine template logic
-            const dayMatch = recentChatString.match(/Day\s+(\d+)/i);
-            const currentDay = dayMatch ? parseInt(dayMatch[1], 10) : 'Unknown';
-            const dayStr = currentDay !== 'Unknown' ? currentDay : 'X';
-            const prevDay = currentDay !== 'Unknown' ? Math.max(1, currentDay - 1) : 'X-1';
-
-            if (settings.routerModules?.world?.enabled) {
-                modularPrompt = modularPrompt.replace(/\{\{#if_world\}\}/g, '')
-                                             .replace(/\{\{\/if_world\}\}/g, '')
-                                             .replace(/\{\{dayStr\}\}/g, dayStr)
-                                             .replace(/\{\{prevDay\}\}/g, prevDay);
-            } else {
-                modularPrompt = modularPrompt.replace(/\{\{#if_world\}\}[\s\S]*?\{\{\/if_world\}\}/g, '');
-            }
+            // World Progression is now a standalone deterministic pass — strip any leftover
+            // {{#if_world}} blocks from user-edited templates (default no longer contains them).
+            modularPrompt = modularPrompt.replace(/\{\{#if_world\}\}[\s\S]*?\{\{\/if_world\}\}/g, '');
+            modularPrompt = modularPrompt.replace(/\{\{#if_world\}\}|\{\{\/if_world\}\}|\{\{dayStr\}\}|\{\{prevDay\}\}/g, '');
 
             const basicSystemPrompt = `You are the Research Assistant. Your task is to identify and record important narrative entities and events.
 
@@ -2010,6 +2000,8 @@ export async function scanAssistantOutputForKeywords(narrativeText, opts = {}) {
     const bookCache = new Map();
 
     for (const bookName of booksToScan) {
+        // _Skeleton books are strictly for World Progression engine — never inject into narrative
+        if (bookName.toLowerCase().endsWith('_skeleton')) continue;
         const book = await ctx.loadWorldInfo(bookName);
         if (!book?.entries) continue;
         bookCache.set(bookName, book);
@@ -2255,3 +2247,525 @@ function countRedundantPairs(content, threshold = 0.6) {
     return count;
 }
 
+
+// -- World Progression ---------------------------------------------------------------
+
+/**
+ * Parses an in-world time string (e.g. "11:52 AM, Day 3") into total minutes
+ * from campaign start (Day 1, 00:00 = 0). Returns -1 if unparseable.
+ * @param {string} timeStr
+ * @returns {number}
+ */
+export function parseInWorldMinutes(timeStr) {
+    if (!timeStr) return -1;
+    const m = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM),\s*Day\s*(\d+)/i);
+    if (!m) return -1;
+    let hours = parseInt(m[1], 10);
+    const minutes = parseInt(m[2], 10);
+    const ampm = m[3].toUpperCase();
+    const day = parseInt(m[4], 10);
+    if (ampm === 'PM' && hours !== 12) hours += 12;
+    if (ampm === 'AM' && hours === 12) hours = 0;
+    return (day - 1) * 24 * 60 + hours * 60 + minutes;
+}
+
+/**
+ * Computes the label for a World Progression period given start/end in total-minutes.
+ * Daily or longer intervals: "Day N". Sub-daily: "Day N, HH:MM-HH:MM".
+ * @param {number} startMinutes
+ * @param {number} endMinutes
+ * @param {number} intervalHours
+ * @returns {string}
+ */
+function computePeriodLabel(startMinutes, endMinutes, intervalHours) {
+    const startDay = Math.floor(startMinutes / (24 * 60)) + 1;
+    if (intervalHours >= 24) {
+        return `Day ${startDay}`;
+    }
+    const fmt = (total) => {
+        const h = Math.floor((total % (24 * 60)) / 60);
+        const m = total % 60;
+        return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    };
+    return `Day ${startDay}, ${fmt(startMinutes)}-${fmt(endMinutes)}`;
+}
+
+/**
+ * Standalone deterministic World Progression pass.
+ * Called by maybeRunWorldProgression() in narrative-hooks.js when the in-world interval
+ * has elapsed. Never invoked by the Lorebook Agent itself.
+ *
+ * @param {string} timeStr        - Raw time string from [TIME] block (e.g. "11:52 AM, Day 3")
+ * @param {number} currentMinutes - Current in-world total minutes (from parseInWorldMinutes)
+ */
+export async function runWorldProgressionPass(timeStr, currentMinutes) {
+    const settings = getSettings();
+    const prefix = getLivePrefix();
+    const worldBookName = prefix ? `${prefix}_World` : 'World';
+    const intervalHours = settings.worldProgressionIntervalHours || 24;
+    const keepActive = settings.worldProgressionKeepActive || 3;
+    const wordTarget = settings.worldProgressionWordTarget || 600;
+
+    const lastFired = settings.worldProgressionLastFiredAtMinutes ?? -1;
+    const intervalMinutes = intervalHours * 60;
+
+    // Determine the start of the period we're reporting on
+    const periodStart = lastFired >= 0 ? lastFired : currentMinutes - intervalMinutes;
+    const periodEnd = periodStart + intervalMinutes;
+    const periodLabel = computePeriodLabel(periodStart, periodEnd, intervalHours);
+
+    broadcastStep('thought', `\uD83C\uDF0D World Progression: Checking for "${periodLabel}" report...`);
+
+    // 1. Load ALL campaign lorebooks once.
+    //    Used for: duplicate check, full lore context, and applyAction verification.
+    //    No double-fetch - archiveBooks is reused throughout the function.
+    const ctx = SillyTavern.getContext();
+    if (typeof ctx.updateWorldInfoList === 'function') {
+        try { await ctx.updateWorldInfoList(); } catch (_) {}
+    }
+    const allBookNames = await getWorldInfoNamesSafe();
+    const archiveBooks = {};
+    for (const n of allBookNames) {
+        if (prefix && !bookBelongsToPrefix(n, prefix)) continue;
+        try {
+            const b = await ctx.loadWorldInfo(n);
+            if (b?.entries) archiveBooks[n] = b;
+        } catch (_) {}
+    }
+
+    // 2. Duplicate check - see if a report for this period already exists in the World book.
+    const worldBook = archiveBooks[worldBookName] ?? null;
+    const cleanPeriod = periodLabel.toLowerCase().trim();
+    if (worldBook?.entries) {
+        for (const entry of Object.values(worldBook.entries)) {
+            const existingLabel = (entry.comment || '').toLowerCase().trim();
+            if (existingLabel === cleanPeriod) {
+                broadcastStep('thought', `\uD83C\uDF0D World Progression: "${periodLabel}" already exists - advancing timer.`);
+                settings.worldProgressionLastFiredAtMinutes = periodEnd;
+                settings.worldProgressionLastFiredPeriodLabel = periodLabel;
+                SillyTavern.getContext().saveSettingsDebounced();
+                return;
+            }
+        }
+    }
+
+    // 3. Build full lore context from ALL campaign lorebooks, split into three sections.
+    //
+    //    _Skeleton books -> Day 0 Baseline (foundational undiscovered entities, never injected
+    //                       into narrative context — only visible to the World Progression engine)
+    //    Regular books   -> Active World Lore (all discovered entities, active or not)
+    //    _World books    -> Historical Reports (all prior periods, incl. deactivated)
+    //
+    //    Segregating the Skeleton into its own timestamped section prevents the LLM from
+    //    treating Day-0 stub data as current events, while still making those entities available
+    //    for off-screen simulation.
+    const skeletonLines = [];
+    const loreLines = [];
+    const historicalReportLines = [];
+
+    for (const [bookName, book] of Object.entries(archiveBooks)) {
+        const nameLower = bookName.toLowerCase();
+        const isSkeletonBook = nameLower.endsWith('_skeleton');
+        const isWorldBook = nameLower.endsWith('_world') || nameLower === 'world';
+        // Sort by uid (numeric insertion order ≈ chronological)
+        const sortedEntries = Object.entries(book.entries)
+            .sort(([a], [b]) => Number(a) - Number(b));
+
+        for (const [, entry] of sortedEntries) {
+            if (!entry?.content?.trim()) continue;
+            const label = (entry.comment || entry.key?.[0] || '(unnamed)').trim();
+            if (isSkeletonBook) {
+                skeletonLines.push(`### ${label}\n${entry.content.trim()}`);
+            } else if (isWorldBook) {
+                historicalReportLines.push(`### ${label}\n${entry.content.trim()}`);
+            } else {
+                loreLines.push(`### ${label}\n${entry.content.trim()}`);
+            }
+        }
+    }
+
+    const skeletonDump = skeletonLines.length
+        ? skeletonLines.join('\n\n')
+        : '(No skeleton generated — engine will rely solely on discovered lore.)';
+    const loreDump = loreLines.length
+        ? loreLines.join('\n\n')
+        : 'No lore entries found.';
+    const historicalDump = historicalReportLines.length
+        ? historicalReportLines.join('\n\n')
+        : 'No prior World Progression reports.';
+
+    // 4. Grab recent narrative blocks (for current scene context)
+    const { chat } = ctx;
+    const narrativeBlocks = [];
+    if (Array.isArray(chat)) {
+        const limit = settings.routerLookback || 4;
+        let found = 0;
+        for (const msg of [...chat].reverse()) {
+            if (found >= limit) break;
+            if (msg.is_system || msg.is_user) continue;
+            let mes = (msg.mes || '').trim()
+                .replace(/<details[^>]*>[\s\S]*?<\/details>/gi, '')
+                .replace(/<think[^>]*>[\s\S]*?<\/think>/gi, '').trim();
+            if (mes) { narrativeBlocks.unshift(mes); found++; }
+        }
+    }
+    const recentNarrative = narrativeBlocks.join('\n\n') || 'No recent narrative.';
+
+    // 5. Build the system prompt from settings ({periodLabel} and {wordTarget} substitution)
+    const rawPrompt = settings.worldProgressionSystemPrompt || '';
+    const systemPrompt = rawPrompt
+        .replace(/\{periodLabel\}/g, periodLabel)
+        .replace(/\{wordTarget\}/g, String(wordTarget));
+
+    const userPrompt =
+`## WORLD SKELETON (Day 0 Baseline — Foundational Undiscovered State)
+These entities existed at the start of the campaign. They have been acting off-screen since Day 1.
+They are NOT yet known to the player. Use them freely to generate off-screen activity.
+${skeletonDump}
+
+## ACTIVE WORLD LORE (Discovered Entities — Current Known State)
+${loreDump}
+
+## HISTORICAL WORLD REPORTS (Previously Generated Off-Screen Activity)
+${historicalDump}
+
+## RECENT NARRATIVE (Current Scene Context)
+${recentNarrative}
+
+Write the World Progression report for **${periodLabel}**.`;
+
+    // 6. Send the LLM request using the Lorebook Agent connection settings
+    const routerSettings = {
+        connectionSource: settings.routerConnectionSource || 'default',
+        connectionProfileId: settings.routerConnectionProfileId,
+        completionPresetId: settings.routerCompletionPresetId,
+        ollamaUrl: settings.routerOllamaUrl,
+        ollamaModel: settings.routerOllamaModel,
+        openaiUrl: settings.routerOpenaiUrl,
+        openaiKey: settings.routerOpenaiKey,
+        openaiModel: settings.routerOpenaiModel,
+    };
+
+    broadcastStep('thought', `\uD83C\uDF0D World Progression: Generating report for "${periodLabel}" (${skeletonLines.length} skeleton, ${loreLines.length} lore, ${historicalReportLines.length} prior reports)...`);
+    let reportContent;
+    try {
+        reportContent = await sendStateRequest(routerSettings, systemPrompt, userPrompt);
+    } catch (e) {
+        broadcastStep('error', `World Progression generation failed: ${e.message}`);
+        return;
+    }
+    if (!reportContent || !reportContent.trim()) {
+        broadcastStep('error', 'World Progression: LLM returned empty response.');
+        return;
+    }
+
+    // 7. Store the entry via applyAction (routes to the _World lorebook).
+    //    archiveBooks already loaded in step 1 - no re-fetch needed.
+    const entryKeys = ['world progression', 'world report', periodLabel.toLowerCase()];
+    if (intervalHours >= 24) {
+        const dayNum = periodLabel.match(/(\d+)/)?.[1];
+        if (dayNum) entryKeys.push(`day ${dayNum}`);
+    }
+
+    await applyAction({
+        record: [{ label: periodLabel, keys: entryKeys, content: reportContent.trim(), category: 'WORLD' }],
+        reason: `World Progression: auto-generated report for ${periodLabel}`,
+    }, archiveBooks, timeStr, '');
+
+    // 8. Rolling window: keep only the N most recent WORLD entries active.
+    await new Promise(r => setTimeout(r, 300));
+    let freshWorldBook = null;
+    try { freshWorldBook = await ctx.loadWorldInfo(worldBookName); } catch (_) {}
+    if (!freshWorldBook?.entries) {
+        try {
+            const r = await fetch('/api/worldinfo/get', {
+                method: 'POST',
+                headers: getRequestHeaders(),
+                body: JSON.stringify({ name: worldBookName })
+            });
+            if (r.ok) { const d = await r.json(); if (d?.entries) freshWorldBook = d; }
+        } catch (_) {}
+    }
+
+    if (freshWorldBook?.entries) {
+        const sorted = Object.entries(freshWorldBook.entries)
+            .sort(([a], [b]) => Number(a) - Number(b));
+        const allWorldIds = sorted.map(([uid]) => `${worldBookName}::${uid}`);
+        const toActivate = allWorldIds.slice(-keepActive);
+        const toDeactivate = allWorldIds.slice(0, Math.max(0, allWorldIds.length - keepActive));
+
+        if (toActivate.length > 0 || toDeactivate.length > 0) {
+            // Reload archive after the new entry was written for accurate verification
+            const freshArchive = {};
+            for (const n of Object.keys(archiveBooks)) {
+                try { const b = await ctx.loadWorldInfo(n); if (b?.entries) freshArchive[n] = b; } catch (_) {}
+            }
+            freshArchive[worldBookName] = freshWorldBook;
+            await applyAction({
+                activate: toActivate,
+                deactivate: toDeactivate,
+                reason: `World Progression: rolling window (keep ${keepActive} active)`,
+            }, freshArchive, timeStr, '');
+        }
+    }
+
+    // 9. Advance the timer and persist
+    settings.worldProgressionLastFiredAtMinutes = periodEnd;
+    settings.worldProgressionLastFiredPeriodLabel = periodLabel;
+    SillyTavern.getContext().saveSettingsDebounced();
+
+    broadcastStep('finish', `\uD83C\uDF0D World Progression: "${periodLabel}" report saved.`);
+    if (typeof globalThis._rpgRenderRouterUI === 'function') {
+        globalThis._rpgRenderRouterUI();
+    }
+}
+// -- World Skeleton ------------------------------------------------------------------
+
+/**
+ * Parses the raw LLM output from the skeleton generation pass into individual
+ * lore records, grouped by section header (## FACTIONS, ## LOCATIONS, etc.).
+ * Returns an array of { label, content, category } objects.
+ * @param {string} rawText
+ * @returns {Array<{label: string, content: string, category: string}>}
+ */
+function parseSkeletonOutput(rawText) {
+    const categoryMap = {
+        'FACTIONS': 'FAC',
+        'FACTION': 'FAC',
+        'LOCATIONS': 'LOC',
+        'LOCATION': 'LOC',
+        'NPCS': 'NPC',
+        'NPC': 'NPC',
+        'CONFLICTS': 'EVENT',
+        'CONFLICT': 'EVENT',
+        'EVENTS': 'EVENT',
+    };
+
+    const records = [];
+    // Split on ### headers
+    const chunks = rawText.split(/(?=^###\s)/m).filter(s => s.trim());
+    // Track which category we're in by the most recent ## header
+    let currentCategory = 'NPC';
+
+    // First pass: identify ## section headers to establish category context
+    const sectionLines = rawText.split('\n');
+    let sectionCat = 'NPC';
+    const sectionBreaks = []; // { lineIndex, category }
+    sectionLines.forEach((line, i) => {
+        const secMatch = line.match(/^##\s+([A-Z]+)/i);
+        if (secMatch) {
+            const key = secMatch[1].toUpperCase();
+            sectionCat = categoryMap[key] || 'NPC';
+            sectionBreaks.push({ lineIndex: i, category: sectionCat });
+        }
+    });
+
+    for (const chunk of chunks) {
+        const headerMatch = chunk.match(/^###\s+(.+)/m);
+        if (!headerMatch) continue;
+        const label = headerMatch[1].trim();
+        const content = chunk.replace(/^###\s+.+\n?/, '').trim();
+        if (!content) continue;
+
+        // Find which ## section this ### belongs to by scanning backward in rawText
+        const chunkStart = rawText.indexOf(chunk);
+        let category = 'NPC';
+        for (const sb of sectionBreaks) {
+            // Count characters up to the lineIndex
+            const lineStart = sectionLines.slice(0, sb.lineIndex).join('\n').length;
+            if (lineStart <= chunkStart) category = sb.category;
+        }
+
+        records.push({ label, content, category });
+    }
+    return records;
+}
+
+/**
+ * Generates the World Skeleton: a hidden lorebook of foundational undiscovered
+ * entities (factions, locations, NPCs, conflicts) seeded from the user's theme.
+ * Saves all entries to [CampaignPrefix]_Skeleton. Overwrites any existing skeleton.
+ *
+ * @param {string} theme - User-provided theme/seed for the world
+ * @returns {Promise<number>} Number of skeleton entries created
+ */
+export async function runSkeletonGenerationPass(theme) {
+    const settings = getSettings();
+    const prefix = getLivePrefix();
+    const skeletonBookName = prefix ? `${prefix}_Skeleton` : 'World_Skeleton';
+
+    broadcastStep('thought', `\uD83D\uDDE6 World Skeleton: Generating from theme...`);
+
+    const systemPrompt = settings.worldProgressionSkeletonSystemPrompt || '';
+    const userPrompt = `## WORLD THEME / SEED\n${theme || '(No theme provided — generate a generic fantasy world skeleton.)'}\n\nGenerate the world skeleton now.`;
+
+    const routerSettings = {
+        connectionSource: settings.routerConnectionSource || 'default',
+        connectionProfileId: settings.routerConnectionProfileId,
+        completionPresetId: settings.routerCompletionPresetId,
+        ollamaUrl: settings.routerOllamaUrl,
+        ollamaModel: settings.routerOllamaModel,
+        openaiUrl: settings.routerOpenaiUrl,
+        openaiKey: settings.routerOpenaiKey,
+        openaiModel: settings.routerOpenaiModel,
+    };
+
+    let rawOutput;
+    try {
+        rawOutput = await sendStateRequest(routerSettings, systemPrompt, userPrompt);
+    } catch (e) {
+        broadcastStep('error', `World Skeleton generation failed: ${e.message}`);
+        throw e;
+    }
+    if (!rawOutput?.trim()) {
+        broadcastStep('error', 'World Skeleton: LLM returned empty response.');
+        throw new Error('Empty skeleton response');
+    }
+
+    const records = parseSkeletonOutput(rawOutput);
+    if (records.length === 0) {
+        broadcastStep('error', 'World Skeleton: Could not parse any entries from LLM output.');
+        throw new Error('No parseable skeleton entries');
+    }
+
+    // Build the skeleton lorebook from scratch (overwrite)
+    const ctx = SillyTavern.getContext();
+    const skeletonBook = { entries: {}, name: skeletonBookName, scan_depth: 4, token_budget: 400, recursive: false, extensions: {} };
+    let uid = 0;
+    for (const rec of records) {
+        skeletonBook.entries[uid] = {
+            uid,
+            key: [rec.label.toLowerCase()],
+            keysecondary: [],
+            comment: rec.label,
+            content: `[Day 0 Baseline]\n${rec.content}`,
+            constant: false, selective: false, selectiveLogic: 0, addMemo: true,
+            order: 100, position: 0,
+            disable: true, // Always disabled — never injected into narrative context
+            probability: 100, useProbability: false,
+            depth: 4, group: '', groupOverride: false, groupWeight: 100,
+            extensions: { rpgCategory: rec.category, rpgSkeleton: true },
+        };
+        uid++;
+    }
+
+    const saveRes = await fetch('/api/worldinfo/edit', {
+        method: 'POST',
+        headers: getRequestHeaders(),
+        body: JSON.stringify({ name: skeletonBookName, data: skeletonBook })
+    });
+    if (!saveRes.ok) {
+        broadcastStep('error', `World Skeleton: Failed to save lorebook (HTTP ${saveRes.status})`);
+        throw new Error(`Save failed: ${saveRes.status}`);
+    }
+
+    // Register book with ST's in-memory registry
+    try { await ctx.saveWorldInfo(skeletonBookName, skeletonBook); } catch (_) {}
+
+    // Register in campaignBooks if not already there
+    const chatId = typeof globalThis._rpgCurrentChatId === 'function' ? globalThis._rpgCurrentChatId() : null;
+    if (chatId && settings.chatStates?.[chatId]) {
+        const existing = new Set(settings.chatStates[chatId].campaignBooks || []);
+        existing.add(skeletonBookName);
+        settings.chatStates[chatId].campaignBooks = [...existing];
+        ctx.saveSettingsDebounced();
+    }
+
+    broadcastStep('finish', `\uD83D\uDDE6 World Skeleton: ${records.length} entries generated and saved to "${skeletonBookName}".`);
+    return records.length;
+}
+
+/**
+ * Promotes a skeleton entity to the active lorebook when the player discovers it.
+ * Scans Historical World Reports for references to the entity and performs a merge
+ * LLM pass to synthesize a cohesive, up-to-date lore entry incorporating both
+ * the Day 0 stub and any off-screen history accumulated since then.
+ *
+ * @param {string} skeletonId     - "BookName::uid" of the skeleton entry to promote
+ * @param {string} newLabel       - Label of the newly discovered entry (from Lorebook Agent)
+ * @param {string} newContent     - Content of the newly discovered entry
+ * @param {Object} archiveBooks   - Loaded lorebook map (from runWorldProgressionPass or applyAction)
+ * @returns {Promise<{label: string, content: string, category: string}|null>}
+ */
+export async function promoteSkeletonEntity(skeletonId, newLabel, newContent, archiveBooks) {
+    const [skeletonBookName, uid] = skeletonId.split('::');
+    const skeletonBook = archiveBooks[skeletonBookName];
+    if (!skeletonBook?.entries?.[uid]) return null;
+
+    const skeletonEntry = skeletonBook.entries[uid];
+    const skeletonContent = (skeletonEntry.content || '').trim();
+    const category = skeletonEntry.extensions?.rpgCategory || 'NPC';
+
+    // Gather historical world report references to this entity
+    const nameLower = newLabel.toLowerCase();
+    const historySnippets = [];
+    for (const [bookName, book] of Object.entries(archiveBooks)) {
+        if (!bookName.toLowerCase().endsWith('_world') && bookName.toLowerCase() !== 'world') continue;
+        const sorted = Object.entries(book.entries).sort(([a], [b]) => Number(a) - Number(b));
+        for (const [, entry] of sorted) {
+            if ((entry.content || '').toLowerCase().includes(nameLower)) {
+                const reportLabel = entry.comment || '(unknown period)';
+                historySnippets.push(`[${reportLabel}] ${(entry.content || '').trim()}`);
+            }
+        }
+    }
+
+    if (historySnippets.length === 0) {
+        // No off-screen history — simple merge of stub + scene entry
+        const merged = skeletonContent && newContent
+            ? `${newContent}\n\n[Prior State]\n${skeletonContent}`
+            : (newContent || skeletonContent);
+        // Delete skeleton entry
+        await deleteLorebookEntry(skeletonId);
+        return { label: newLabel, content: merged, category };
+    }
+
+    // Run merge LLM pass to synthesize a complete up-to-date entry
+    const settings = getSettings();
+    const systemPrompt = `You are a Lore Synthesizer. You will be given three pieces of information about an entity:
+1. Their original Day 0 background stub (how they were at campaign start)
+2. Their off-screen activity history extracted from World Progression reports
+3. A new scene-based description written after the player has encountered them
+
+Synthesize these into a single, cohesive, up-to-date lore entry. Write in third person.
+Preserve all specific names, facts, and events. Do not invent new information.
+Output ONLY the final lore entry text. No preamble, no labels, no meta-commentary.`;
+
+    const userPrompt = `## ENTITY: ${newLabel}
+
+## DAY 0 SKELETON STUB
+${skeletonContent}
+
+## OFF-SCREEN HISTORY (from World Progression reports)
+${historySnippets.join('\n\n---\n\n')}
+
+## NEW SCENE-BASED DESCRIPTION (player has now encountered this entity)
+${newContent}
+
+Synthesize the above into one complete, up-to-date lore entry.`;
+
+    const routerSettings = {
+        connectionSource: settings.routerConnectionSource || 'default',
+        connectionProfileId: settings.routerConnectionProfileId,
+        completionPresetId: settings.routerCompletionPresetId,
+        ollamaUrl: settings.routerOllamaUrl,
+        ollamaModel: settings.routerOllamaModel,
+        openaiUrl: settings.routerOpenaiUrl,
+        openaiKey: settings.routerOpenaiKey,
+        openaiModel: settings.routerOpenaiModel,
+    };
+
+    let mergedContent;
+    try {
+        mergedContent = await sendStateRequest(routerSettings, systemPrompt, userPrompt);
+    } catch (_) {
+        // Merge failed — fall back to simple concatenation
+        mergedContent = `${newContent}\n\n[Off-screen history]\n${historySnippets.join('\n\n')}`;
+    }
+
+    // Delete skeleton entry
+    await deleteLorebookEntry(skeletonId);
+
+    broadcastStep('thought', `\uD83D\uDDE6 Skeleton Promotion: "${newLabel}" promoted with ${historySnippets.length} history reference(s).`);
+    return { label: newLabel, content: (mergedContent || '').trim(), category };
+}

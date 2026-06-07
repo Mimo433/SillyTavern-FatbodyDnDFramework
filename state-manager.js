@@ -21,7 +21,7 @@ export const DEFAULT_MODULES = {
     fac:   { enabled: true, tag: 'FAC',   format: 'Name | Status | Description | Keywords',           instruction: 'Named factions, guilds, organisations. **Status**: short current-state line (standing with the party, active conflicts, what changed recently). **Description**: longer narrative (history, ideology, schemes, notable members). **Keywords**: comma-separated terms for discovery.' },
     quest: { enabled: true, tag: 'QUEST', format: 'Name | Location | Description | Keywords',         instruction: 'ONLY record a quest when the player explicitly accepts it. A quest being mentioned or offered is NOT enough.' },
     event: { enabled: true, tag: 'EVENT', format: 'Name | Details | Keywords',                        instruction: 'Significant narrative events. The Name is a SHORT, STABLE identifier (e.g. "Siege of Ashford") — no timestamps in the name, no "Final"/"Update" suffixes. Put timestamps in the Details field. Reuse the exact same Name when adding new information — entries are chronicles that accumulate automatically.' },
-    world: { enabled: false, tag: 'WORLD', format: 'Name | Details | Keywords',                       instruction: 'World Engine reports tracking off-screen NPC actions and events. Name must be the time period (e.g. "Day 1", "Week 1 (Days 1-7)").' }
+    world: { enabled: false, tag: 'WORLD', format: 'Name | Details | Keywords',                       instruction: 'World Progression reports tracking off-screen NPC actions and events. Name must be the time period (e.g. "Day 1", "Week 1 (Days 1-7)").' }
 };
 
 // ── Core settings accessor ─────────────────────────────────────────────────────
@@ -189,6 +189,49 @@ You may be asked to use Markers: ((PLS)), ((B)), ((XB)), ((BDG)), ((HGT)). These
         routerCleanupTokenThreshold: 300,
         routerCleanupEvery: 0,
         routerCleanupUseThreshold: true,
+        // ── World Progression (deterministic, standalone pass) ────────────────────
+        worldProgressionEnabled: false,           // master toggle
+        worldProgressionIntervalHours: 24,        // fire every X in-world hours (24 = daily)
+        worldProgressionKeepActive: 3,            // rolling window of active reports
+        worldProgressionWordTarget: 600,          // target word count for generated reports
+        worldProgressionLastFiredAtMinutes: -1,   // last in-world total-minutes at which a report fired
+        worldProgressionLastFiredPeriodLabel: '', // label of the last generated period entry
+        worldProgressionSystemPrompt: `You are the World Progression Engine — a simulation of the game world's off-screen activity.
+
+The report covers the in-world period: **{periodLabel}**
+Target length: {wordTarget}+ words.
+
+## RULES
+1. Do NOT mention the player character or their immediate party. This covers events they are unaware of.
+2. Simulate off-screen NPC-to-NPC interactions: political scheming, faction moves, economic shifts, environmental changes, monster migrations, rival adventurers completing quests, weather events, etc.
+3. Use the active lore below as your foundation. Name specific NPCs, factions, and locations. Invent plausible actions that fit their established agendas.
+4. Structure your report clearly: use **bold names** or bullet points to organize events.
+5. Write at least {wordTarget} words. This is a detailed chronicle, not a summary.
+6. Output ONLY the report content. No preamble, no tags, no meta-commentary.`,
+        // ── World Skeleton ─────────────────────────────────────────────────────────
+        worldProgressionSkeletonTheme: '',         // user seed/theme for skeleton generation
+        worldProgressionSkeletonSystemPrompt: `You are a World Architect. Given a world theme/seed, generate a foundational world skeleton for use in an RPG campaign simulation.
+
+Generate exactly the following structure, using markdown headers:
+
+## FACTIONS
+Create 4 major factions. For each, write 3–4 sentences covering: their name, nature, goals, key figures, and current activities.
+
+## LOCATIONS
+Create 4 significant locations the player has NOT yet visited. For each, write 2–3 sentences covering: name, geography/nature, who controls it, and what is happening there.
+
+## NPCS
+Create 4 notable NPCs the player has NOT yet met. For each, write 2–3 sentences covering: name, role/affiliation, personality, and current agenda.
+
+## CONFLICTS
+Create 3 ongoing macro-conflicts or world events. For each, write 2–3 sentences covering: the parties involved, the current state of the conflict, and what is at stake.
+
+## RULES
+- All generated entities must be consistent with the provided theme/seed.
+- Do NOT reference or include the player character or their party.
+- Do NOT use placeholder names. Invent specific, evocative names.
+- Output ONLY the structured content. No preamble or meta-commentary.`,
+
         routerSystemPromptTemplate: `<basic_instructions>
 You are the Researcher Agent, a specialized Dungeon Master's Assistant. Your role is to architect the AI Narrator's memory — keeping the Active Context saturated with the most relevant lore at all times.
 
@@ -279,19 +322,7 @@ Also include each ancestor name (Khelt, Rust-Lantern District) as a plain keywor
 NPC / FAC / QUEST / EVENT labels: Name only — NO " :: " hierarchy, NO tag prefix.
 Example: [[FAC: Iron Syndicate | ...]]  NOT  [[FAC: Khelt :: Iron Syndicate | ...]]  and  NOT  [[FAC: FAC: Iron Syndicate | ...]]
 
-**FAC** uses four fields: \`Name | Status | Description | Keywords\`. Put a concise current-state line in **Status** (standing, conflicts, recent changes); put history, ideology, schemes, and members in **Description**.
-
-{{#if_world}}
-## WORLD ENGINE (BACKGROUND EVENTS)
-Current Day is: Day {{dayStr}}.
-CRITICAL INSTRUCTION: You MUST backfill missing World Engine day reports. Your absolute top priority in this pass is to check the ARCHIVE INDEX for "Day {{prevDay}}".
-- If "Day {{prevDay}}" is NOT in the archive, you MUST generate it right now using the WORLD tag: \`[[WORLD: Day {{prevDay}} | <content> | day {{prevDay}}, world engine ]]\`. Do not make excuses. It is your job to generate the missing Day {{prevDay}} report immediately.
-- DO NOT write a report for the current ongoing day (Day {{dayStr}}). You only write reports for past days.
-- TIMESKIPS: If there is a massive gap in days, generate a single entry for the missing period (e.g., \`[[WORLD: Week 1 (Days 1-7) | ... ]]\`).
-- MASSIVE DETAIL REQUIRED: The WORLD entry <content> MUST be a highly detailed, extensive multi-paragraph report (at least 500-800+ words).
-- LIVING WORLD SIMULATION: Do NOT focus on the player character or their immediate party. The player is NOT the center of the universe. Do NOT just echo the player's recent events. Instead, simulate a living, breathing world. Invent rich, dynamic, off-screen actions for other factions, named NPCs, guilds, and regions. What political scheming happened today? Did rival adventurers complete a quest? Did monsters migrate or weather ruin crops? Provide deep, specific updates on NPC-to-NPC interactions that the player is completely unaware of. Use bullet points or bold names to structure the massive report.
-- CONTEXT MANAGEMENT: You MUST \`[[ACTIVATE: Day {{prevDay}}]]\` (and the 2 days prior if they exist). You MUST \`[[DEACTIVATE]]\` any older WORLD reports.
-{{/if_world}}`,
+**FAC** uses four fields: \`Name | Status | Description | Keywords\`. Put a concise current-state line in **Status** (standing, conflicts, recent changes); put history, ideology, schemes, and members in **Description**.`,
         categoryRenderOptions: {},
         experimentalHalfReviewMode: false,
         experimentalFullReviewMode: false,
@@ -329,6 +360,24 @@ CRITICAL INSTRUCTION: You MUST backfill missing World Engine day reports. Your a
             world: { enabled: !!old.world, tag: 'WORLD', format: 'Name | Details | Keywords', instruction: DEFAULT_MODULES.world.instruction }
         };
     }
+
+    // ── MIGRATION: routerModules.world.enabled → worldProgressionEnabled (v2.x+) ──────
+    // The World Progression system is a standalone deterministic pass. If a user had the
+    // old module toggle enabled, migrate that intent and disable the legacy module toggle.
+    if (s.routerModules?.world?.enabled && !s.worldProgressionEnabled) {
+        s.worldProgressionEnabled = true;
+        s.routerModules.world.enabled = false;
+    }
+    // ── MIGRATION: worldEngine* → worldProgression* (v2.x rename) ────────────────────
+    if (s.worldEngineEnabled !== undefined && s.worldProgressionEnabled === false) {
+        s.worldProgressionEnabled = !!s.worldEngineEnabled;
+        delete s.worldEngineEnabled;
+    }
+    if (s.worldEngineIntervalHours !== undefined) { s.worldProgressionIntervalHours = s.worldEngineIntervalHours; delete s.worldEngineIntervalHours; }
+    if (s.worldEngineKeepActive !== undefined) { s.worldProgressionKeepActive = s.worldEngineKeepActive; delete s.worldEngineKeepActive; }
+    if (s.worldEngineWordTarget !== undefined) { s.worldProgressionWordTarget = s.worldEngineWordTarget; delete s.worldEngineWordTarget; }
+    if (s.worldEngineLastFiredAtMinutes !== undefined) { s.worldProgressionLastFiredAtMinutes = s.worldEngineLastFiredAtMinutes; delete s.worldEngineLastFiredAtMinutes; }
+    if (s.worldEngineLastFiredPeriodLabel !== undefined) { s.worldProgressionLastFiredPeriodLabel = s.worldEngineLastFiredPeriodLabel; delete s.worldEngineLastFiredPeriodLabel; }
 
     // FAC tag: 3-field format -> 4-field (v2.2.3+) so Status and Description are separate prompts to the model
     if (s.routerModules?.fac?.format === 'Name | Description | Keywords') {
@@ -486,6 +535,9 @@ export function saveChatState(chatId) {
         routerCampaignPrefix: s.routerCampaignPrefix || '',
         routerLookback: s.routerLookback || 4,
         routerDirectPrompt: s.routerDirectPrompt || '',
+        // World Progression per-chat time tracking
+        worldProgressionLastFiredAtMinutes: s.worldProgressionLastFiredAtMinutes ?? -1,
+        worldProgressionLastFiredPeriodLabel: s.worldProgressionLastFiredPeriodLabel || '',
         // Preserve lorebook stack link — written by Link button and router, not by normal state saves
         campaignBooks: existing.campaignBooks || [],
     };
@@ -517,6 +569,8 @@ export function saveProfile(name) {
         routerCampaignPrefix: s.routerCampaignPrefix || '',
         routerLookback: s.routerLookback || 4,
         routerDirectPrompt: s.routerDirectPrompt || '',
+        worldProgressionLastFiredAtMinutes: s.worldProgressionLastFiredAtMinutes ?? -1,
+        worldProgressionLastFiredPeriodLabel: s.worldProgressionLastFiredPeriodLabel || '',
     };
     s.activeProfile = name;
     SillyTavern.getContext().saveSettingsDebounced();

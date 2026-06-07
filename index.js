@@ -4043,6 +4043,9 @@ function createPanel() {
             list.innerHTML = '';
 
             Object.entries(s.routerModules || {}).forEach(([id, config]) => {
+                // The 'world' module is now managed by the standalone World Progression panel
+                // (Settings → World Progression). Hide it here to avoid confusion.
+                if (id === 'world') return;
                 const row = document.createElement('div');
                 row.style.cssText = 'margin-bottom:8px; padding-bottom:6px; border-bottom:1px solid rgba(255,255,255,0.05);';
 
@@ -8333,6 +8336,148 @@ Return ONLY the XML section. No explanation, no other text.`;
             saveSettings();
             toastr['success']('Modular instructions reset to default.', 'RPG Tracker');
         });
+
+        // ── World Progression settings ─────────────────────────────────────────
+        const $wpEnabled = $('#rpg_world_progression_enabled');
+        const $wpInterval = $('#rpg_world_progression_interval');
+        const $wpKeepActive = $('#rpg_world_progression_keep_active');
+        const $wpWordTarget = $('#rpg_world_progression_word_target');
+        const $wpSystemPrompt = $('#rpg_world_progression_system_prompt');
+        const $wpResetPrompt = $('#rpg_world_progression_btn_reset_prompt');
+        const $wpLastFired = $('#rpg_world_progression_last_fired');
+        const $wpGenerateNow = $('#rpg_world_progression_generate_now');
+
+        /** Refreshes the "Last generated:" read-only display. */
+        function updateWorldProgressionLastFiredDisplay() {
+            const s = getSettings();
+            const label = s.worldProgressionLastFiredPeriodLabel || '';
+            const mins = s.worldProgressionLastFiredAtMinutes ?? -1;
+            if (label) {
+                $wpLastFired.text(label);
+            } else if (mins >= 0) {
+                const totalH = Math.floor(mins / 60);
+                const h = totalH % 24;
+                const m = mins % 60;
+                const day = Math.floor(mins / (24 * 60)) + 1;
+                $wpLastFired.text(`Day ${day}, ${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`);
+            } else {
+                $wpLastFired.text('Never');
+            }
+        }
+
+        $wpEnabled.prop('checked', !!settings.worldProgressionEnabled).on('change', function () {
+            getSettings().worldProgressionEnabled = !!$(this).prop('checked');
+            saveSettings();
+        });
+        $wpInterval.val(settings.worldProgressionIntervalHours || 24).on('input', function () {
+            getSettings().worldProgressionIntervalHours = parseInt(String($(this).val() || '')) || 24;
+            saveSettings();
+        });
+        $wpKeepActive.val(settings.worldProgressionKeepActive || 3).on('input', function () {
+            getSettings().worldProgressionKeepActive = parseInt(String($(this).val() || '')) || 3;
+            saveSettings();
+        });
+        $wpWordTarget.val(settings.worldProgressionWordTarget || 600).on('input', function () {
+            getSettings().worldProgressionWordTarget = parseInt(String($(this).val() || '')) || 600;
+            saveSettings();
+        });
+        $wpSystemPrompt.val(settings.worldProgressionSystemPrompt || '').on('input', function () {
+            getSettings().worldProgressionSystemPrompt = String($(this).val() || '');
+            saveSettings();
+        });
+        $wpResetPrompt.on('click', function () {
+            if (!confirm('Reset World Progression system prompt to default?')) return;
+            const { extensionSettings } = SillyTavern.getContext();
+            if (extensionSettings[MODULE_NAME]) {
+                delete extensionSettings[MODULE_NAME].worldProgressionSystemPrompt;
+            }
+            const freshDefault = getSettings().worldProgressionSystemPrompt;
+            getSettings().worldProgressionSystemPrompt = freshDefault;
+            $wpSystemPrompt.val(freshDefault);
+            saveSettings();
+            toastr['success']('World Progression prompt reset to default.', 'World Progression');
+        });
+        updateWorldProgressionLastFiredDisplay();
+
+        $wpGenerateNow.on('click', async function () {
+            const { parseInWorldMinutes: piw, runWorldProgressionPass: rwp } = await import('./router.js');
+            const s = getSettings();
+            const timeMatch = (s.currentMemo || '').match(/\[TIME\]([\s\S]*?)\[\/TIME\]/i);
+            const timeStr = timeMatch?.[1]?.split('\n').filter(Boolean)[0]?.trim() || '';
+            const currentMinutes = piw(timeStr);
+            if (currentMinutes < 0) {
+                toastr['warning']('Cannot parse in-world time from State Memo. Make sure the State Tracker has run at least once.', 'World Progression');
+                return;
+            }
+            // Force fire by temporarily clearing lastFiredAtMinutes so it picks up the current period
+            const savedLast = s.worldProgressionLastFiredAtMinutes;
+            s.worldProgressionLastFiredAtMinutes = -1;
+            $wpGenerateNow.prop('disabled', true).text('Generating…');
+            try {
+                await rwp(timeStr, currentMinutes);
+                updateWorldProgressionLastFiredDisplay();
+                toastr['success']('World Progression report generated.', 'World Progression');
+            } catch (e) {
+                toastr['error'](`World Progression error: ${e.message}`, 'World Progression');
+                s.worldProgressionLastFiredAtMinutes = savedLast;
+            } finally {
+                $wpGenerateNow.prop('disabled', false).html('<i class="fa-solid fa-globe"></i> Generate Now (current period)');
+            }
+        });
+
+        // ── World Skeleton wiring ───────────────────────────────────────────────
+        const $wpSkeletonTheme = $('#rpg_world_progression_skeleton_theme');
+        const $wpGenerateSkeleton = $('#rpg_world_progression_btn_generate_skeleton');
+        const $wpSkeletonStatus = $('#rpg_world_progression_skeleton_status');
+
+        /** Refreshes the skeleton entry count label from the _Skeleton lorebook. */
+        async function updateSkeletonStatus() {
+            const prefix = (getSettings().routerPrefix || '').trim();
+            const skeletonBookName = prefix ? `${prefix}_Skeleton` : 'World_Skeleton';
+            try {
+                const ctx = SillyTavern.getContext();
+                const book = await ctx.loadWorldInfo(skeletonBookName);
+                const count = book?.entries ? Object.keys(book.entries).length : 0;
+                $wpSkeletonStatus.text(count > 0 ? `${count} skeleton entries in "${skeletonBookName}"` : 'No skeleton generated.');
+            } catch (_) {
+                $wpSkeletonStatus.text('No skeleton generated.');
+            }
+        }
+
+        $wpSkeletonTheme.val(settings.worldProgressionSkeletonTheme || '').on('input', function () {
+            getSettings().worldProgressionSkeletonTheme = String($(this).val() || '');
+            saveSettings();
+        });
+
+        $wpGenerateSkeleton.on('click', async function () {
+            const theme = String($wpSkeletonTheme.val() || '').trim();
+            if (!theme) {
+                toastr['warning']('Please enter a world theme or seed before generating.', 'World Skeleton');
+                return;
+            }
+            const prefix = (getSettings().routerPrefix || '').trim();
+            if (!prefix) {
+                toastr['warning']('No campaign prefix set. Set a prefix in the Lorebook Agent settings first.', 'World Skeleton');
+                return;
+            }
+            $wpGenerateSkeleton.prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin"></i> Generating…');
+            try {
+                const { runSkeletonGenerationPass } = await import('./router.js');
+                const count = await runSkeletonGenerationPass(theme);
+                await updateSkeletonStatus();
+                toastr['success'](`World Skeleton generated: ${count} entries created.`, 'World Skeleton');
+            } catch (e) {
+                toastr['error'](`World Skeleton error: ${e.message}`, 'World Skeleton');
+            } finally {
+                $wpGenerateSkeleton.prop('disabled', false).html('<i class="fa-solid fa-wand-magic-sparkles"></i> Generate Skeleton');
+            }
+        });
+
+        // Populate status on load
+        updateSkeletonStatus();
+        // ── End World Progression settings ─────────────────────────────────────
+
+
         // Custom Sysprompt Mode toggle
         const customSyspromptCb = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_tracker_custom_sysprompt'));
         const narratorConfigBlock = document.getElementById('rpg_narrator_config_block');
