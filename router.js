@@ -1,4 +1,4 @@
-﻿import { getSettings, getEffectiveRouterCampaignPrefix } from './state-manager.js';
+import { getSettings, getEffectiveRouterCampaignPrefix } from './state-manager.js';
 import { sendStateRequest, sendAgentTurn } from './llm-client.js';
 import { getRequestHeaders } from '../../../../script.js';
 
@@ -2542,43 +2542,87 @@ function parseSkeletonOutput(rawText) {
     };
 
     const records = [];
-    // Split on ### headers
-    const chunks = rawText.split(/(?=^###\s)/m).filter(s => s.trim());
-    // Track which category we're in by the most recent ## header
+    const lines = rawText.split('\n');
+    
     let currentCategory = 'NPC';
+    let currentItem = null;
 
-    // First pass: identify ## section headers to establish category context
-    const sectionLines = rawText.split('\n');
-    let sectionCat = 'NPC';
-    const sectionBreaks = []; // { lineIndex, category }
-    sectionLines.forEach((line, i) => {
-        const secMatch = line.match(/^##\s+([A-Z]+)/i);
+    const sectionRegex = /^##\s+([A-Z]+)/i;
+    const subHeaderRegex = /^###\s+(.+)/;
+    const listRegex = /^\s*(?:[\*\-\d\.\s]*)\s*\*\*(.+?)\*\*[:\-]?\s*(.*)/;
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const trimmedLine = line.trim();
+
+        // 1. Check for ## Section Header
+        const secMatch = line.match(sectionRegex);
         if (secMatch) {
+            if (currentItem) {
+                records.push(currentItem);
+                currentItem = null;
+            }
             const key = secMatch[1].toUpperCase();
-            sectionCat = categoryMap[key] || 'NPC';
-            sectionBreaks.push({ lineIndex: i, category: sectionCat });
-        }
-    });
-
-    for (const chunk of chunks) {
-        const headerMatch = chunk.match(/^###\s+(.+)/m);
-        if (!headerMatch) continue;
-        const label = headerMatch[1].trim();
-        const content = chunk.replace(/^###\s+.+\n?/, '').trim();
-        if (!content) continue;
-
-        // Find which ## section this ### belongs to by scanning backward in rawText
-        const chunkStart = rawText.indexOf(chunk);
-        let category = 'NPC';
-        for (const sb of sectionBreaks) {
-            // Count characters up to the lineIndex
-            const lineStart = sectionLines.slice(0, sb.lineIndex).join('\n').length;
-            if (lineStart <= chunkStart) category = sb.category;
+            currentCategory = categoryMap[key] || 'NPC';
+            continue;
         }
 
-        records.push({ label, content, category });
+        // 2. Check for ### Sub-header
+        const subMatch = line.match(subHeaderRegex);
+        if (subMatch) {
+            if (currentItem) {
+                records.push(currentItem);
+            }
+            currentItem = {
+                label: subMatch[1].trim(),
+                content: '',
+                category: currentCategory
+            };
+            continue;
+        }
+
+        // 3. Check for list items like * **Name**: description
+        const listMatch = line.match(listRegex);
+        if (listMatch) {
+            if (currentItem) {
+                records.push(currentItem);
+            }
+            currentItem = {
+                label: listMatch[1].trim(),
+                content: listMatch[2].trim(),
+                category: currentCategory
+            };
+            continue;
+        }
+
+        // 4. Append to existing item content
+        if (currentItem) {
+            if (trimmedLine) {
+                if (currentItem.content) {
+                    currentItem.content += ' ' + trimmedLine;
+                } else {
+                    currentItem.content = trimmedLine;
+                }
+            }
+        }
     }
-    return records;
+
+    if (currentItem) {
+        records.push(currentItem);
+    }
+
+    // Clean up content strings (collapse multiple spaces, remove quotes)
+    for (const rec of records) {
+        rec.content = rec.content.replace(/\s+/g, ' ').trim();
+        if (rec.content.startsWith('"') && rec.content.endsWith('"')) {
+            rec.content = rec.content.slice(1, -1).trim();
+        }
+        if (rec.content.startsWith("'") && rec.content.endsWith("'")) {
+            rec.content = rec.content.slice(1, -1).trim();
+        }
+    }
+
+    return records.filter(r => r.label && r.content);
 }
 
 /**
