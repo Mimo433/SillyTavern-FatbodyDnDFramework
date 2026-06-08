@@ -2394,24 +2394,7 @@ export async function runWorldProgressionPass(timeStr, currentMinutes) {
         ? historicalReportLines.join('\n\n')
         : 'No prior World Progression reports.';
 
-    // 4. Grab recent narrative blocks (for current scene context)
-    const { chat } = ctx;
-    const narrativeBlocks = [];
-    if (Array.isArray(chat)) {
-        const limit = settings.routerLookback || 4;
-        let found = 0;
-        for (const msg of [...chat].reverse()) {
-            if (found >= limit) break;
-            if (msg.is_system || msg.is_user) continue;
-            let mes = (msg.mes || '').trim()
-                .replace(/<details[^>]*>[\s\S]*?<\/details>/gi, '')
-                .replace(/<think[^>]*>[\s\S]*?<\/think>/gi, '').trim();
-            if (mes) { narrativeBlocks.unshift(mes); found++; }
-        }
-    }
-    const recentNarrative = narrativeBlocks.join('\n\n') || 'No recent narrative.';
-
-    // 5. Build the system prompt from settings ({periodLabel} and {wordTarget} substitution)
+    // 4. Build the system prompt from settings ({periodLabel} and {wordTarget} substitution)
     const rawPrompt = settings.worldProgressionSystemPrompt || '';
     const systemPrompt = rawPrompt
         .replace(/\{periodLabel\}/g, periodLabel)
@@ -2428,9 +2411,6 @@ ${loreDump}
 
 ## HISTORICAL WORLD REPORTS (Previously Generated Off-Screen Activity)
 ${historicalDump}
-
-## RECENT NARRATIVE (Current Scene Context)
-${recentNarrative}
 
 Write the World Progression report for **${periodLabel}**.`;
 
