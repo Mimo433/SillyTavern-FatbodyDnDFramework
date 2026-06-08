@@ -8355,6 +8355,8 @@ Return ONLY the XML section. No explanation, no other text.`;
         const $wpSystemPrompt = $('#rpg_world_progression_system_prompt');
         const $wpResetPrompt = $('#rpg_world_progression_btn_reset_prompt');
         const $wpLastFired = $('#rpg_world_progression_last_fired');
+        const $wpLastReportVal = $('#rpg_world_progression_last_report_val');
+        const $wpNextReportVal = $('#rpg_world_progression_next_report_val');
         const $wpGenerateNow = $('#rpg_world_progression_generate_now');
 
         /** Refreshes the "Last generated:" read-only display. */
@@ -8362,17 +8364,29 @@ Return ONLY the XML section. No explanation, no other text.`;
             const s = getSettings();
             const label = s.worldProgressionLastFiredPeriodLabel || '';
             const mins = s.worldProgressionLastFiredAtMinutes ?? -1;
-            if (label) {
-                $wpLastFired.text(label);
-            } else if (mins >= 0) {
-                const totalH = Math.floor(mins / 60);
+
+            function formatInWorldMinutes(totalMins) {
+                if (totalMins < 0) return 'Never';
+                const totalH = Math.floor(totalMins / 60);
                 const h = totalH % 24;
-                const m = mins % 60;
-                const day = Math.floor(mins / (24 * 60)) + 1;
-                $wpLastFired.text(`Day ${day}, ${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`);
-            } else {
-                $wpLastFired.text('Never');
+                const m = totalMins % 60;
+                const day = Math.floor(totalMins / (24 * 60)) + 1;
+                return `Day ${day}, ${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
             }
+
+            let lastReportText = 'Never';
+            if (label) {
+                lastReportText = label;
+            } else if (mins >= 0) {
+                lastReportText = formatInWorldMinutes(mins);
+            }
+            $wpLastFired.text(lastReportText);
+            $wpLastReportVal.text(lastReportText);
+
+            const intervalHours = s.worldProgressionIntervalHours || 24;
+            const intervalMinutes = intervalHours * 60;
+            const nextMins = mins >= 0 ? mins + intervalMinutes : intervalMinutes;
+            $wpNextReportVal.text(formatInWorldMinutes(nextMins));
         }
 
         $wpEnabled.prop('checked', !!settings.worldProgressionEnabled).on('change', function () {
@@ -8382,6 +8396,7 @@ Return ONLY the XML section. No explanation, no other text.`;
         $wpInterval.val(settings.worldProgressionIntervalHours || 24).on('input', function () {
             getSettings().worldProgressionIntervalHours = parseInt(String($(this).val() || '')) || 24;
             saveSettings();
+            updateWorldProgressionLastFiredDisplay();
         });
         $wpKeepActive.val(settings.worldProgressionKeepActive || 3).on('input', function () {
             getSettings().worldProgressionKeepActive = parseInt(String($(this).val() || '')) || 3;
