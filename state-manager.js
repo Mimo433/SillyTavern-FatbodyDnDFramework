@@ -194,7 +194,7 @@ You may be asked to use Markers: ((PLS)), ((B)), ((XB)), ((BDG)), ((HGT)). These
         worldProgressionIntervalHours: 24,        // fire every X in-world hours (24 = daily)
         worldProgressionKeepActive: 3,            // rolling window of active reports
         worldProgressionWordTarget: 600,          // target word count for generated reports
-        worldProgressionLookback: 0,              // number of recent chat messages to include (0 = disabled)
+        worldProgressionLookback: 20,             // number of recent chat messages to include (0 = disabled)
         worldProgressionLastFiredAtMinutes: -1,   // last in-world total-minutes at which a report fired
         worldProgressionLastFiredPeriodLabel: '', // label of the last generated period entry
         worldProgressionSystemPrompt: `You are the World Progression Engine — a living simulation of the game world's off-screen activity. Simulate political scheming, faction moves, economic shifts, environmental changes, creature activity, rival actors pursuing independent agendas, weather events, and emergent consequences of prior world state.
@@ -530,7 +530,7 @@ export function saveChatState(chatId) {
         routerCampaignPrefix: s.routerCampaignPrefix || '',
         routerLookback: s.routerLookback || 4,
         routerDirectPrompt: s.routerDirectPrompt || '',
-        worldProgressionLookback: s.worldProgressionLookback ?? 0,
+        worldProgressionLookback: s.worldProgressionLookback ?? 20,
         // World Progression per-chat time tracking
         worldProgressionLastFiredAtMinutes: s.worldProgressionLastFiredAtMinutes ?? -1,
         worldProgressionLastFiredPeriodLabel: s.worldProgressionLastFiredPeriodLabel || '',
@@ -565,7 +565,7 @@ export function saveProfile(name) {
         routerCampaignPrefix: s.routerCampaignPrefix || '',
         routerLookback: s.routerLookback || 4,
         routerDirectPrompt: s.routerDirectPrompt || '',
-        worldProgressionLookback: s.worldProgressionLookback ?? 0,
+        worldProgressionLookback: s.worldProgressionLookback ?? 20,
         worldProgressionLastFiredAtMinutes: s.worldProgressionLastFiredAtMinutes ?? -1,
         worldProgressionLastFiredPeriodLabel: s.worldProgressionLastFiredPeriodLabel || '',
     };
