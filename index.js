@@ -807,11 +807,15 @@ async function refreshExtensionPrompt() {
         const books = {};
         for (const k of s.activeRouterKeys) {
             const [bookName] = k.split('::');
+            const isWorld = bookName.toLowerCase().endsWith('_world') || bookName.toLowerCase() === 'world';
+            if (isWorld) continue;
             if (!books[bookName]) books[bookName] = await ctx.loadWorldInfo(bookName);
         }
 
         for (const k of s.activeRouterKeys) {
             const [bookName, uid] = k.split('::');
+            const isWorld = bookName.toLowerCase().endsWith('_world') || bookName.toLowerCase() === 'world';
+            if (isWorld) continue;
             const entry = books[bookName]?.entries?.[uid];
             if (entry && entry.content) {
                 injectedContext += `### [${entry.key?.[0] || entry.comment || uid}]\n${entry.content}\n\n`;
@@ -851,10 +855,14 @@ function installRouterInterceptor() {
             const books = {};
             for (const k of s.activeRouterKeys) {
                 const [bookName] = k.split('::');
+                const isWorld = bookName.toLowerCase().endsWith('_world') || bookName.toLowerCase() === 'world';
+                if (isWorld) continue;
                 if (!books[bookName]) books[bookName] = await ctx.loadWorldInfo(bookName);
             }
             for (const k of s.activeRouterKeys) {
                 const [bookName, uid] = k.split('::');
+                const isWorld = bookName.toLowerCase().endsWith('_world') || bookName.toLowerCase() === 'world';
+                if (isWorld) continue;
                 const entry = books[bookName]?.entries?.[uid];
                 if (entry && entry.content) injectedContext += `### [${entry.key?.[0] || entry.comment || uid}]\n${entry.content}\n\n`;
             }

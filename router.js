@@ -1119,6 +1119,83 @@ async function applyAction(action, allBooks = {}, currentTime = '', breadcrumb =
     }
     if (deactivate.length > 0) changed = true;
 
+    // 1b. Physical activation/deactivation for _World books
+    if (activate.length > 0 || deactivate.length > 0) {
+        const worldBookUpdates = new Map();
+        for (const k of activate) {
+            if (typeof k === 'string' && k.includes('::')) {
+                const [bookName, uid] = k.split('::');
+                const isWorld = bookName.toLowerCase().endsWith('_world') || bookName.toLowerCase() === 'world';
+                if (isWorld) {
+                    if (!worldBookUpdates.has(bookName)) {
+                        worldBookUpdates.set(bookName, { activateUids: new Set(), deactivateUids: new Set() });
+                    }
+                    worldBookUpdates.get(bookName).activateUids.add(uid);
+                }
+            }
+        }
+        for (const k of deactivate) {
+            if (typeof k === 'string' && k.includes('::')) {
+                const [bookName, uid] = k.split('::');
+                const isWorld = bookName.toLowerCase().endsWith('_world') || bookName.toLowerCase() === 'world';
+                if (isWorld) {
+                    if (!worldBookUpdates.has(bookName)) {
+                        worldBookUpdates.set(bookName, { activateUids: new Set(), deactivateUids: new Set() });
+                    }
+                    worldBookUpdates.get(bookName).deactivateUids.add(uid);
+                }
+            }
+        }
+        for (const [bookName, updates] of worldBookUpdates.entries()) {
+            let bookData = null;
+            try { bookData = await ctx.loadWorldInfo(bookName); } catch (_) {}
+            if (!bookData) {
+                try {
+                    const res = await fetch('/api/worldinfo/get', {
+                        method: 'POST',
+                        headers: getRequestHeaders(),
+                        body: JSON.stringify({ name: bookName })
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data?.entries) bookData = data;
+                    }
+                } catch (_) {}
+            }
+            if (bookData?.entries) {
+                let bookChanged = false;
+                for (const uid of updates.activateUids) {
+                    if (bookData.entries[uid]) {
+                        bookData.entries[uid].constant = true;
+                        bookData.entries[uid].disable = false;
+                        bookData.entries[uid].key = [];
+                        bookChanged = true;
+                    }
+                }
+                for (const uid of updates.deactivateUids) {
+                    if (bookData.entries[uid]) {
+                        bookData.entries[uid].constant = false;
+                        bookData.entries[uid].disable = true;
+                        bookData.entries[uid].key = [];
+                        bookChanged = true;
+                    }
+                }
+                if (bookChanged) {
+                    try {
+                        await fetch('/api/worldinfo/edit', {
+                            method: 'POST',
+                            headers: getRequestHeaders(),
+                            body: JSON.stringify({ name: bookName, data: bookData })
+                        });
+                        if (typeof ctx.saveWorldInfo === 'function') {
+                            await ctx.saveWorldInfo(bookName, bookData);
+                        }
+                    } catch (_) {}
+                }
+            }
+        }
+    }
+
     // Sync keywordActivatedKeys: agent ownership trumps keyword-auto tracking.
     // - Explicitly activated: agent owns it now, no longer auto-expires.
     // - Explicitly deactivated: remove from both pools.
@@ -1254,16 +1331,21 @@ async function applyAction(action, allBooks = {}, currentTime = '', breadcrumb =
             rec.content = timePrefix + rec.content;
         }
 
-        // Add location hierarchy keywords (plain fragments, no 'In:' prefix)
-        // Matches status footer tokens for native ST keyword triggering.
-        {
-            const parts = (breadcrumb || '').split(' :: ').filter(Boolean);
-            rec.keys = rec.keys || [];
-            for (const part of parts) {
-                if (!rec.keys.includes(part)) rec.keys.push(part);
+        const isWorld = targetBook.toLowerCase().endsWith('_world') || targetBook.toLowerCase() === 'world';
+        if (isWorld) {
+            rec.keys = [];
+        } else {
+            // Add location hierarchy keywords (plain fragments, no 'In:' prefix)
+            // Matches status footer tokens for native ST keyword triggering.
+            {
+                const parts = (breadcrumb || '').split(' :: ').filter(Boolean);
+                rec.keys = rec.keys || [];
+                for (const part of parts) {
+                    if (!rec.keys.includes(part)) rec.keys.push(part);
+                }
             }
+            rec.keys = cleanKeys(rec.keys || []);
         }
-        rec.keys = cleanKeys(rec.keys || []);
 
         if (!bookQueue.has(targetBook)) bookQueue.set(targetBook, []);
         bookQueue.get(targetBook).push(rec);
@@ -1311,6 +1393,7 @@ async function applyAction(action, allBooks = {}, currentTime = '', breadcrumb =
                 if (entryLabel === cleanLabel) { existingUid = uid; break; }
             }
 
+            const isWorldBook = targetBook.toLowerCase().endsWith('_world') || targetBook.toLowerCase() === 'world';
             if (existingUid) {
                 // Append delta to existing chronicle (dedup path)
                 const fullId = `${targetBook}::${existingUid}`;
@@ -1319,9 +1402,17 @@ async function applyAction(action, allBooks = {}, currentTime = '', breadcrumb =
                 const existing = (bookData.entries[existingUid].content || '').replace(/^\[ID:[^\]]+\]\n?/i, '').trimEnd();
                 delta = deduplicateContent(existing, delta);
                 bookData.entries[existingUid].content = existing && delta ? `${existing}\n${delta}` : (existing || delta);
-                const keys = bookData.entries[existingUid].key || [];
-                (rec.keys || []).forEach(k => { if (!keys.includes(k)) keys.push(k); });
-                bookData.entries[existingUid].key = cleanKeys(keys);
+                
+                if (isWorldBook) {
+                    bookData.entries[existingUid].key = [];
+                    bookData.entries[existingUid].constant = true;
+                    bookData.entries[existingUid].disable = false;
+                } else {
+                    const keys = bookData.entries[existingUid].key || [];
+                    (rec.keys || []).forEach(k => { if (!keys.includes(k)) keys.push(k); });
+                    bookData.entries[existingUid].key = cleanKeys(keys);
+                }
+                
                 if (!newActive.includes(fullId)) newActive.push(fullId);
                 recordedIds.push(`${fullId} (updated)`);
             } else {
@@ -1331,12 +1422,13 @@ async function applyAction(action, allBooks = {}, currentTime = '', breadcrumb =
                 const fullId = `${targetBook}::${nextUid}`;
                 bookData.entries[nextUid] = {
                     uid: nextUid,
-                    key: rec.keys || [rec.label],
+                    key: isWorldBook ? [] : (rec.keys || [rec.label]),
                     keysecondary: [],
                     comment: rec.label || 'LORE_GEN',
                     content: rec.content || '',
-                    constant: false, selective: false, selectiveLogic: 0, addMemo: true,
-                    order: 100, position: 0, disable: !settings.routerNativeKeywordActivation,
+                    constant: isWorldBook ? true : false,
+                    selective: false, selectiveLogic: 0, addMemo: true,
+                    order: 100, position: 0, disable: isWorldBook ? false : !settings.routerNativeKeywordActivation,
                     probability: 100, useProbability: false,
                     depth: 4, group: '', groupOverride: false, groupWeight: 100,
                 };

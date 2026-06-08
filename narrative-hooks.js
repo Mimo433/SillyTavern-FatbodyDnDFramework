@@ -428,7 +428,13 @@ export function installInterceptor() {
                 // They are disable:true in the lorebook so ST's native scanner ignores them.
                 // Neither of the keyword passes above covers them — this pass fills the gap.
                 const alreadyInjected = new Set([...triggered, ...(settings.keywordActivatedKeys || [])]);
-                const agentOwned = (settings.activeRouterKeys || []).filter(id => !alreadyInjected.has(id));
+                const agentOwned = (settings.activeRouterKeys || [])
+                    .filter(id => !alreadyInjected.has(id))
+                    .filter(id => {
+                        const [bookName] = id.split('::');
+                        const isWorld = bookName.toLowerCase().endsWith('_world') || bookName.toLowerCase() === 'world';
+                        return !isWorld;
+                    });
                 if (agentOwned.length > 0) {
                     try {
                         const ctx = SillyTavern.getContext();
