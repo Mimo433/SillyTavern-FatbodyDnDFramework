@@ -3716,7 +3716,12 @@ function createPanel() {
             editBtn.textContent = 'Edit';
             editBtn.title = 'Edit this lore entry';
             editBtn.style.cssText = 'background:rgba(80,140,255,0.12); border:1px solid rgba(80,140,255,0.35); color:var(--rt-accent); border-radius:3px; font-size:9px; padding:2px 10px; cursor:pointer;';
-            readActions.appendChild(cleanBtn);
+            
+            const bookNameLower = (item.book || '').toLowerCase();
+            const isWorldBook = bookNameLower.endsWith('_world') || bookNameLower === 'world';
+            if (!isWorldBook) {
+                readActions.appendChild(cleanBtn);
+            }
             readActions.appendChild(editBtn);
 
             readPane.appendChild(titleRead);

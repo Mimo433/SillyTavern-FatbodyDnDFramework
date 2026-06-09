@@ -371,6 +371,10 @@ export async function runRouterPass(narrativeOutput, manualPrompt = null, custom
             const flagged = [];
             for (const [bookName, book] of Object.entries(archiveBooks)) {
                 if (!book?.entries) continue;
+                const nameLower = bookName.toLowerCase();
+                const isWorldBook = nameLower.endsWith('_world') || nameLower === 'world';
+                if (isWorldBook) continue;
+
                 for (const [uid, entry] of Object.entries(book.entries)) {
                     const fullId = `${bookName}::${uid}`;
                     const tokens = estimateTokens(entry.content);
