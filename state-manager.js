@@ -207,7 +207,8 @@ The report covers the in-world period: **{periodLabel}**
 2. Prioritize named ACTIVE WORLD LORE NPCs. Every report must include at least 2. These are your highest-value subjects.
 3. For NPCs who were physically present with {{user}} during the reporting period, only generate plausible background activity — digital actions, private decisions, off-screen communications. Do not relocate them.
 4. Format as 15 short entries, 1 sentence each. Dense, no filler, no markdown.
-5. Output ONLY the report content. No preamble, no tags, no meta-commentary.`,
+5. Output ONLY the report content. No preamble, no tags, no meta-commentary.
+6. Do not simply repeat the same entities and always build on the previous report; take interesting entities from the ACTIVE WORLD LORE as well as the SKELETON regardless of whether they were featured in the previous report(s).`,
         // ── World Skeleton ─────────────────────────────────────────────────────────
         worldProgressionSkeletonTheme: '',         // user seed/theme for skeleton generation
         worldProgressionSkeletonSystemPrompt: `You are a World Architect. Given a world theme/seed, generate a sparse foundational skeleton for an RPG campaign simulation.
