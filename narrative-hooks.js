@@ -68,6 +68,64 @@ export function buildRngBlock(queue) {
 
 // ── Dice rolling ───────────────────────────────────────────────────────────────
 
+function parseAndRoll(formula) {
+    const cleanFormula = formula.replace(/\s+/g, '');
+    // Regex matches e.g. "2d20k1+5+2", "1d20+7", "d20-1", "2d20kh1", "2d20dl1"
+    const regex = /^([1-9]\d*)?d([1-9]\d*)(?:([kd][hl]?)([1-9]\d*))?((?:[+-]\d+)*)$/i;
+    const match = cleanFormula.match(regex);
+    if (!match) return null;
+
+    const numDice = match[1] ? parseInt(match[1], 10) : 1;
+    const numSides = parseInt(match[2], 10);
+    const opType = match[3] ? match[3].toLowerCase() : null;
+    const opCount = match[4] ? parseInt(match[4], 10) : 0;
+    const modifierStr = match[5] || '';
+
+    // Safety limit to prevent locking the execution thread
+    if (numDice > 100) return null;
+
+    const rolls = [];
+    for (let i = 0; i < numDice; i++) {
+        rolls.push(rollDie(numSides));
+    }
+
+    let keptRolls = [...rolls];
+    if (opType && opCount > 0) {
+        keptRolls.sort((a, b) => a - b);
+        if (opType.startsWith('k')) {
+            if (opType === 'kl') {
+                keptRolls = keptRolls.slice(0, opCount);
+            } else {
+                keptRolls = keptRolls.slice(-opCount);
+            }
+        } else if (opType.startsWith('d')) {
+            if (opType === 'dh') {
+                keptRolls = keptRolls.slice(0, Math.max(0, numDice - opCount));
+            } else {
+                keptRolls = keptRolls.slice(opCount);
+            }
+        }
+    }
+
+    let modifier = 0;
+    if (modifierStr) {
+        const modMatches = modifierStr.match(/[+-]\d+/g);
+        if (modMatches) {
+            for (const m of modMatches) {
+                modifier += parseInt(m, 10);
+            }
+        }
+    }
+
+    const diceSum = keptRolls.reduce((sum, val) => sum + val, 0);
+    const total = diceSum + modifier;
+
+    return {
+        total: String(total),
+        rolls: rolls.map(String)
+    };
+}
+
 export async function doDiceRoll(customDiceFormula, quiet = false) {
     const nullValue = { total: '', rolls: [] };
     let value = typeof customDiceFormula === 'string' ? customDiceFormula.trim() : '1d20';
@@ -79,6 +137,17 @@ export async function doDiceRoll(customDiceFormula, quiet = false) {
 
     if (!value) return nullValue;
 
+    // Try custom/advanced parser first
+    const customResult = parseAndRoll(value);
+    if (customResult) {
+        if (!quiet) {
+            const context = SillyTavern.getContext();
+            context.sendSystemMessage('generic', `${context.name1} rolls a ${value}. The result is: ${customResult.total} (${customResult.rolls.join(', ')})`, { isSmallSys: true });
+        }
+        return customResult;
+    }
+
+    // Fall back to standard droll library
     const droll = SillyTavern.libs.droll;
     if (!droll) {
         toastr['error']('Dice library (droll) not found.');

@@ -2342,16 +2342,16 @@ export function parseInWorldMinutes(timeStr) {
  * @returns {string}
  */
 function computePeriodLabel(startMinutes, endMinutes, intervalHours) {
-    const startDay = Math.floor(startMinutes / (24 * 60)) + 1;
-    if (intervalHours >= 24) {
-        return `Day ${startDay}`;
-    }
-    const fmt = (total) => {
-        const h = Math.floor((total % (24 * 60)) / 60);
-        const m = total % 60;
-        return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-    };
-    return `Day ${startDay}, ${fmt(startMinutes)}-${fmt(endMinutes)}`;
+    const day = Math.floor(endMinutes / (24 * 60)) + 1;
+    const minutesOfToday = endMinutes % (24 * 60);
+    let hours = Math.floor(minutesOfToday / 60);
+    const mins = minutesOfToday % 60;
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    let displayHours = hours % 12;
+    if (displayHours === 0) displayHours = 12;
+    const displayHoursStr = String(displayHours).padStart(2, '0');
+    const displayMins = String(mins).padStart(2, '0');
+    return `Day ${day}, ${displayHoursStr}:${displayMins} ${ampm}`;
 }
 
 /**
@@ -2367,7 +2367,7 @@ export async function runWorldProgressionPass(timeStr, currentMinutes) {
     const prefix = getLivePrefix();
     const worldBookName = prefix ? `${prefix}_World` : 'World';
     const intervalHours = settings.worldProgressionIntervalHours || 24;
-    const keepActive = settings.worldProgressionKeepActive || 3;
+    const keepActive = settings.worldProgressionKeepActive || 1;
     const wordTarget = 600;
 
     const lastFired = settings.worldProgressionLastFiredAtMinutes ?? -1;
@@ -2425,6 +2425,10 @@ export async function runWorldProgressionPass(timeStr, currentMinutes) {
     const skeletonLines = [];
     const loreGrouped = {}; // categoryHeader -> Array of entry lines
     const historicalReportLines = [];
+    const npcNames = [];
+    const locationNames = [];
+    const factionNames = [];
+    const conflictNames = [];
 
     function getBookCategoryHeader(bookName, prefix) {
         let cleanName = bookName;
@@ -2452,16 +2456,35 @@ export async function runWorldProgressionPass(timeStr, currentMinutes) {
         for (const [, entry] of sortedEntries) {
             if (!entry?.content?.trim()) continue;
             const label = (entry.comment || entry.key?.[0] || '(unnamed)').trim();
+            if (label === '(unnamed)' || !label) continue;
+
+            const categoryHeader = getBookCategoryHeader(bookName, prefix);
+            const isNpc = (isSkeletonBook && entry.extensions?.rpgCategory === 'NPC') ||
+                          (!isSkeletonBook && (categoryHeader === 'NPC' || categoryHeader === 'NPCS' || nameLower.includes('npc')));
+            const isLoc = (isSkeletonBook && entry.extensions?.rpgCategory === 'LOC') ||
+                          (!isSkeletonBook && (categoryHeader === 'LOC' || categoryHeader === 'LOCATIONS' || nameLower.includes('location') || nameLower.includes('place')));
+            const isFac = (isSkeletonBook && entry.extensions?.rpgCategory === 'FAC') ||
+                          (!isSkeletonBook && (categoryHeader === 'FAC' || categoryHeader === 'FACTIONS' || nameLower.includes('faction') || nameLower.includes('guild')));
+            const isConflict = (isSkeletonBook && entry.extensions?.rpgCategory === 'EVENT') ||
+                               (!isSkeletonBook && (categoryHeader === 'EVENT' || categoryHeader === 'EVENTS' || categoryHeader === 'QUEST' || categoryHeader === 'QUESTS' || nameLower.includes('event') || nameLower.includes('conflict') || nameLower.includes('quest')));
+
             if (isSkeletonBook) {
                 skeletonLines.push(`### ${label}\n${entry.content.trim()}`);
+                if (isNpc) npcNames.push(label);
+                else if (isLoc) locationNames.push(label);
+                else if (isFac) factionNames.push(label);
+                else if (isConflict) conflictNames.push(label);
             } else if (isWorldBook) {
                 historicalReportLines.push(`### ${label}\n${entry.content.trim()}`);
             } else {
-                const categoryHeader = getBookCategoryHeader(bookName, prefix);
                 if (!loreGrouped[categoryHeader]) {
                     loreGrouped[categoryHeader] = [];
                 }
                 loreGrouped[categoryHeader].push(`### ${label}\n${entry.content.trim()}`);
+                if (isNpc) npcNames.push(label);
+                else if (isLoc) locationNames.push(label);
+                else if (isFac) factionNames.push(label);
+                else if (isConflict) conflictNames.push(label);
             }
         }
     }
@@ -2512,6 +2535,38 @@ export async function runWorldProgressionPass(timeStr, currentMinutes) {
         .replace(/\{periodLabel\}/g, periodLabel)
         .replace(/\{wordTarget\}/g, String(wordTarget));
 
+    // Determine designated entities randomly
+    const designations = [];
+    const handleRandomization = (enabled, namesList, count, sectionLabel) => {
+        if (!enabled) return;
+        const uniqueNames = Array.from(new Set(namesList)).filter(Boolean);
+        if (uniqueNames.length > 0) {
+            const clampedCount = Math.min(count, uniqueNames.length);
+            const shuffled = [...uniqueNames];
+            for (let i = shuffled.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+            }
+            const selected = shuffled.slice(0, clampedCount);
+            if (selected.length > 0) {
+                designations.push(`### ${sectionLabel}\n` + selected.map(n => `- ${n}`).join('\n'));
+            }
+        }
+    };
+
+    handleRandomization(settings.worldProgressionRandomizeNPCs, npcNames, settings.worldProgressionRandomNPCCount || 5, 'NPCs');
+    handleRandomization(settings.worldProgressionRandomizeLocations, locationNames, settings.worldProgressionRandomLocationCount || 4, 'Locations');
+    handleRandomization(settings.worldProgressionRandomizeFactions, factionNames, settings.worldProgressionRandomFactionCount || 4, 'Factions');
+    handleRandomization(settings.worldProgressionRandomizeConflicts, conflictNames, settings.worldProgressionRandomConflictCount || 3, 'Conflicts/Quests');
+
+    let selectedNPCsText = '';
+    if (designations.length > 0) {
+        selectedNPCsText = `\n\n## DESIGNATED ENTITIES FOR THIS PERIOD\n` +
+            `The following entities have been pre-selected by the system simulator. You MUST focus on and ONLY change the status, advance the timeline, or create new narrative beats for these designated entities:\n\n` +
+            designations.join('\n\n') +
+            `\n\nYou are strictly forbidden from changing the status, advancing the timeline, or creating new narrative beats for unauthorized entities. However, you MAY mention them passively as background context if their past, established actions are a direct catalyst for the designated entities.`;
+    }
+
     let userPrompt =
 `## WORLD SKELETON (Day 0 Baseline — Foundational Undiscovered State)
 These entities existed at the start of the campaign. They have been acting off-screen since Day 1.
@@ -2526,6 +2581,10 @@ ${historicalDump}`;
 
     if (recentNarrative) {
         userPrompt += `\n\n## RECENT NARRATIVE (Current Scene Context)\n${recentNarrative}`;
+    }
+
+    if (selectedNPCsText) {
+        userPrompt += selectedNPCsText;
     }
 
     userPrompt += `\n\nWrite the World Progression report for **${periodLabel}**.`;
@@ -2559,10 +2618,8 @@ ${historicalDump}`;
     // 7. Store the entry via applyAction (routes to the _World lorebook).
     //    archiveBooks already loaded in step 1 - no re-fetch needed.
     const entryKeys = ['world progression', 'world report', periodLabel.toLowerCase()];
-    if (intervalHours >= 24) {
-        const dayNum = periodLabel.match(/(\d+)/)?.[1];
-        if (dayNum) entryKeys.push(`day ${dayNum}`);
-    }
+    const dayNum = periodLabel.match(/day\s+(\d+)/i)?.[1];
+    if (dayNum) entryKeys.push(`day ${dayNum}`);
 
     await applyAction({
         record: [{ label: periodLabel, keys: entryKeys, content: reportContent.trim(), category: 'WORLD' }],
@@ -2737,7 +2794,17 @@ export async function runSkeletonGenerationPass(theme) {
 
     broadcastStep('thought', `\uD83D\uDDE6 World Skeleton: Generating from theme...`);
 
-    const systemPrompt = settings.worldProgressionSkeletonSystemPrompt || '';
+    const factionCount = settings.worldProgressionSkeletonFactions ?? 4;
+    const locationCount = settings.worldProgressionSkeletonLocations ?? 4;
+    const npcCount = settings.worldProgressionSkeletonNPCs ?? 0;
+    const conflictCount = settings.worldProgressionSkeletonConflicts ?? 3;
+
+    const systemPrompt = (settings.worldProgressionSkeletonSystemPrompt || '')
+        .replace(/\{factionCount\}/g, String(factionCount))
+        .replace(/\{locationCount\}/g, String(locationCount))
+        .replace(/\{npcCount\}/g, String(npcCount))
+        .replace(/\{conflictCount\}/g, String(conflictCount));
+
     const userPrompt = `## WORLD THEME / SEED\n${theme || '(No theme provided — generate a generic fantasy world skeleton.)'}\n\nGenerate the world skeleton now.`;
 
     const routerSettings = {
@@ -2774,11 +2841,15 @@ export async function runSkeletonGenerationPass(theme) {
     const skeletonBook = { entries: {}, name: skeletonBookName, scan_depth: 4, token_budget: 400, recursive: false, extensions: {} };
     let uid = 0;
     for (const rec of records) {
+        const prefixMap = { 'FAC': 'FACTION', 'LOC': 'LOCATION', 'NPC': 'NPC', 'EVENT': 'CONFLICT' };
+        const typePrefix = prefixMap[rec.category] || 'ENTITY';
+        const typePrefixedLabel = `${typePrefix}: ${rec.label}`;
+
         skeletonBook.entries[uid] = {
             uid,
             key: [], // No keywords to prevent narrative activation
             keysecondary: [],
-            comment: rec.label,
+            comment: typePrefixedLabel,
             content: `[Day 0 Baseline]\n${rec.content}`,
             constant: false, selective: false, selectiveLogic: 0, addMemo: true,
             order: 100, position: 0,

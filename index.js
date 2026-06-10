@@ -331,7 +331,7 @@ async function syncCampaignPrefixAndWorldsForChat(newChatId, source) {
                 const sorted = Object.entries(worldBook.entries)
                     .sort(([a], [b]) => Number(a) - Number(b));
                 const allWorldIds = sorted.map(([uid]) => `${worldBookName}::${uid}`);
-                const keepActive = s2.worldProgressionKeepActive || 3;
+                const keepActive = s2.worldProgressionKeepActive || 1;
                 s2.activeWorldKeys = allWorldIds.slice(-keepActive);
             } else {
                 s2.activeWorldKeys = [];
@@ -799,8 +799,44 @@ function loadChatState(chatId) {
     s.routerDirectPrompt = saved.routerDirectPrompt || '';
     s.worldProgressionLookback = saved.worldProgressionLookback ?? 20;
     s.worldProgressionHistoryLookback = saved.worldProgressionHistoryLookback ?? 0;
+    s.worldProgressionRandomizeNPCs = saved.worldProgressionRandomizeNPCs ?? false;
+    s.worldProgressionRandomNPCCount = saved.worldProgressionRandomNPCCount ?? 5;
+    s.worldProgressionRandomizeLocations = saved.worldProgressionRandomizeLocations ?? false;
+    s.worldProgressionRandomLocationCount = saved.worldProgressionRandomLocationCount ?? 4;
+    s.worldProgressionRandomizeFactions = saved.worldProgressionRandomizeFactions ?? false;
+    s.worldProgressionRandomFactionCount = saved.worldProgressionRandomFactionCount ?? 4;
+    s.worldProgressionRandomizeConflicts = saved.worldProgressionRandomizeConflicts ?? false;
+    s.worldProgressionRandomConflictCount = saved.worldProgressionRandomConflictCount ?? 3;
+    s.worldProgressionSkeletonFactions = saved.worldProgressionSkeletonFactions ?? 4;
+    s.worldProgressionSkeletonLocations = saved.worldProgressionSkeletonLocations ?? 4;
+    s.worldProgressionSkeletonNPCs = saved.worldProgressionSkeletonNPCs ?? 0;
+    s.worldProgressionSkeletonConflicts = saved.worldProgressionSkeletonConflicts ?? 3;
     s.worldProgressionLastFiredAtMinutes = saved.worldProgressionLastFiredAtMinutes ?? -1;
     s.worldProgressionLastFiredPeriodLabel = saved.worldProgressionLastFiredPeriodLabel || '';
+
+    // Update settings UI inputs if rendered
+    $('#rpg_world_progression_randomize_npcs').prop('checked', !!s.worldProgressionRandomizeNPCs);
+    $('#rpg_world_progression_random_npc_count').val(s.worldProgressionRandomNPCCount || 5);
+    $('#rpg_world_progression_randomize_locations').prop('checked', !!s.worldProgressionRandomizeLocations);
+    $('#rpg_world_progression_random_location_count').val(s.worldProgressionRandomLocationCount || 4);
+    $('#rpg_world_progression_randomize_factions').prop('checked', !!s.worldProgressionRandomizeFactions);
+    $('#rpg_world_progression_random_faction_count').val(s.worldProgressionRandomFactionCount || 4);
+    $('#rpg_world_progression_randomize_conflicts').prop('checked', !!s.worldProgressionRandomizeConflicts);
+    $('#rpg_world_progression_random_conflict_count').val(s.worldProgressionRandomConflictCount || 3);
+    $('#rpg_world_progression_skeleton_factions').val(s.worldProgressionSkeletonFactions ?? 4);
+    $('#rpg_world_progression_skeleton_locations').val(s.worldProgressionSkeletonLocations ?? 4);
+    $('#rpg_world_progression_skeleton_npcs').val(s.worldProgressionSkeletonNPCs ?? 0);
+    $('#rpg_world_progression_skeleton_conflicts').val(s.worldProgressionSkeletonConflicts ?? 3);
+
+    // Toggle container visibilities
+    if (s.worldProgressionRandomizeNPCs) $('#rpg_world_progression_random_npc_count_container').show();
+    else $('#rpg_world_progression_random_npc_count_container').hide();
+    if (s.worldProgressionRandomizeLocations) $('#rpg_world_progression_random_location_count_container').show();
+    else $('#rpg_world_progression_random_location_count_container').hide();
+    if (s.worldProgressionRandomizeFactions) $('#rpg_world_progression_random_faction_count_container').show();
+    else $('#rpg_world_progression_random_faction_count_container').hide();
+    if (s.worldProgressionRandomizeConflicts) $('#rpg_world_progression_random_conflict_count_container').show();
+    else $('#rpg_world_progression_random_conflict_count_container').hide();
     // Don't restore routerCampaignPrefix from per-chat saved state — the prefix
     // is fully derivable from the chat ID and must be re-derived live by
     // onChatChanged. Restoring a stale value (e.g. a bare "Assistant" from
@@ -2308,8 +2344,44 @@ function loadProfile(name) {
     s.routerDirectPrompt = p.routerDirectPrompt || '';
     s.worldProgressionLookback = p.worldProgressionLookback ?? 20;
     s.worldProgressionHistoryLookback = p.worldProgressionHistoryLookback ?? 0;
+    s.worldProgressionRandomizeNPCs = p.worldProgressionRandomizeNPCs ?? false;
+    s.worldProgressionRandomNPCCount = p.worldProgressionRandomNPCCount ?? 5;
+    s.worldProgressionRandomizeLocations = p.worldProgressionRandomizeLocations ?? false;
+    s.worldProgressionRandomLocationCount = p.worldProgressionRandomLocationCount ?? 4;
+    s.worldProgressionRandomizeFactions = p.worldProgressionRandomizeFactions ?? false;
+    s.worldProgressionRandomFactionCount = p.worldProgressionRandomFactionCount ?? 4;
+    s.worldProgressionRandomizeConflicts = p.worldProgressionRandomizeConflicts ?? false;
+    s.worldProgressionRandomConflictCount = p.worldProgressionRandomConflictCount ?? 3;
+    s.worldProgressionSkeletonFactions = p.worldProgressionSkeletonFactions ?? 4;
+    s.worldProgressionSkeletonLocations = p.worldProgressionSkeletonLocations ?? 4;
+    s.worldProgressionSkeletonNPCs = p.worldProgressionSkeletonNPCs ?? 0;
+    s.worldProgressionSkeletonConflicts = p.worldProgressionSkeletonConflicts ?? 3;
     s.worldProgressionLastFiredAtMinutes = p.worldProgressionLastFiredAtMinutes ?? -1;
     s.worldProgressionLastFiredPeriodLabel = p.worldProgressionLastFiredPeriodLabel || '';
+
+    // Update settings UI inputs if rendered
+    $('#rpg_world_progression_randomize_npcs').prop('checked', !!s.worldProgressionRandomizeNPCs);
+    $('#rpg_world_progression_random_npc_count').val(s.worldProgressionRandomNPCCount || 5);
+    $('#rpg_world_progression_randomize_locations').prop('checked', !!s.worldProgressionRandomizeLocations);
+    $('#rpg_world_progression_random_location_count').val(s.worldProgressionRandomLocationCount || 4);
+    $('#rpg_world_progression_randomize_factions').prop('checked', !!s.worldProgressionRandomizeFactions);
+    $('#rpg_world_progression_random_faction_count').val(s.worldProgressionRandomFactionCount || 4);
+    $('#rpg_world_progression_randomize_conflicts').prop('checked', !!s.worldProgressionRandomizeConflicts);
+    $('#rpg_world_progression_random_conflict_count').val(s.worldProgressionRandomConflictCount || 3);
+    $('#rpg_world_progression_skeleton_factions').val(s.worldProgressionSkeletonFactions ?? 4);
+    $('#rpg_world_progression_skeleton_locations').val(s.worldProgressionSkeletonLocations ?? 4);
+    $('#rpg_world_progression_skeleton_npcs').val(s.worldProgressionSkeletonNPCs ?? 0);
+    $('#rpg_world_progression_skeleton_conflicts').val(s.worldProgressionSkeletonConflicts ?? 3);
+
+    // Toggle container visibilities
+    if (s.worldProgressionRandomizeNPCs) $('#rpg_world_progression_random_npc_count_container').show();
+    else $('#rpg_world_progression_random_npc_count_container').hide();
+    if (s.worldProgressionRandomizeLocations) $('#rpg_world_progression_random_location_count_container').show();
+    else $('#rpg_world_progression_random_location_count_container').hide();
+    if (s.worldProgressionRandomizeFactions) $('#rpg_world_progression_random_faction_count_container').show();
+    else $('#rpg_world_progression_random_faction_count_container').hide();
+    if (s.worldProgressionRandomizeConflicts) $('#rpg_world_progression_random_conflict_count_container').show();
+    else $('#rpg_world_progression_random_conflict_count_container').hide();
     s.activeProfile = name;
     _historyViewIndex = -1;
 
@@ -8490,6 +8562,18 @@ Return ONLY the XML section. No explanation, no other text.`;
         const $wpInterval = $('#rpg_world_progression_interval');
         const $wpKeepActive = $('#rpg_world_progression_keep_active');
         const $wpHistoryLookback = $('#rpg_world_progression_history_lookback');
+        const $wpRandomizeNPCs = $('#rpg_world_progression_randomize_npcs');
+        const $wpRandomNPCCount = $('#rpg_world_progression_random_npc_count');
+        const $wpRandomNPCCountContainer = $('#rpg_world_progression_random_npc_count_container');
+        const $wpRandomizeLocations = $('#rpg_world_progression_randomize_locations');
+        const $wpRandomLocationCount = $('#rpg_world_progression_random_location_count');
+        const $wpRandomLocationCountContainer = $('#rpg_world_progression_random_location_count_container');
+        const $wpRandomizeFactions = $('#rpg_world_progression_randomize_factions');
+        const $wpRandomFactionCount = $('#rpg_world_progression_random_faction_count');
+        const $wpRandomFactionCountContainer = $('#rpg_world_progression_random_faction_count_container');
+        const $wpRandomizeConflicts = $('#rpg_world_progression_randomize_conflicts');
+        const $wpRandomConflictCount = $('#rpg_world_progression_random_conflict_count');
+        const $wpRandomConflictCountContainer = $('#rpg_world_progression_random_conflict_count_container');
         const $wpLookback = $('#rpg_world_progression_lookback');
         const $wpSystemPrompt = $('#rpg_world_progression_system_prompt');
         const $wpResetPrompt = $('#rpg_world_progression_btn_reset_prompt');
@@ -8540,14 +8624,83 @@ Return ONLY the XML section. No explanation, no other text.`;
             saveSettings();
             updateWorldProgressionLastFiredDisplay();
         });
-        $wpKeepActive.val(settings.worldProgressionKeepActive || 3).on('input', function () {
-            getSettings().worldProgressionKeepActive = parseInt(String($(this).val() || '')) || 3;
+        $wpKeepActive.val(settings.worldProgressionKeepActive || 1).on('input', function () {
+            getSettings().worldProgressionKeepActive = parseInt(String($(this).val() || '')) || 1;
             saveSettings();
         });
         $wpHistoryLookback.val(settings.worldProgressionHistoryLookback ?? 0).on('input', function () {
             getSettings().worldProgressionHistoryLookback = parseInt(String($(this).val() || '')) || 0;
             saveSettings();
         });
+
+        function updateRandomizersVisibility() {
+            if ($wpRandomizeNPCs.prop('checked')) {
+                $wpRandomNPCCountContainer.show();
+            } else {
+                $wpRandomNPCCountContainer.hide();
+            }
+            if ($wpRandomizeLocations.prop('checked')) {
+                $wpRandomLocationCountContainer.show();
+            } else {
+                $wpRandomLocationCountContainer.hide();
+            }
+            if ($wpRandomizeFactions.prop('checked')) {
+                $wpRandomFactionCountContainer.show();
+            } else {
+                $wpRandomFactionCountContainer.hide();
+            }
+            if ($wpRandomizeConflicts.prop('checked')) {
+                $wpRandomConflictCountContainer.show();
+            } else {
+                $wpRandomConflictCountContainer.hide();
+            }
+        }
+
+        $wpRandomizeNPCs.prop('checked', !!settings.worldProgressionRandomizeNPCs).on('change', function () {
+            getSettings().worldProgressionRandomizeNPCs = !!$(this).prop('checked');
+            saveSettings();
+            updateRandomizersVisibility();
+        });
+
+        $wpRandomNPCCount.val(settings.worldProgressionRandomNPCCount || 5).on('input', function () {
+            getSettings().worldProgressionRandomNPCCount = parseInt(String($(this).val() || '')) || 5;
+            saveSettings();
+        });
+
+        $wpRandomizeLocations.prop('checked', !!settings.worldProgressionRandomizeLocations).on('change', function () {
+            getSettings().worldProgressionRandomizeLocations = !!$(this).prop('checked');
+            saveSettings();
+            updateRandomizersVisibility();
+        });
+
+        $wpRandomLocationCount.val(settings.worldProgressionRandomLocationCount || 4).on('input', function () {
+            getSettings().worldProgressionRandomLocationCount = parseInt(String($(this).val() || '')) || 4;
+            saveSettings();
+        });
+
+        $wpRandomizeFactions.prop('checked', !!settings.worldProgressionRandomizeFactions).on('change', function () {
+            getSettings().worldProgressionRandomizeFactions = !!$(this).prop('checked');
+            saveSettings();
+            updateRandomizersVisibility();
+        });
+
+        $wpRandomFactionCount.val(settings.worldProgressionRandomFactionCount || 4).on('input', function () {
+            getSettings().worldProgressionRandomFactionCount = parseInt(String($(this).val() || '')) || 4;
+            saveSettings();
+        });
+
+        $wpRandomizeConflicts.prop('checked', !!settings.worldProgressionRandomizeConflicts).on('change', function () {
+            getSettings().worldProgressionRandomizeConflicts = !!$(this).prop('checked');
+            saveSettings();
+            updateRandomizersVisibility();
+        });
+
+        $wpRandomConflictCount.val(settings.worldProgressionRandomConflictCount || 3).on('input', function () {
+            getSettings().worldProgressionRandomConflictCount = parseInt(String($(this).val() || '')) || 3;
+            saveSettings();
+        });
+
+        updateRandomizersVisibility();
 
         $wpLookback.val(settings.worldProgressionLookback ?? 0).on('input', function () {
             getSettings().worldProgressionLookback = parseInt(String($(this).val() || '')) || 0;
@@ -8599,6 +8752,10 @@ Return ONLY the XML section. No explanation, no other text.`;
 
         // ── World Skeleton wiring ───────────────────────────────────────────────
         const $wpSkeletonTheme = $('#rpg_world_progression_skeleton_theme');
+        const $wpSkeletonFactions = $('#rpg_world_progression_skeleton_factions');
+        const $wpSkeletonLocations = $('#rpg_world_progression_skeleton_locations');
+        const $wpSkeletonNPCs = $('#rpg_world_progression_skeleton_npcs');
+        const $wpSkeletonConflicts = $('#rpg_world_progression_skeleton_conflicts');
         const $wpSkeletonPrompt = $('#rpg_world_progression_skeleton_system_prompt');
         const $wpResetSkeletonPrompt = $('#rpg_world_progression_btn_reset_skeleton_prompt');
         const $wpGenerateSkeleton = $('#rpg_world_progression_btn_generate_skeleton');
@@ -8620,6 +8777,26 @@ Return ONLY the XML section. No explanation, no other text.`;
 
         $wpSkeletonTheme.val(settings.worldProgressionSkeletonTheme || '').on('input', function () {
             getSettings().worldProgressionSkeletonTheme = String($(this).val() || '');
+            saveSettings();
+        });
+
+        $wpSkeletonFactions.val(settings.worldProgressionSkeletonFactions ?? 4).on('input', function () {
+            getSettings().worldProgressionSkeletonFactions = parseInt(String($(this).val() || '')) || 4;
+            saveSettings();
+        });
+
+        $wpSkeletonLocations.val(settings.worldProgressionSkeletonLocations ?? 4).on('input', function () {
+            getSettings().worldProgressionSkeletonLocations = parseInt(String($(this).val() || '')) || 4;
+            saveSettings();
+        });
+
+        $wpSkeletonNPCs.val(settings.worldProgressionSkeletonNPCs ?? 0).on('input', function () {
+            getSettings().worldProgressionSkeletonNPCs = parseInt(String($(this).val() || '')) || 0;
+            saveSettings();
+        });
+
+        $wpSkeletonConflicts.val(settings.worldProgressionSkeletonConflicts ?? 3).on('input', function () {
+            getSettings().worldProgressionSkeletonConflicts = parseInt(String($(this).val() || '')) || 3;
             saveSettings();
         });
 

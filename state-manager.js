@@ -193,9 +193,21 @@ You may be asked to use Markers: ((PLS)), ((B)), ((XB)), ((BDG)), ((HGT)). These
         // ── World Progression (deterministic, standalone pass) ────────────────────
         worldProgressionEnabled: false,           // master toggle
         worldProgressionIntervalHours: 24,        // fire every X in-world hours (24 = daily)
-        worldProgressionKeepActive: 3,            // rolling window of active reports
+        worldProgressionKeepActive: 1,            // rolling window of active reports
         worldProgressionLookback: 20,             // number of recent chat messages to include (0 = disabled)
         worldProgressionHistoryLookback: 0,       // number of historical reports to incorporate (0 = include all)
+        worldProgressionRandomizeNPCs: false,      // toggle to randomize NPC pool
+        worldProgressionRandomNPCCount: 5,        // number of NPCs to incorporate
+        worldProgressionRandomizeLocations: false,  // toggle to randomize locations
+        worldProgressionRandomLocationCount: 4,    // number of locations to incorporate
+        worldProgressionRandomizeFactions: false,   // toggle to randomize factions
+        worldProgressionRandomFactionCount: 4,     // number of factions to incorporate
+        worldProgressionRandomizeConflicts: false,  // toggle to randomize conflicts
+        worldProgressionRandomConflictCount: 3,    // number of conflicts to incorporate
+        worldProgressionSkeletonFactions: 4,       // number of factions in skeleton
+        worldProgressionSkeletonLocations: 4,      // number of locations in skeleton
+        worldProgressionSkeletonNPCs: 0,           // number of NPCs in skeleton
+        worldProgressionSkeletonConflicts: 3,      // number of conflicts in skeleton
         worldProgressionLastFiredAtMinutes: -1,   // last in-world total-minutes at which a report fired
         worldProgressionLastFiredPeriodLabel: '', // label of the last generated period entry
         worldProgressionSystemPrompt: `You are the World Progression Engine — a living simulation of the game world's off-screen activity. Simulate political scheming, faction moves, economic shifts, environmental changes, creature activity, rival actors pursuing independent agendas, weather events, and emergent consequences of prior world state.
@@ -204,22 +216,29 @@ The report covers the in-world period: **{periodLabel}**
 
 ## RULES
 1. Do NOT summarize player actions. Build consequences from them instead — defeated rivals plot revenge, sympathetic contacts cover their tracks, encountered strangers react to what happened.
-2. Prioritize named ACTIVE WORLD LORE NPCs. Every report must include at least 2. These are your highest-value subjects.
-3. For NPCs who were physically present with {{user}} during the reporting period, only generate plausible background activity — digital actions, private decisions, off-screen communications. Do not relocate them.
+2. Prioritize named ACTIVE WORLD LORE NPCs. Every report must include at least 2. These are your highest-value subjects. However, if the ## DESIGNATED ENTITIES FOR THIS PERIOD block is present, you MUST strictly follow it and only change the status, advance the timeline, or create new narrative beats for these designated entities. You are strictly forbidden from changing the status, advancing the timeline, or creating new narrative beats for unauthorized entities. However, you MAY mention them passively as background context if their past, established actions are a direct catalyst for the designated entities.
+3. For NPCs who were physically present with {{user}} during the reporting period, only generate plausible background activity — digital actions, private decisions, private thoughts/opinions, off-screen communications. Do not relocate them.
 4. Format as 15 short entries, 1 sentence each. Dense, no filler, no markdown.
 5. Output ONLY the report content. No preamble, no tags, no meta-commentary.
-6. Do not simply repeat the same entities and always build on the previous report; take interesting entities from the ACTIVE WORLD LORE as well as the SKELETON regardless of whether they were featured in the previous report(s).`,
+6. Do not simply repeat the same entities and always build on the previous report; take interesting entities from the ACTIVE WORLD LORE as well as the SKELETON regardless of whether they were featured in the previous report(s). If designated entities are provided, strictly limit your active scope to those, obeying the passive referencing rule for other entities.
+7. DO NOT write a cumulative report, stacking old entries in the same report. Only write new events, not a recap of the previous ones; they are preserved in their own file.
+8. Cross-category entity bleeding is desirable; often have designated NPCs, locations, factions, and conflicts collide or influence one another in the same narrative beat rather than treating them as isolated line items. However, only do this when it makes sense.
+9. You must strictly respect geographical and logistical boundaries to preserve spatial plausibility; isolated or distant entities cannot physically interact and must instead collide via informational, digital, or financial ripples (e.g., radio tracking, digital alerts, automated network scrapers, or news traveling from afar).
+10. Character vectors must take place only at or ripple through the designated locations provided for this period; if an active NPC cannot logically travel to a selected location within this time window, their connection must manifest purely as an off-screen reaction or informational dependency.`,
         // ── World Skeleton ─────────────────────────────────────────────────────────
         worldProgressionSkeletonTheme: '',         // user seed/theme for skeleton generation
         worldProgressionSkeletonSystemPrompt: `You are a World Architect. Given a world theme/seed, generate a sparse foundational skeleton for an RPG campaign simulation.
 
-## FACTIONS (4 total)
+## FACTIONS ({factionCount} total)
 Each faction: name, one-sentence nature, one-sentence current tension.
 
-## LOCATIONS (4 total)  
+## LOCATIONS ({locationCount} total)  
 Each location: name, one-sentence description, one-sentence current state.
 
-## CONFLICTS (3 total)
+## NPCS ({npcCount} total)
+Each NPC: name, one-sentence description, one-sentence current state. (Omit/skip this section entirely if the count is 0)
+
+## CONFLICTS ({conflictCount} total)
 Each conflict: parties involved, one-sentence current state.
 
 ## RULES
@@ -534,6 +553,18 @@ export function saveChatState(chatId) {
         routerDirectPrompt: s.routerDirectPrompt || '',
         worldProgressionLookback: s.worldProgressionLookback ?? 20,
         worldProgressionHistoryLookback: s.worldProgressionHistoryLookback ?? 0,
+        worldProgressionRandomizeNPCs: s.worldProgressionRandomizeNPCs ?? false,
+        worldProgressionRandomNPCCount: s.worldProgressionRandomNPCCount ?? 5,
+        worldProgressionRandomizeLocations: s.worldProgressionRandomizeLocations ?? false,
+        worldProgressionRandomLocationCount: s.worldProgressionRandomLocationCount ?? 4,
+        worldProgressionRandomizeFactions: s.worldProgressionRandomizeFactions ?? false,
+        worldProgressionRandomFactionCount: s.worldProgressionRandomFactionCount ?? 4,
+        worldProgressionRandomizeConflicts: s.worldProgressionRandomizeConflicts ?? false,
+        worldProgressionRandomConflictCount: s.worldProgressionRandomConflictCount ?? 3,
+        worldProgressionSkeletonFactions: s.worldProgressionSkeletonFactions ?? 4,
+        worldProgressionSkeletonLocations: s.worldProgressionSkeletonLocations ?? 4,
+        worldProgressionSkeletonNPCs: s.worldProgressionSkeletonNPCs ?? 0,
+        worldProgressionSkeletonConflicts: s.worldProgressionSkeletonConflicts ?? 3,
         // World Progression per-chat time tracking
         worldProgressionLastFiredAtMinutes: s.worldProgressionLastFiredAtMinutes ?? -1,
         worldProgressionLastFiredPeriodLabel: s.worldProgressionLastFiredPeriodLabel || '',
@@ -571,6 +602,18 @@ export function saveProfile(name) {
         routerDirectPrompt: s.routerDirectPrompt || '',
         worldProgressionLookback: s.worldProgressionLookback ?? 20,
         worldProgressionHistoryLookback: s.worldProgressionHistoryLookback ?? 0,
+        worldProgressionRandomizeNPCs: s.worldProgressionRandomizeNPCs ?? false,
+        worldProgressionRandomNPCCount: s.worldProgressionRandomNPCCount ?? 5,
+        worldProgressionRandomizeLocations: s.worldProgressionRandomizeLocations ?? false,
+        worldProgressionRandomLocationCount: s.worldProgressionRandomLocationCount ?? 4,
+        worldProgressionRandomizeFactions: s.worldProgressionRandomizeFactions ?? false,
+        worldProgressionRandomFactionCount: s.worldProgressionRandomFactionCount ?? 4,
+        worldProgressionRandomizeConflicts: s.worldProgressionRandomizeConflicts ?? false,
+        worldProgressionRandomConflictCount: s.worldProgressionRandomConflictCount ?? 3,
+        worldProgressionSkeletonFactions: s.worldProgressionSkeletonFactions ?? 4,
+        worldProgressionSkeletonLocations: s.worldProgressionSkeletonLocations ?? 4,
+        worldProgressionSkeletonNPCs: s.worldProgressionSkeletonNPCs ?? 0,
+        worldProgressionSkeletonConflicts: s.worldProgressionSkeletonConflicts ?? 3,
         worldProgressionLastFiredAtMinutes: s.worldProgressionLastFiredAtMinutes ?? -1,
         worldProgressionLastFiredPeriodLabel: s.worldProgressionLastFiredPeriodLabel || '',
     };
