@@ -850,7 +850,7 @@ const DEFAULT_XP_COLOR = 'linear-gradient(90deg, #0088ff, #00d4ff)';
                             <div id="rt_onboarding_quests_frustration_wrap" style="padding-left: 20px; display: none;">
                                 <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                                     <input type="checkbox" id="rt_onboarding_quests_frustration" />
-                                    <span style="opacity: 0.9;">↳ Frustration</span>
+                                    <span style="opacity: 0.9;">↳ Frustration (Experimental)</span>
                                 </label>
                             </div>
                             <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
