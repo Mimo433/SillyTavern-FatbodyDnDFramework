@@ -540,15 +540,22 @@ export function installInterceptor() {
         if (settings.debugMode) console.groupEnd();
         if (!injections) return;
 
-        const originalContent = extractTextContent(msg);
+        const originalContent = extractTextContent(msg).trim();
+        const displayContent = originalContent ? originalContent : "[Continue the narrative]";
+        const userHeader = `\n### CURRENT USER INPUT\n${displayContent}\n`;
+
         if (typeof msg.content === 'string') {
-            msg.content = injections + msg.content;
+            msg.content = injections + userHeader;
             if (settings.debugMode) console.log("Injected into string msg.content");
         } else if (Array.isArray(msg.content)) {
-            msg.content.unshift({ type: 'text', text: injections });
+            const nonTextParts = msg.content.filter(p => p && p.type !== 'text');
+            msg.content = [
+                { type: 'text', text: injections + userHeader },
+                ...nonTextParts
+            ];
             if (settings.debugMode) console.log("Injected into array msg.content");
         } else if (typeof msg.mes === 'string') {
-            msg.mes = injections + msg.mes;
+            msg.mes = injections + userHeader;
             if (settings.debugMode) console.log("Injected into string msg.mes");
         } else {
             if (settings.debugMode) console.log("Failed to inject! Unknown msg structure:", Object.keys(msg));
@@ -556,7 +563,7 @@ export function installInterceptor() {
 
         if (settings.debugMode) {
             console.log("[Fatbody Framework] Injections pushed to request.");
-            logTransaction('Main Chat', [{ role: 'user', content: injections + originalContent }]);
+            logTransaction('Main Chat', [{ role: 'user', content: injections + userHeader }]);
         }
     };
 }
