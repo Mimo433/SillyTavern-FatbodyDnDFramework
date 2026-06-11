@@ -2426,8 +2426,8 @@ async function showRngExplanation() {
                 </div>
                 ${card('📋', 'Which system should I use?',
         `<ul style="margin: 4px 0 0 0; padding-left: 20px; text-align: left; list-style-position: outside;">
-                        <li style="margin-bottom: 4px;"><b>Hybrid RNG (recommended):</b> Enables both systems. A more "waterproof" system.</li>
-                        <li><b>Legacy RNG:</b> Queue-only. Use if your model doesn't support tool calling or you prefer the simpler setup for any other reason.</li>
+                        <li style="margin-bottom: 4px;"><b>Pre-Seeded + Tool Calls (recommended):</b> Enables both systems. This is the most robust, hybrid setup.</li>
+                        <li><b>Pre-Seeded Only:</b> Queue-only. Use if your model doesn't support function/tool calling or you prefer the simpler setup.</li>
                     </ul>`
     )}
             </div>`;
