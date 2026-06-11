@@ -2414,12 +2414,12 @@ async function showRngExplanation() {
             </div>`;
     const popupBody = `
             <div style="font-size: 0.9em; line-height: 1.5; max-width: 480px; text-align: left;">
-                ${card('🎲', 'RNG Queue <span style="font-weight:normal;opacity:0.6;">(Combat)</span>',
+                ${card('🎲', 'Pre-Seeded RNG Queue',
         `Generates a list of pre-rolled dice and injects them directly into the story context. The AI uses the next roll in the queue until it reaches the last one, then wraps about to the start again. Each input injects a fresh set of numbers.<br><br>
-                    Ideal for combat because initiative creates a deterministic "grid," removing any opportunity for the AI to game the outcome. This is why it's the default method for combat—it reduces token costs massively, minimizes latency, and is more reliable due to its reduced structural complexity.`
+                    This is a highly efficient and robust system that works extremely well for both combat and narrative checks. In combat, it creates a deterministic "grid" that removes any opportunity for the AI to game the outcome. Because it does not require additional tool-calling roundtrips, it reduces token costs, minimizes latency, and is highly reliable due to its reduced structural complexity.`
     )}
-                ${card('🔧', 'Tool Call RNG <span style="font-weight:normal;opacity:0.6;">(Narrative)</span>',
-        `A reactive system where the AI proactively calls a dice tool for a specific narrative action (e.g., picking a lock, persuading a guard). The AI must declare a <b>Difficulty Class (DC)</b> before seeing the result. This ensures it can't "game the system" by lowering the DC to fit a roll or skipping the roll entirely. While I haven't personally observed this "gaming" behavior with the Queue-only method, Tool Calls ensure that it remains technically impossible.`
+                ${card('🔧', 'Tool Call RNG',
+        `A reactive system where the AI proactively calls a dice tool for a specific narrative action (e.g., picking a lock, persuading a guard). The AI must declare a <b>Difficulty Class (DC)</b> before seeing the result. This ensures it can't "game the system" by lowering the DC to fit a roll or skipping the roll entirely. While Tool Calls guarantee that gaming the roll is technically impossible, they add slightly more latency and structure compared to the queue.`
     )}
                 <div style="background: rgba(255,200,50,0.08); border: 1px solid rgba(255,200,50,0.25); border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; font-size: 0.88em; text-align: left;">
                     <b style="color: #ffcc33;">⚠ Important:</b> Tool Call RNG requires <b>"Enable function calling"</b> to be enabled in SillyTavern's AI Response Configuration.
@@ -2427,7 +2427,7 @@ async function showRngExplanation() {
                 ${card('📋', 'Which system should I use?',
         `<ul style="margin: 4px 0 0 0; padding-left: 20px; text-align: left; list-style-position: outside;">
                         <li style="margin-bottom: 4px;"><b>Pre-Seeded + Tool Calls (recommended):</b> Enables both systems. This is the most robust, hybrid setup.</li>
-                        <li><b>Pre-Seeded Only:</b> Queue-only. Use if your model doesn't support function/tool calling or you prefer the simpler setup.</li>
+                        <li><b>Pre-Seeded Only:</b> Queue-only. Use if your model doesn't support function/tool calling or you prefer the simpler setup. It works just as well for the vast majority of cases.</li>
                     </ul>`
     )}
             </div>`;
