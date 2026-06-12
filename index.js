@@ -7997,10 +7997,10 @@ RULES:
                         </div>
                     </div>
                     <div>
-                        <div style="font-size:11px; opacity:0.7; margin-bottom:4px;">XML Content — paste or edit freely</div>
+                        <div style="font-size:11px; opacity:0.7; margin-bottom:4px;">XML Content — paste or edit freely (outer XML tag is managed automatically)</div>
                         <textarea id="rt-se-content" class="text_pole" rows="12"
                             style="width:100%; font-size:11px; font-family:monospace; resize:vertical; white-space:pre;"
-                            placeholder="&lt;my_mechanic&gt;\n  Rules go here...\n&lt;/my_mechanic&gt;"
+                            placeholder="  Rules go here...\n  - Rule 1\n  - Rule 2"
                             >${escapeHtml(content)}</textarea>
                     </div>
                     ${showRegenerate ? `<button id="rt-se-regen" class="menu_button interactable" style="background:rgba(180,100,255,0.15); border-color:rgba(180,100,255,0.4); width:100%;"><i class="fa-solid fa-rotate"></i> Regenerate with AI</button>` : ''}
@@ -8096,16 +8096,27 @@ RULES:
             }
             let finalTag = currentTag.trim().replace(/[^\w_-]/g, '');
 
-            // Auto-wrap if the user just pasted plain text without XML tags
-            const openTagRe = /^<(\w[\w_-]*)>/;
-            const tagMatch = finalContent.match(openTagRe);
+            // Robust check to see if content is already wrapped in a root XML tag
+            const outerTagRegex = /^<(\w+[\w_-]*)(?:\s+[^>]*)*>([\s\S]*)<\/\1>$/;
+            const tagMatch = finalContent.match(outerTagRegex);
+
             if (tagMatch) {
-                finalTag = finalTag || tagMatch[1];
-            } else if (finalTag) {
-                finalContent = `<${finalTag}>\n${finalContent}\n</${finalTag}>`;
+                const contentTag = tagMatch[1];
+                const innerContent = tagMatch[2].trim();
+                
+                // If Tag Name field was empty, adopt the tag from the XML content
+                if (!finalTag) {
+                    finalTag = contentTag;
+                }
+                
+                // Always wrap with finalTag to ensure consistency and prevent mismatch/double-tagging
+                finalContent = `<${finalTag}>\n${innerContent}\n</${finalTag}>`;
             } else {
-                finalTag = 'custom_section';
-                finalContent = `<custom_section>\n${finalContent}\n</custom_section>`;
+                // Content is not wrapped in XML tags, or has mismatched/multiple sibling tags
+                if (!finalTag) {
+                    finalTag = 'custom_section';
+                }
+                finalContent = `<${finalTag}>\n${finalContent}\n</${finalTag}>`;
             }
 
             return {
