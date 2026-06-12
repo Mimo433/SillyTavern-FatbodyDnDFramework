@@ -7911,7 +7911,15 @@ RULES:
                 return false;
             }
 
-            const enabledPrompts = (settings.customSyspromptLibrary || []).filter(p => p.enabled);
+            const enabledPrompts = (settings.customSyspromptLibrary || []).filter(p => {
+                if (!p.enabled || !p.content) return false;
+                const trimmed = p.content.trim();
+                if (!trimmed) return false;
+                // Skip if content is just empty XML tags (e.g. <custom_section>\n\n</custom_section>)
+                const emptyTagMatch = trimmed.match(/^<(\w+[\w_-]*)>\s*<\/\1>$/);
+                if (emptyTagMatch) return false;
+                return true;
+            });
             let injectionText = '';
             
             if (enabledPrompts.length > 0) {
@@ -8043,6 +8051,10 @@ RULES:
             const saveModeEl = document.querySelector('input[name="rt_se_save_mode"]:checked');
 
             let finalContent = contentEl ? contentEl.value.trim() : content;
+            if (!finalContent) {
+                toastr['warning']('Section content cannot be empty.', 'Section Builder');
+                return null;
+            }
             let finalTag = tagEl ? tagEl.value.trim().replace(/[^\w_-]/g, '') : tag;
 
             // Auto-wrap if the user just pasted plain text without XML tags
