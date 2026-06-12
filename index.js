@@ -7920,30 +7920,39 @@ RULES:
                 if (emptyTagMatch) return false;
                 return true;
             });
-            let injectionText = '';
-            
-            if (enabledPrompts.length > 0) {
-                injectionText = '<!-- RT_CUSTOM_LIBRARY_START -->\n' + 
-                                enabledPrompts.map(p => p.content).join('\n\n') + 
-                                '\n<!-- RT_CUSTOM_LIBRARY_END -->';
-            }
+
+            const newInjection = enabledPrompts.length > 0
+                ? enabledPrompts.map(p => p.content).join('\n\n')
+                : '';
 
             let currentContent = mainTextarea.value;
-            
-            // Remove existing block if any
-            const blockRegex = /<!-- RT_CUSTOM_LIBRARY_START -->[\s\S]*?<!-- RT_CUSTOM_LIBRARY_END -->\n*/g;
-            currentContent = currentContent.replace(blockRegex, '');
 
-            if (injectionText) {
-                // Try to insert before <constraints>
+            // Remove the previously-injected block by exact string match (no markers in textarea).
+            // Also clean up any legacy injections that used the old HTML-comment sentinel format.
+            const legacyBlockRegex = /<!-- RT_CUSTOM_LIBRARY_START -->[\s\S]*?<!-- RT_CUSTOM_LIBRARY_END -->\n*/g;
+            currentContent = currentContent.replace(legacyBlockRegex, '');
+
+            const lastInjection = settings._customLibraryLastInjection || '';
+            if (lastInjection) {
+                // Escape for use in a RegExp to do an exact literal removal
+                const escaped = lastInjection.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                currentContent = currentContent.replace(new RegExp(`\\n{0,2}${escaped}\\n{0,2}`, 'g'), '\n\n');
+            }
+
+            if (newInjection) {
+                // Insert raw sections (no markers) — the AI sees clean XML only.
                 if (currentContent.includes('<constraints>')) {
-                    currentContent = currentContent.replace('<constraints>', `${injectionText}\n\n<constraints>`);
+                    currentContent = currentContent.replace('<constraints>', `${newInjection}\n\n<constraints>`);
                 } else {
-                    currentContent = currentContent.trim() + '\n\n' + injectionText;
+                    currentContent = currentContent.trim() + '\n\n' + newInjection;
                 }
             }
 
-            mainTextarea.value = currentContent;
+            // Remember what we injected so next apply can remove it precisely.
+            settings._customLibraryLastInjection = newInjection;
+            saveSettings();
+
+            mainTextarea.value = currentContent.replace(/\n{3,}/g, '\n\n').trim();
             mainTextarea.dispatchEvent(new Event('blur', { bubbles: true }));
             return true;
         }
