@@ -486,6 +486,20 @@
                         <input id="rpg_world_progression_history_lookback" type="text" inputmode="numeric" pattern="[0-9]*" class="text_pole" value="0" style="max-width: 100px;" title="Number of historical World Progression reports included in generation context (0 = all)" />
                         <div style="font-size: 0.75em; opacity: 0.55; margin-top: -2px;">0 = include all previous reports</div>
 
+                        <label class="checkbox_label" style="margin-top: 8px;">
+                            <input id="rpg_world_progression_consolidate_enabled" type="checkbox" />
+                            <span>Auto-consolidate backlog</span>
+                            <i class="fa-solid fa-circle-question interactable" style="font-size: 0.85em; opacity: 0.7; margin-left: 4px;" title="When enabled, the oldest N individual reports are automatically compressed into a single summary by the LLM once the threshold accumulates. Uses its own dedicated prompt — no token cost on normal Lorebook Agent calls."></i>
+                        </label>
+
+                        <div id="rpg_world_progression_consolidate_interval_container" style="margin-top: 4px;">
+                            <label style="font-size: 0.85em; font-weight: bold; opacity: 0.8;">Consolidation Threshold (reports)
+                                <i class="fa-solid fa-circle-question interactable" style="font-size: 0.85em; opacity: 0.7; margin-left: 4px;" title="How many individual reports must accumulate before consolidation fires. The oldest N reports are merged into one entry (e.g. 7 daily reports → 'Days 1–7'). With a 12h interval, 7 reports cover ~3.5 in-world days per batch."></i>
+                            </label>
+                            <input id="rpg_world_progression_consolidate_interval" type="text" inputmode="numeric" pattern="[0-9]*" class="text_pole" value="7" style="max-width: 100px;" title="Number of raw reports to accumulate before auto-consolidation fires" />
+                            <div style="font-size: 0.75em; opacity: 0.55; margin-top: -2px;">Batch size is count-based, not time-based — 7 reports at 12h/report ≈ 3.5 in-world days per batch.</div>
+                        </div>
+
                         <label class="checkbox_label" style="margin-top: 6px;">
                             <input id="rpg_world_progression_randomize_npcs" type="checkbox" />
                             <span>Randomize NPC pool selection</span>

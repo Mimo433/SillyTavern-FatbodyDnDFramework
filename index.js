@@ -9168,6 +9168,29 @@ RULES:
             saveSettings();
         });
 
+        const $wpConsolidateEnabled = $('#rpg_world_progression_consolidate_enabled');
+        const $wpConsolidateInterval = $('#rpg_world_progression_consolidate_interval');
+        const $wpConsolidateIntervalContainer = $('#rpg_world_progression_consolidate_interval_container');
+
+        function updateConsolidateVisibility() {
+            if ($wpConsolidateEnabled.prop('checked')) {
+                $wpConsolidateIntervalContainer.show();
+            } else {
+                $wpConsolidateIntervalContainer.hide();
+            }
+        }
+
+        $wpConsolidateEnabled.prop('checked', !!settings.worldProgressionConsolidateEnabled).on('change', function () {
+            getSettings().worldProgressionConsolidateEnabled = !!$(this).prop('checked');
+            saveSettings();
+            updateConsolidateVisibility();
+        });
+        $wpConsolidateInterval.val(settings.worldProgressionConsolidateInterval ?? 7).on('input', function () {
+            getSettings().worldProgressionConsolidateInterval = parseInt(String($(this).val() || '')) || 7;
+            saveSettings();
+        });
+        updateConsolidateVisibility();
+
         function updateRandomizersVisibility() {
             if ($wpRandomizeNPCs.prop('checked')) {
                 $wpRandomNPCCountContainer.show();

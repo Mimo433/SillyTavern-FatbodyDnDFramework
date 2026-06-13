@@ -221,6 +221,8 @@ You may be asked to use Markers: ((PLS)), ((B)), ((XB)), ((BDG)), ((HGT)). These
         worldProgressionSkeletonConflicts: 3,      // number of conflicts in skeleton
         worldProgressionLastFiredAtMinutes: -1,   // last in-world total-minutes at which a report fired
         worldProgressionLastFiredPeriodLabel: '', // label of the last generated period entry
+        worldProgressionConsolidateEnabled: false,         // auto-compress backlog when threshold is hit
+        worldProgressionConsolidateInterval: 7,            // number of raw reports before consolidation fires
         worldProgressionSystemPrompt: `You are the World Progression Engine — a living simulation of the game world's off-screen activity. Simulate political scheming, faction moves, economic shifts, environmental changes, creature activity, rival actors pursuing independent agendas, weather events, and emergent consequences of prior world state.
 
 The report covers the in-world period: **{periodLabel}**
@@ -611,6 +613,8 @@ export function saveChatState(chatId) {
         // World Progression per-chat time tracking
         worldProgressionLastFiredAtMinutes: s.worldProgressionLastFiredAtMinutes ?? -1,
         worldProgressionLastFiredPeriodLabel: s.worldProgressionLastFiredPeriodLabel || '',
+        worldProgressionConsolidateEnabled: s.worldProgressionConsolidateEnabled ?? false,
+        worldProgressionConsolidateInterval: s.worldProgressionConsolidateInterval ?? 7,
         // Preserve lorebook stack link — written by Link button and router, not by normal state saves
         campaignBooks: existing.campaignBooks || [],
     };
@@ -669,6 +673,8 @@ export function saveProfile(name) {
         worldProgressionSkeletonConflicts: s.worldProgressionSkeletonConflicts ?? 3,
         worldProgressionLastFiredAtMinutes: s.worldProgressionLastFiredAtMinutes ?? -1,
         worldProgressionLastFiredPeriodLabel: s.worldProgressionLastFiredPeriodLabel || '',
+        worldProgressionConsolidateEnabled: s.worldProgressionConsolidateEnabled ?? false,
+        worldProgressionConsolidateInterval: s.worldProgressionConsolidateInterval ?? 7,
     };
     s.activeProfile = name;
     SillyTavern.getContext().saveSettingsDebounced();

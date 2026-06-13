@@ -2422,6 +2422,19 @@ export async function runWorldProgressionPass(timeStr, currentMinutes) {
     const keepActive = settings.worldProgressionKeepActive || 1;
     const wordTarget = 600;
 
+    // Connection settings shared by all LLM calls within this pass
+    // (consolidation pre-step + main report generation).
+    const routerSettings = {
+        connectionSource: settings.routerConnectionSource || 'default',
+        connectionProfileId: settings.routerConnectionProfileId,
+        completionPresetId: settings.routerCompletionPresetId,
+        ollamaUrl: settings.routerOllamaUrl,
+        ollamaModel: settings.routerOllamaModel,
+        openaiUrl: settings.routerOpenaiUrl,
+        openaiKey: settings.routerOpenaiKey,
+        openaiModel: settings.routerOpenaiModel,
+    };
+
     const lastFired = settings.worldProgressionLastFiredAtMinutes ?? -1;
     const intervalMinutes = intervalHours * 60;
 
@@ -2461,6 +2474,128 @@ export async function runWorldProgressionPass(timeStr, currentMinutes) {
                 settings.worldProgressionLastFiredPeriodLabel = periodLabel;
                 SillyTavern.getContext().saveSettingsDebounced();
                 return;
+            }
+        }
+    }
+
+    // 2b. Consolidation pre-step — fire BEFORE building lore context so the historical dump
+    //     fed to the new report reflects the freshly compressed archive.
+    //     This is a standalone LLM call with its OWN dedicated system prompt.
+    //     It is NEVER part of the Lorebook Agent prompt and has zero per-turn token cost.
+    if (settings.worldProgressionConsolidateEnabled) {
+        const consolidateInterval = Math.max(2, settings.worldProgressionConsolidateInterval || 7);
+        const currentWorldBook = archiveBooks[worldBookName] ?? null;
+        if (currentWorldBook?.entries) {
+            // Sort entries chronologically by UID (insertion order ≈ chronological)
+            const allWorldEntries = Object.entries(currentWorldBook.entries)
+                .sort(([a], [b]) => Number(a) - Number(b));
+
+            // Classify entries: raw = individual period reports; consolidated = range summaries
+            const isRawReport = (label) => {
+                if (!/^day\s+\d+/i.test(label)) return false; // must start with "Day N"
+                if (/days?\s+\d+\s*[\-\u2013\u2014]\s*\d+/i.test(label)) return false; // "Days N-M"
+                if (/condensed|compressed|merged|summary/i.test(label)) return false;
+                return true;
+            };
+
+            const rawEntries = allWorldEntries.filter(([, e]) =>
+                isRawReport((e.comment || '').trim())
+            );
+
+            if (rawEntries.length >= consolidateInterval) {
+                // Take the oldest N raw reports for consolidation
+                const toConsolidate = rawEntries.slice(0, consolidateInterval);
+
+                // Build a content dump for the LLM
+                const rawDump = toConsolidate
+                    .map(([, e]) => `### ${(e.comment || '').trim()}\n${(e.content || '').trim()}`)
+                    .join('\n\n');
+
+                // Determine the day range covered by these reports
+                const dayNums = toConsolidate.map(([, e]) => {
+                    const m = (e.comment || '').match(/Day\s+(\d+)/i);
+                    return m ? parseInt(m[1], 10) : null;
+                }).filter(n => n !== null);
+                const minDay = dayNums.length ? Math.min(...dayNums) : 1;
+                const maxDay = dayNums.length ? Math.max(...dayNums) : minDay;
+                const consolidatedLabel = (minDay === maxDay)
+                    ? `Day ${minDay} (Condensed)`
+                    : `Days ${minDay}\u2013${maxDay}`;
+
+                // Dedicated consolidation system prompt — never reused anywhere else
+                const consolidationSystemPrompt =
+`You are the World Archivist. Compress the following World Progression reports into a single, unified summary while preserving maximum narrative signal.
+
+## RULES
+1. Merge all reports into a single coherent, present-tense narrative.
+2. Always retain temporal context. The summary MUST begin with the overall period label (e.g. "[${consolidatedLabel}]"). Never remove all temporal markers.
+3. Preserve every unique fact — faction developments, NPC actions, location changes, economic shifts, and plot developments. Never replace detailed facts with generic summaries (e.g. writing "Various events occurred" is a critical failure).
+4. Eliminate only true redundancies — if the same fact repeats across multiple reports, write it once.
+5. Target 40–60% of the combined original token count.
+6. Format: dense prose or tight bullet points, no filler, no markdown headers beyond the period label. 1–2 sentences per development.
+7. Output ONLY the compressed report content. No preamble, no tags, no meta-commentary.`;
+
+                const consolidationUserPrompt =
+`Compress the following ${toConsolidate.length} World Progression reports into a single summary for the period **${consolidatedLabel}**.
+
+${rawDump}`;
+
+                broadcastStep('thought', `\uD83C\uDF0D World Progression: Consolidating ${toConsolidate.length} reports into \"${consolidatedLabel}\"...`);
+
+                let consolidatedContent = null;
+                try {
+                    consolidatedContent = await sendStateRequest(routerSettings, consolidationSystemPrompt, consolidationUserPrompt);
+                } catch (e) {
+                    broadcastStep('error', `World Progression consolidation failed: ${e.message} — continuing without consolidation.`);
+                }
+
+                if (consolidatedContent && consolidatedContent.trim()) {
+                    // Reload the world book from disk for a fresh write
+                    let freshBook = null;
+                    try { freshBook = await ctx.loadWorldInfo(worldBookName); } catch (_) {}
+                    if (!freshBook?.entries) freshBook = currentWorldBook;
+
+                    // Add the consolidated entry
+                    const allUids = Object.keys(freshBook.entries).map(Number).filter(n => !isNaN(n));
+                    const nextUid = allUids.length > 0 ? Math.max(...allUids) + 1 : 0;
+                    freshBook.entries[nextUid] = {
+                        uid: nextUid,
+                        key: [],
+                        keysecondary: [],
+                        comment: consolidatedLabel,
+                        content: consolidatedContent.trim(),
+                        constant: false,
+                        selective: false, selectiveLogic: 0, addMemo: true,
+                        order: settings.routerDefaultOrder ?? 100,
+                        position: settings.routerDefaultPosition ?? 0,
+                        disable: true,
+                        probability: 100, useProbability: false,
+                        depth: settings.routerDefaultDepth ?? 4,
+                        role: null,
+                        group: '', groupOverride: false, groupWeight: 100,
+                    };
+
+                    // Delete the raw entries that were consolidated
+                    const toDeleteUids = toConsolidate.map(([uid]) => uid);
+                    for (const uid of toDeleteUids) {
+                        delete freshBook.entries[uid];
+                        const fullId = `${worldBookName}::${uid}`;
+                        settings.activeWorldKeys = (settings.activeWorldKeys || []).filter(k => k !== fullId);
+                    }
+
+                    // Persist to disk
+                    await fetch('/api/worldinfo/edit', {
+                        method: 'POST',
+                        headers: getRequestHeaders(),
+                        body: JSON.stringify({ name: worldBookName, data: freshBook })
+                    });
+                    try { await ctx.saveWorldInfo(worldBookName, freshBook); } catch (_) {}
+
+                    // Update the in-memory archive so the lore context build step reads fresh data
+                    archiveBooks[worldBookName] = freshBook;
+
+                    broadcastStep('thought', `\uD83C\uDF0D World Progression: \"${consolidatedLabel}\" consolidated — ${toDeleteUids.length} raw reports removed.`);
+                }
             }
         }
     }
@@ -2642,17 +2777,6 @@ ${historicalDump}`;
     userPrompt += `\n\nWrite the World Progression report for **${periodLabel}**.`;
 
     // 6. Send the LLM request using the Lorebook Agent connection settings
-    const routerSettings = {
-        connectionSource: settings.routerConnectionSource || 'default',
-        connectionProfileId: settings.routerConnectionProfileId,
-        completionPresetId: settings.routerCompletionPresetId,
-        ollamaUrl: settings.routerOllamaUrl,
-        ollamaModel: settings.routerOllamaModel,
-        openaiUrl: settings.routerOpenaiUrl,
-        openaiKey: settings.routerOpenaiKey,
-        openaiModel: settings.routerOpenaiModel,
-    };
-
     const loreCount = Object.values(loreGrouped).reduce((sum, arr) => sum + arr.length, 0);
     broadcastStep('thought', `\uD83C\uDF0D World Progression: Generating report for "${periodLabel}" (${skeletonLines.length} skeleton, ${loreCount} lore, ${historicalReportLines.length} prior reports)...`);
     let reportContent;
