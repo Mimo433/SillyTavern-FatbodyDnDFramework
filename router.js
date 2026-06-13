@@ -432,13 +432,14 @@ export async function runRouterPass(narrativeOutput, manualPrompt = null, custom
 ## RULES
 1. Merge all timestamped updates into a single coherent, present-tense description.
 2. Preserve plot-significant changes as brief dated notes (e.g. "Burned down on Day 12").
-3. Remove redundant observations — if six updates repeat the same fact, write it once.
-4. Preserve every unique fact. When in doubt, keep it. Never replace detailed facts with generic summary text (e.g., writing "Merged details" or "Merged workshop data" is invalid content).
-5. Target 30–60% of the original token count.
-6. Do NOT activate, deactivate, record, or delete entries except via CONSOLIDATE targets.
-7. Do NOT consolidate entries of different categories (e.g., do NOT merge an NPC or Location into a Quest or Event). Consolidation is strictly for true duplicates representing the exact same entity or concept (e.g., two entries for the same NPC).
-8. Do NOT merge multiple distinct chronological events into a single entry to "reduce fragmentation". Each distinct event must remain as a separate entry so it triggers on its own keywords.
-9. Output your reasoning first, then the tags.`;
+3. Always retain temporal context. Every rewritten entry MUST include at least one in-world time anchor (e.g. "[Day 2]" or "[Day 2, 11:42]"). You may collapse many timestamps into one, but never remove all temporal markers from an entry.
+4. Remove redundant observations — if six updates repeat the same fact, write it once.
+5. Preserve every unique fact. When in doubt, keep it. Never replace detailed facts with generic summary text (e.g., writing "Merged details" or "Merged workshop data" is invalid content).
+6. Target 30–60% of the original token count.
+7. Do NOT activate, deactivate, record, or delete entries except via CONSOLIDATE targets.
+8. Do NOT consolidate entries of different categories (e.g., do NOT merge an NPC or Location into a Quest or Event). Consolidation is strictly for true duplicates representing the exact same entity or concept (e.g., two entries for the same NPC).
+9. Do NOT merge multiple distinct chronological events into a single entry to "reduce fragmentation". Each distinct event must remain as a separate entry so it triggers on its own keywords.
+10. Output your reasoning first, then the tags.`;
 
             let agentInstructionPrompt = `You are the Lorebook Archivist. Consolidate bloated lorebook entries using the tools provided.
 
@@ -451,12 +452,13 @@ For each flagged entry:
 ## RULES
 1. Merge timestamped updates into a single coherent, present-tense description.
 2. Preserve plot-significant changes as brief dated notes (e.g. "Burned down on Day 12").
-3. Remove redundant observations. Preserve every unique fact. Never replace detailed facts with generic summary text (e.g., writing "Merged Pumping Station data." is a severe failure). The survivor must compile and retain the detailed facts of all targets.
-4. Target 30–60% of the original token count per entry.
-5. Do NOT activate, deactivate, record, or create new entries.
-6. Do NOT consolidate entries of different categories (e.g., do NOT merge an NPC or Location into a Quest or Event). Consolidation is strictly for true duplicates representing the exact same entity (e.g., two entries for the same NPC).
-7. Do NOT merge multiple distinct chronological events into a single entry to "reduce fragmentation". Each distinct historical event must remain as its own entry so it triggers on its specific keywords.
-8. Call commit exactly once at the end. Do not call it per-entry.`;
+3. Always retain temporal context. Every rewritten entry MUST include at least one in-world time anchor (e.g. "[Day 2]" or "[Day 2, 11:42]"). You may collapse many timestamps into one, but never remove all temporal markers from an entry.
+4. Remove redundant observations. Preserve every unique fact. Never replace detailed facts with generic summary text (e.g., writing "Merged Pumping Station data." is a severe failure). The survivor must compile and retain the detailed facts of all targets.
+5. Target 30–60% of the original token count per entry.
+6. Do NOT activate, deactivate, record, or create new entries.
+7. Do NOT consolidate entries of different categories (e.g., do NOT merge an NPC or Location into a Quest or Event). Consolidation is strictly for true duplicates representing the exact same entity (e.g., two entries for the same NPC).
+8. Do NOT merge multiple distinct chronological events into a single entry to "reduce fragmentation". Each distinct historical event must remain as its own entry so it triggers on its specific keywords.
+9. Call commit exactly once at the end. Do not call it per-entry.`;
 
             if (customInstructions) {
                 const overrideText = `\n\n## USER CUSTOM REQUIREMENTS\nYou MUST adhere strictly to these custom compression instructions:\n- ${customInstructions}`;
@@ -593,6 +595,8 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
             ];
 
             let cleanupTurns = 0;
+            let cleanupRetries = 0;
+            const MAX_CLEANUP_RETRIES = 2;
             while (cleanupTurns < maxTurns) {
                 cleanupTurns++;
                 broadcastStep('thought', `Cleanup thinking (Turn ${cleanupTurns}/${maxTurns})...`);
@@ -608,7 +612,28 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
                 if (!resolvedToolCall && result.content) {
                     resolvedToolCall = parseTextAction(result.content);
                 }
-                if (!resolvedToolCall) break;
+                if (!resolvedToolCall) {
+                    if (cleanupRetries < MAX_CLEANUP_RETRIES) {
+                        cleanupRetries++;
+                        cleanupTurns--; // don't charge this against the turn budget
+                        const isEmpty = !result.content || !result.content.trim();
+                        if (isEmpty) {
+                            // Empty/null content means the API returned an incomplete response
+                            // (e.g. reasoning-model cut-off with finish_reason: null).
+                            // Retry with the same message history — no history change needed.
+                            broadcastStep('thought', `Incomplete API response (retry ${cleanupRetries}/${MAX_CLEANUP_RETRIES})...`);
+                        } else {
+                            // Model produced content but no parseable Action: line.
+                            // Nudge it to output its action and retry.
+                            broadcastStep('thought', `No action in response, nudging model (retry ${cleanupRetries}/${MAX_CLEANUP_RETRIES})...`);
+                            cleanupMessages.push({ role: 'assistant', content: result.content });
+                            cleanupMessages.push({ role: 'user', content: 'Please output your Action now. Remember: Action: toolname({...})' });
+                        }
+                        continue;
+                    }
+                    break;
+                }
+                cleanupRetries = 0; // reset on a successful action
 
                 const { name: toolName, args } = resolvedToolCall;
                 const callId = /** @type {any} */ (resolvedToolCall).id || `call_cleanup_${Date.now()}_${cleanupTurns}`;
@@ -943,6 +968,8 @@ ${sharedContext}`;
                 { role: 'user',   content: contextMessage }
             ];
 
+            let agentRetries = 0;
+            const MAX_AGENT_RETRIES = 2;
             while (turns < maxTurns) {
                 turns++;
                 broadcastStep('thought', `Thinking (Turn ${turns}/${maxTurns})...`);
@@ -966,9 +993,26 @@ ${sharedContext}`;
                 }
 
                 if (!resolvedToolCall) {
-                    // No tool call and no parseable action ? model is done
+                    if (agentRetries < MAX_AGENT_RETRIES) {
+                        agentRetries++;
+                        turns--; // don't charge this against the turn budget
+                        const isEmpty = !result.content || !result.content.trim();
+                        if (isEmpty) {
+                            // Empty/null content — incomplete API response (e.g. reasoning cut-off).
+                            // Retry with unchanged history.
+                            broadcastStep('thought', `Incomplete API response (retry ${agentRetries}/${MAX_AGENT_RETRIES})...`);
+                        } else {
+                            // Model produced text but no parseable Action — nudge it.
+                            broadcastStep('thought', `No action in response, nudging model (retry ${agentRetries}/${MAX_AGENT_RETRIES})...`);
+                            messages.push({ role: 'assistant', content: result.content });
+                            messages.push({ role: 'user', content: 'Please output your Action now. Remember: Action: toolname({...})' });
+                        }
+                        continue;
+                    }
+                    // No tool call and no parseable action after retries — model is done
                     break;
                 }
+                agentRetries = 0; // reset on a successful action
 
                 const { name: toolName, args } = resolvedToolCall;
                 const callId = /** @type {any} */ (resolvedToolCall).id || `call_${Date.now()}_${turns}`;
