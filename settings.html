@@ -615,20 +615,22 @@
                             </div>
                         </div>
 
+
                         <label class="checkbox_label" style="margin-top: 6px;">
-                            <input id="rpg_world_progression_randomize_conflicts" type="checkbox" />
-                            <span>Randomize Conflict pool selection</span>
-                            <i class="fa-solid fa-circle-question interactable" style="font-size: 0.85em; opacity: 0.7; margin-left: 4px;" title="When enabled, World Progression randomly selects conflicts/events from the active world lore and skeleton to focus on."></i>
+                            <input id="rpg_world_progression_auto_exclude_party" type="checkbox" />
+                            <span>Auto-exclude active party members</span>
+                            <i class="fa-solid fa-circle-question interactable" style="font-size: 0.85em; opacity: 0.7; margin-left: 4px;" title="When enabled, automatically excludes all characters listed in the State Tracker [PARTY] block from focus randomization pools. Names are parsed to strip any parenthesis details (e.g. 'Gary (Ranger)' becomes 'Gary')."></i>
                         </label>
 
-                        <div id="rpg_world_progression_random_conflict_count_container" style="margin-top: 4px; margin-left: 20px;">
-                            <label style="font-size: 0.85em; font-weight: bold; opacity: 0.8;">Conflicts to Incorporate
-                                <i class="fa-solid fa-circle-question interactable" style="font-size: 0.85em; opacity: 0.7; margin-left: 4px;" title="Number of random conflicts to choose."></i>
+                        <div style="margin-top: 6px;">
+                            <label style="font-size: 0.85em; font-weight: bold; opacity: 0.8; display: block; margin-bottom: 2px;">World Report Exclusion List
+                                <i class="fa-solid fa-circle-question interactable" style="font-size: 0.85em; opacity: 0.7; margin-left: 4px;" title="Comma-separated list of lore entry titles or keys to exclude from focus randomization (e.g. to exclude your own party members). Excluded entries are still sent as passive context to the LLM, but won't be explicitly selected/spotlighted as designated entities for a period."></i>
                             </label>
-                            <input id="rpg_world_progression_random_conflict_count" type="text" inputmode="numeric" pattern="[0-9]*" class="text_pole" value="3" style="max-width: 100px;" title="Number of conflicts to randomly select" />
+                            <input id="rpg_world_progression_exclusion_list" type="text" class="text_pole" placeholder="e.g. gary, player_party, hero" title="Comma-separated list of entry titles/keys to exclude from focus selection" style="width: 100%; box-sizing: border-box;" />
                         </div>
 
                         <hr style="margin: 6px 0;">
+
 
                         <!-- ── SECTION: NARRATIVE INPUT ── -->
                         <div style="font-size: 0.82em; font-weight: bold; opacity: 0.75; margin-bottom: 2px; letter-spacing: 0.04em; text-transform: uppercase;">

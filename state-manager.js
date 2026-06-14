@@ -232,19 +232,23 @@ The report covers the in-world period: **{periodLabel}**
 
 ## RULES
 1. Do NOT summarize player actions. Build consequences from them instead — defeated rivals plot revenge, sympathetic contacts cover their tracks, encountered strangers react to what happened.
-2. Prioritize named ACTIVE WORLD LORE NPCs. Every report must include at least 2. These are your highest-value subjects. However, if the ## DESIGNATED ENTITIES FOR THIS PERIOD block is present, you MUST strictly follow it and only change the status, advance the timeline, or create new narrative beats for these designated entities. You are strictly forbidden from changing the status, advancing the timeline, or creating new narrative beats for unauthorized entities. However, you MAY mention them passively as background context if their past, established actions are a direct catalyst for the designated entities.
-3. For NPCs who were physically present with {{user}} during the reporting period, only generate plausible background activity — digital actions, private decisions, private thoughts/opinions, off-screen communications. Do not relocate them.
-4. Format as 15 short entries, 1 sentence each. Dense, no filler, no markdown.
-5. Output ONLY the report content. No preamble, no tags, no meta-commentary.
-6. Do not simply repeat the same entities and always build on the previous report; take interesting entities from the ACTIVE WORLD LORE as well as the SKELETON regardless of whether they were featured in the previous report(s). If designated entities are provided, strictly limit your active scope to those, obeying the passive referencing rule for other entities.
-7. DO NOT write a cumulative report, stacking old entries in the same report. Only write new events, not a recap of the previous ones; they are preserved in their own file.
-8. Cross-category entity bleeding is desirable; often have designated NPCs, locations, factions, and conflicts collide or influence one another in the same narrative beat rather than treating them as isolated line items. However, only do this when it makes sense.
-9. You must strictly respect geographical and logistical boundaries to preserve spatial plausibility; isolated or distant entities cannot physically interact and must instead collide via informational, digital, or financial ripples (e.g., radio tracking, digital alerts, automated network scrapers, or news traveling from afar).
-10. Character vectors must take place only at or ripple through the designated locations provided for this period; if an active NPC cannot logically travel to a selected location within this time window, their connection must manifest purely as an off-screen reaction or informational dependency.`,
+2. QUESTS and EVENTS are historical records for context only — they are NOT simulatable entities. Never generate entries that describe a quest advancing, stalling, succeeding, or failing. If a quest appears in the designated entities block, ignore it entirely.
+3. Prioritize named ACTIVE WORLD LORE NPCs. Every report must include at least 2. These are your highest-value subjects. However, if the ## DESIGNATED ENTITIES FOR THIS PERIOD block is present, you MUST strictly follow it and only change the status, advance the timeline, or create new narrative beats for these designated entities. You are strictly forbidden from changing the status, advancing the timeline, or creating new narrative beats for unauthorized entities. However, you MAY mention them passively as background context if their past, established actions are a direct catalyst for the designated entities.
+4. For NPCs who were physically present with {{user}} during the reporting period, only generate plausible background activity — digital actions, private decisions, private thoughts/opinions, off-screen communications. Do not relocate them.
+5. Format as 15 short entries, 1 sentence each. Dense, no filler, no markdown.
+6. Output ONLY the report content. No preamble, no tags, no meta-commentary.
+7. Do not simply repeat the same entities and always build on the previous report; take interesting entities from the ACTIVE WORLD LORE as well as the SKELETON regardless of whether they were featured in the previous report(s). If designated entities are provided, strictly limit your active scope to those, obeying the passive referencing rule for other entities.
+8. DO NOT write a cumulative report, stacking old entries in the same report. Only write new events, not a recap of the previous ones; they are preserved in their own file.
+9. Cross-category entity bleeding is desirable; often have designated NPCs, locations, factions, and conflicts collide or influence one another in the same narrative beat rather than treating them as isolated line items. However, only do this when it makes sense.
+10. You must strictly respect geographical and logistical boundaries to preserve spatial plausibility; isolated or distant entities cannot physically interact and must instead collide via informational, digital, or financial ripples (e.g., radio tracking, digital alerts, automated network scrapers, or news traveling from afar).
+11. Character vectors must take place only at or ripple through the designated locations provided for this period; if an active NPC cannot logically travel to a selected location within this time window, their connection must manifest purely as an off-screen reaction or informational dependency.`,
         // ── World Skeleton ─────────────────────────────────────────────────────────
         worldProgressionSkeletonAtmosphereSummary: '', // single paragraph atmosphere description (required only if not using existing entries context)
         worldProgressionSkeletonAtmosphereLookback: 30, // messages lookback count for atmosphere generation
         worldProgressionSkeletonUseExisting: true, // toggle to feed existing entries context when appending
+        worldProgressionExclusionList: '',         // comma-separated list of lore entry titles or keys to exclude from focus randomization
+        worldProgressionAutoExcludeParty: false,   // automatically exclude active party members from focus randomization
+
         worldProgressionSkeletonSystemPrompt: `You are a World Architect. Given a world theme/seed, generate a sparse foundational skeleton for an RPG campaign simulation.
 
 ## FACTIONS ({factionCount} total)
@@ -462,6 +466,24 @@ Example: [[FAC: Iron Syndicate | ...]]  NOT  [[FAC: Khelt :: Iron Syndicate | ..
         }
     }
 
+    // ── MIGRATION: Update World Progression System Prompt with Quests/Events rule (v3.4.4+) ──────
+    if (s.worldProgressionSystemPrompt && !s.worldProgressionSystemPrompt.includes('QUESTS and EVENTS are historical records')) {
+        s.worldProgressionSystemPrompt = s.worldProgressionSystemPrompt.replace(
+            '1. Do NOT summarize player actions. Build consequences from them instead — defeated rivals plot revenge, sympathetic contacts cover their tracks, encountered strangers react to what happened.',
+            '1. Do NOT summarize player actions. Build consequences from them instead — defeated rivals plot revenge, sympathetic contacts cover their tracks, encountered strangers react to what happened.\n2. QUESTS and EVENTS are historical records for context only — they are NOT simulatable entities. Never generate entries that describe a quest advancing, stalling, succeeding, or failing. If a quest appears in the designated entities block, ignore it entirely.'
+        );
+        s.worldProgressionSystemPrompt = s.worldProgressionSystemPrompt
+            .replace('2. Prioritize named ACTIVE WORLD LORE NPCs.', '3. Prioritize named ACTIVE WORLD LORE NPCs.')
+            .replace('3. For NPCs who were physically present', '4. For NPCs who were physically present')
+            .replace('4. Format as 15 short entries', '5. Format as 15 short entries')
+            .replace('5. Output ONLY the report content.', '6. Output ONLY the report content.')
+            .replace('6. Do not simply repeat the same entities', '7. Do not simply repeat the same entities')
+            .replace('7. DO NOT write a cumulative report', '8. DO NOT write a cumulative report')
+            .replace('8. Cross-category entity bleeding is desirable', '9. Cross-category entity bleeding is desirable')
+            .replace('9. You must strictly respect geographical', '10. You must strictly respect geographical')
+            .replace('10. Character vectors must take place', '11. Character vectors must take place');
+    }
+
     return extensionSettings[MODULE_NAME];
 }
 
@@ -626,6 +648,9 @@ export function saveChatState(chatId) {
         worldProgressionSkeletonUseExisting: s.worldProgressionSkeletonUseExisting ?? true,
         worldProgressionConsolidateEnabled: s.worldProgressionConsolidateEnabled ?? false,
         worldProgressionConsolidateInterval: s.worldProgressionConsolidateInterval ?? 7,
+        worldProgressionExclusionList: s.worldProgressionExclusionList || '',
+        worldProgressionAutoExcludeParty: s.worldProgressionAutoExcludeParty ?? false,
+
         // Preserve lorebook stack link — written by Link button and router, not by normal state saves
         campaignBooks: existing.campaignBooks || [],
     };
@@ -692,6 +717,9 @@ export function saveProfile(name) {
         worldProgressionSkeletonAtmosphereSummary: s.worldProgressionSkeletonAtmosphereSummary || '',
         worldProgressionSkeletonAtmosphereLookback: s.worldProgressionSkeletonAtmosphereLookback ?? 30,
         worldProgressionSkeletonUseExisting: s.worldProgressionSkeletonUseExisting ?? true,
+        worldProgressionExclusionList: s.worldProgressionExclusionList || '',
+        worldProgressionAutoExcludeParty: s.worldProgressionAutoExcludeParty ?? false,
+
     };
     s.activeProfile = name;
     SillyTavern.getContext().saveSettingsDebounced();

@@ -823,6 +823,8 @@ function loadChatState(chatId) {
     s.worldProgressionSkeletonAtmosphereSummary = saved.worldProgressionSkeletonAtmosphereSummary ?? '';
     s.worldProgressionSkeletonAtmosphereLookback = saved.worldProgressionSkeletonAtmosphereLookback ?? 30;
     s.worldProgressionSkeletonUseExisting = saved.worldProgressionSkeletonUseExisting ?? true;
+    s.worldProgressionExclusionList = saved.worldProgressionExclusionList ?? '';
+    s.worldProgressionAutoExcludeParty = saved.worldProgressionAutoExcludeParty ?? false;
     s.worldProgressionLastFiredAtMinutes = saved.worldProgressionLastFiredAtMinutes ?? -1;
     s.worldProgressionLastFiredPeriodLabel = saved.worldProgressionLastFiredPeriodLabel || '';
 
@@ -836,8 +838,7 @@ function loadChatState(chatId) {
     $('#rpg_world_progression_randomize_factions').prop('checked', !!s.worldProgressionRandomizeFactions);
     $('#rpg_world_progression_random_skeleton_faction_count').val(s.worldProgressionRandomSkeletonFactionCount ?? 2);
     $('#rpg_world_progression_random_narrative_faction_count').val(s.worldProgressionRandomNarrativeFactionCount ?? 2);
-    $('#rpg_world_progression_randomize_conflicts').prop('checked', !!s.worldProgressionRandomizeConflicts);
-    $('#rpg_world_progression_random_conflict_count').val(s.worldProgressionRandomConflictCount ?? 3);
+
     $('#rpg_world_progression_skeleton_factions').val(s.worldProgressionSkeletonFactions ?? 4);
     $('#rpg_world_progression_skeleton_locations').val(s.worldProgressionSkeletonLocations ?? 4);
     $('#rpg_world_progression_skeleton_npcs').val(s.worldProgressionSkeletonNPCs ?? 0);
@@ -845,6 +846,8 @@ function loadChatState(chatId) {
     $('#rpg_world_progression_skeleton_atmosphere').val(s.worldProgressionSkeletonAtmosphereSummary);
     $('#rpg_world_progression_skeleton_atmosphere_lookback').val(s.worldProgressionSkeletonAtmosphereLookback);
     $('#rpg_world_progression_skeleton_use_existing').prop('checked', !!s.worldProgressionSkeletonUseExisting);
+    $('#rpg_world_progression_exclusion_list').val(s.worldProgressionExclusionList);
+    $('#rpg_world_progression_auto_exclude_party').prop('checked', !!s.worldProgressionAutoExcludeParty);
 
     const wpPosSelect = $('#rpg_world_progression_injection_position');
     const wpPosition = s.worldProgressionInjectionPosition ?? 4;
@@ -867,8 +870,7 @@ function loadChatState(chatId) {
     else $('#rpg_world_progression_random_location_count_container').hide();
     if (s.worldProgressionRandomizeFactions) $('#rpg_world_progression_random_faction_count_container').show();
     else $('#rpg_world_progression_random_faction_count_container').hide();
-    if (s.worldProgressionRandomizeConflicts) $('#rpg_world_progression_random_conflict_count_container').show();
-    else $('#rpg_world_progression_random_conflict_count_container').hide();
+
 
     // Sync World Progression timing readouts for this chat
     {
@@ -2360,6 +2362,8 @@ function loadProfile(name) {
     s.worldProgressionSkeletonConflicts = p.worldProgressionSkeletonConflicts ?? 3;
     s.worldProgressionLastFiredAtMinutes = p.worldProgressionLastFiredAtMinutes ?? -1;
     s.worldProgressionLastFiredPeriodLabel = p.worldProgressionLastFiredPeriodLabel || '';
+    s.worldProgressionExclusionList = p.worldProgressionExclusionList ?? '';
+    s.worldProgressionAutoExcludeParty = p.worldProgressionAutoExcludeParty ?? false;
 
     // Update settings UI inputs if rendered
     $('#rpg_world_progression_randomize_npcs').prop('checked', !!s.worldProgressionRandomizeNPCs);
@@ -2371,12 +2375,13 @@ function loadProfile(name) {
     $('#rpg_world_progression_randomize_factions').prop('checked', !!s.worldProgressionRandomizeFactions);
     $('#rpg_world_progression_random_skeleton_faction_count').val(s.worldProgressionRandomSkeletonFactionCount ?? 2);
     $('#rpg_world_progression_random_narrative_faction_count').val(s.worldProgressionRandomNarrativeFactionCount ?? 2);
-    $('#rpg_world_progression_randomize_conflicts').prop('checked', !!s.worldProgressionRandomizeConflicts);
-    $('#rpg_world_progression_random_conflict_count').val(s.worldProgressionRandomConflictCount ?? 3);
+
     $('#rpg_world_progression_skeleton_factions').val(s.worldProgressionSkeletonFactions ?? 4);
     $('#rpg_world_progression_skeleton_locations').val(s.worldProgressionSkeletonLocations ?? 4);
     $('#rpg_world_progression_skeleton_npcs').val(s.worldProgressionSkeletonNPCs ?? 0);
     $('#rpg_world_progression_skeleton_conflicts').val(s.worldProgressionSkeletonConflicts ?? 3);
+    $('#rpg_world_progression_exclusion_list').val(s.worldProgressionExclusionList);
+    $('#rpg_world_progression_auto_exclude_party').prop('checked', !!s.worldProgressionAutoExcludeParty);
 
     // Toggle container visibilities
     if (s.worldProgressionRandomizeNPCs) $('#rpg_world_progression_random_npc_count_container').show();
@@ -2385,8 +2390,7 @@ function loadProfile(name) {
     else $('#rpg_world_progression_random_location_count_container').hide();
     if (s.worldProgressionRandomizeFactions) $('#rpg_world_progression_random_faction_count_container').show();
     else $('#rpg_world_progression_random_faction_count_container').hide();
-    if (s.worldProgressionRandomizeConflicts) $('#rpg_world_progression_random_conflict_count_container').show();
-    else $('#rpg_world_progression_random_conflict_count_container').hide();
+
     s.activeProfile = name;
     _historyViewIndex = -1;
 
@@ -9172,9 +9176,7 @@ RULES:
         const $wpRandomSkeletonFactionCount = $('#rpg_world_progression_random_skeleton_faction_count');
         const $wpRandomNarrativeFactionCount = $('#rpg_world_progression_random_narrative_faction_count');
         const $wpRandomFactionCountContainer = $('#rpg_world_progression_random_faction_count_container');
-        const $wpRandomizeConflicts = $('#rpg_world_progression_randomize_conflicts');
-        const $wpRandomConflictCount = $('#rpg_world_progression_random_conflict_count');
-        const $wpRandomConflictCountContainer = $('#rpg_world_progression_random_conflict_count_container');
+
         const $wpLookback = $('#rpg_world_progression_lookback');
         const $wpSystemPrompt = $('#rpg_world_progression_system_prompt');
         const $wpResetPrompt = $('#rpg_world_progression_btn_reset_prompt');
@@ -9276,11 +9278,7 @@ RULES:
             } else {
                 $wpRandomFactionCountContainer.hide();
             }
-            if ($wpRandomizeConflicts.prop('checked')) {
-                $wpRandomConflictCountContainer.show();
-            } else {
-                $wpRandomConflictCountContainer.hide();
-            }
+
         }
 
         $wpRandomizeNPCs.prop('checked', !!settings.worldProgressionRandomizeNPCs).on('change', function () {
@@ -9331,21 +9329,22 @@ RULES:
             saveSettings();
         });
 
-        $wpRandomizeConflicts.prop('checked', !!settings.worldProgressionRandomizeConflicts).on('change', function () {
-            getSettings().worldProgressionRandomizeConflicts = !!$(this).prop('checked');
-            saveSettings();
-            updateRandomizersVisibility();
-        });
 
-        $wpRandomConflictCount.val(settings.worldProgressionRandomConflictCount ?? 3).on('input', function () {
-            getSettings().worldProgressionRandomConflictCount = parseInt(String($(this).val() || '')) || 3;
-            saveSettings();
-        });
 
         updateRandomizersVisibility();
 
         $wpLookback.val(settings.worldProgressionLookback ?? 0).on('input', function () {
             getSettings().worldProgressionLookback = parseInt(String($(this).val() || '')) || 0;
+            saveSettings();
+        });
+        const $wpExclusionList = $('#rpg_world_progression_exclusion_list');
+        $wpExclusionList.val(settings.worldProgressionExclusionList || '').on('input', function () {
+            getSettings().worldProgressionExclusionList = String($(this).val() || '');
+            saveSettings();
+        });
+        const $wpAutoExcludeParty = $('#rpg_world_progression_auto_exclude_party');
+        $wpAutoExcludeParty.prop('checked', !!settings.worldProgressionAutoExcludeParty).on('change', function () {
+            getSettings().worldProgressionAutoExcludeParty = !!$(this).prop('checked');
             saveSettings();
         });
         $wpSystemPrompt.val(settings.worldProgressionSystemPrompt || '').on('input', function () {

@@ -2624,6 +2624,32 @@ ${rawDump}`;
     const skeletonFactionDescs = []; // { name, desc }
     const skeletonLocationDescs = []; // { name, desc }
 
+    // Compute exclusion list
+    const excludedTerms = [];
+    if (settings.worldProgressionExclusionList) {
+        settings.worldProgressionExclusionList
+            .split(',')
+            .map(term => term.trim().toLowerCase())
+            .filter(Boolean)
+            .forEach(term => excludedTerms.push(term));
+    }
+    if (settings.worldProgressionAutoExcludeParty) {
+        const memo = settings.currentMemo || '';
+        const partyMatch = memo.match(/\[PARTY\]([\s\S]*?)\[\/PARTY\]/i);
+        if (partyMatch) {
+            const blockContent = partyMatch[1];
+            const lines = blockContent.split('\n').map(l => l.trim()).filter(Boolean);
+            for (const line of lines) {
+                const colonIdx = line.indexOf(':');
+                const entityPart = colonIdx !== -1 ? line.substring(0, colonIdx).trim() : line;
+                const namePart = entityPart.replace(/\s*\([^)]*\)/g, '').trim();
+                if (namePart && namePart !== '(unnamed)') {
+                    excludedTerms.push(namePart.toLowerCase());
+                }
+            }
+        }
+    }
+
     function getBookCategoryHeader(bookName, prefix) {
         let cleanName = bookName;
         if (prefix && bookName.startsWith(prefix + '_')) {
@@ -2662,16 +2688,33 @@ ${rawDump}`;
             const isConflict = (isSkeletonBook && entry.extensions?.rpgCategory === 'EVENT') ||
                                (!isSkeletonBook && (categoryHeader === 'EVENT' || categoryHeader === 'EVENTS' || categoryHeader === 'QUEST' || categoryHeader === 'QUESTS' || nameLower.includes('event') || nameLower.includes('conflict') || nameLower.includes('quest')));
 
+            // Check exclusion list
+            let isExcluded = false;
+            if (excludedTerms.length > 0) {
+                const labelLower = label.toLowerCase();
+                const primaryKeys = Array.isArray(entry.key) ? entry.key.map(k => String(k).trim().toLowerCase()) : [];
+                const secondaryKeys = Array.isArray(entry.keysecondary) ? entry.keysecondary.map(k => String(k).trim().toLowerCase()) : [];
+
+                isExcluded = excludedTerms.some(term => {
+                    if (labelLower.includes(term)) return true;
+                    if (primaryKeys.some(k => k.includes(term))) return true;
+                    if (secondaryKeys.some(k => k.includes(term))) return true;
+                    return false;
+                });
+            }
+
             if (isSkeletonBook) {
                 skeletonLines.push(`### ${label}\n${entry.content.trim()}`);
-                if (isNpc) skeletonNpcNames.push(label);
-                else if (isLoc) {
-                    skeletonLocationNames.push(label);
-                    skeletonLocationDescs.push({ name: label, desc: entry.content.trim().split(/[.!?]/)[0].trim() });
-                } else if (isFac) {
-                    skeletonFactionNames.push(label);
-                    skeletonFactionDescs.push({ name: label, desc: entry.content.trim().split(/[.!?]/)[0].trim() });
-                } else if (isConflict) conflictNames.push(label);
+                if (!isExcluded) {
+                    if (isNpc) skeletonNpcNames.push(label);
+                    else if (isLoc) {
+                        skeletonLocationNames.push(label);
+                        skeletonLocationDescs.push({ name: label, desc: entry.content.trim().split(/[.!?]/)[0].trim() });
+                    } else if (isFac) {
+                        skeletonFactionNames.push(label);
+                        skeletonFactionDescs.push({ name: label, desc: entry.content.trim().split(/[.!?]/)[0].trim() });
+                    } else if (isConflict) conflictNames.push(label);
+                }
             } else if (isWorldBook) {
                 historicalReportLines.push(`### ${label}\n${entry.content.trim()}`);
             } else {
@@ -2679,13 +2722,16 @@ ${rawDump}`;
                     loreGrouped[categoryHeader] = [];
                 }
                 loreGrouped[categoryHeader].push(`### ${label}\n${entry.content.trim()}`);
-                if (isNpc) narrativeNpcNames.push(label);
-                else if (isLoc) narrativeLocationNames.push(label);
-                else if (isFac) narrativeFactionNames.push(label);
-                else if (isConflict) conflictNames.push(label);
+                if (!isExcluded) {
+                    if (isNpc) narrativeNpcNames.push(label);
+                    else if (isLoc) narrativeLocationNames.push(label);
+                    else if (isFac) narrativeFactionNames.push(label);
+                    else if (isConflict) conflictNames.push(label);
+                }
             }
         }
     }
+
 
     const skeletonDump = skeletonLines.length
         ? skeletonLines.join('\n\n')
@@ -2807,13 +2853,7 @@ ${rawDump}`;
         'Factions'
     );
 
-    // Conflicts remain a flat pool (no skeleton/narrative split)
-    if (settings.worldProgressionRandomizeConflicts) {
-        const selected = shuffleAndSelect(conflictNames, settings.worldProgressionRandomConflictCount || 3);
-        if (selected.length > 0) {
-            designations.push(`### Conflicts/Quests\n` + selected.map(n => `- ${n}`).join('\n'));
-        }
-    }
+
 
     let selectedNPCsText = '';
     if (designations.length > 0) {
