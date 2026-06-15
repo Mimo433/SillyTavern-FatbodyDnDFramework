@@ -227,6 +227,13 @@ These are BASE ranges. Scale UP or DOWN based on quest difficulty and narrative 
 NPC tiers are only a guideline; values may vary based on theme/archetype.
 </combat>
 
+<homebrew_and_custom_classes>
+If a character or NPC possesses a non-standard, custom, or homebrew class (e.g., non-combatant archetypes like "Electronics Hobbyist" or "Mechanic"), do not scale their BAB using standard martial class tables. Instead, logically improvise their Base Attack Bonus (BAB) based strictly on thematic common sense:
+  - Pure non-combatants/tech assets: BAB scales slowly (+0 at early levels, maxing out around +2 or +3 at high levels).
+  - Blue-collar/improvised fighters (mechanics, brawlers): Moderate BAB progression.
+  - Tactical/trained operators (soldiers, elite operatives): High BAB progression (equal to level or slightly below).
+</homebrew_and_custom_classes>
+
 <saving_throws>
 NPC SAVING THROWS:
 Assign thematically. Three saves per NPC: Fortitude / Reflex / Will
@@ -457,6 +464,13 @@ These are BASE ranges. Scale UP or DOWN based on quest difficulty and narrative 
 
 NPC tiers are only a guideline; values may vary based on theme/archetype.
 </combat>
+
+<homebrew_and_custom_classes>
+If a character or NPC possesses a non-standard, custom, or homebrew class (e.g., non-combatant archetypes like "Electronics Hobbyist" or "Mechanic"), do not scale their BAB using standard martial class tables. Instead, logically improvise their Base Attack Bonus (BAB) based strictly on thematic common sense:
+  - Pure non-combatants/tech assets: BAB scales slowly (+0 at early levels, maxing out around +2 or +3 at high levels).
+  - Blue-collar/improvised fighters (mechanics, brawlers): Moderate BAB progression.
+  - Tactical/trained operators (soldiers, elite operatives): High BAB progression (equal to level or slightly below).
+</homebrew_and_custom_classes>
 
 <saving_throws>
 NPC SAVING THROWS:
