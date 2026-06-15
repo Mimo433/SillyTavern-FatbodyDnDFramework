@@ -12,11 +12,11 @@ I wasn't satisfied with any of the commercial offerings available (AI Realm, AI 
 
 ---
 
-<p style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%;">
-  <img src="https://github.com/user-attachments/assets/cde8b1b9-dc31-4089-97dd-ebd16facd3af" style="width: 70%; max-width: 100%; display: block;" alt="A basic character sheet" />
+<div style="text-align: center;">
+  <img src="https://github.com/user-attachments/assets/cde8b1b9-dc31-4089-97dd-ebd16facd3af" style="width: 60%; display: block; margin: 0 auto;" alt="A basic character sheet" />
   <br>
   <em>A basic character sheet</em>
-</p>
+</div>
 
 ---
 
