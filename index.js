@@ -8462,7 +8462,7 @@ RULES:
         });
 
         $('#rpg_tracker_btn_reset_and_apply_sysprompt').on('click', async function () {
-            if (!confirm('This will:\n\n1. Reset the Core State Model prompt to built-in default\n2. Reset all Stock Module prompts, Active Modules, and Module Order to factory defaults\n3. Reset all Lorebook Agent prompts and World Progression prompts to factory defaults\n4. Fetch the latest sysprompt.txt and write it directly into your Quick Prompt "Main" box\n\nYour custom modules will NOT be affected. Proceed?')) return;
+            if (!confirm('This will:\n\n1. Reset the Core State Model prompt to built-in default\n2. Reset all Stock Module prompts, Active Modules, and Module Order to factory defaults\n3. Reset all Lorebook Agent prompts and World Progression prompts to factory defaults\n4. Fetch the latest sysprompt.txt and write it directly into your Quick Prompt "Main" box\n5. Automatically re-enable any custom sysprompt sections that were already enabled\n\nYour custom modules will NOT be affected. Proceed?')) return;
 
             const { extensionSettings } = SillyTavern.getContext();
 
@@ -8539,8 +8539,38 @@ RULES:
                 mainTextarea.value = content;
                 // Fire blur to trigger ST's handleQuickEditSave listener
                 mainTextarea.dispatchEvent(new Event('blur', { bubbles: true }));
+
+                // 5. Automatically re-apply any custom sysprompt library sections that were already enabled
+                await applyCustomSysprompts();
+
                 toastr['success']('All prompts reset & Main sysprompt applied! \u2705', 'RPG Tracker');
             } else {
+                // 5. Automatically re-apply any custom sysprompt library sections that were already enabled
+                const enabledPrompts = (finalSettings.customSyspromptLibrary || []).filter(p => {
+                    if (!p.enabled || !p.content) return false;
+                    const trimmed = p.content.trim();
+                    if (!trimmed) return false;
+                    const emptyTagMatch = trimmed.match(/^<(\w+[\w_-]*)>\s*<\/\1>$/);
+                    if (emptyTagMatch) return false;
+                    return true;
+                });
+
+                const newInjection = enabledPrompts.length > 0
+                    ? enabledPrompts.map(p => p.content).join('\n\n')
+                    : '';
+
+                if (newInjection) {
+                    if (content.includes('<constraints>')) {
+                        content = content.replace('<constraints>', `${newInjection}\n\n<constraints>`);
+                    } else {
+                        content = content.trim() + '\n\n' + newInjection;
+                    }
+                    content = content.replace(/\n{3,}/g, '\n\n').trim();
+
+                    finalSettings._customLibraryLastInjection = newInjection;
+                    saveSettings();
+                }
+
                 // Fallback: ST might not be in OpenAI mode, so the quick-edit textarea may not exist.
                 // Copy to clipboard as a graceful fallback.
                 const ta = document.createElement('textarea');
