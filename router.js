@@ -141,13 +141,13 @@ async function getWorldInfoNamesSafe() {
         }
     } catch (_) {}
 
-    // 3. Fallback for older ST versions
+    // 3. Fallback: enumerate all lorebooks from the backend list endpoint
     try {
-        const r = await fetch('/api/worldinfo/get', { method: 'POST', headers: getRequestHeaders() });
+        const r = await fetch('/api/worldinfo/list', { method: 'POST', headers: getRequestHeaders() });
         if (r.ok) {
             const j = await r.json();
-            if (typeof j === 'object' && j !== null && !j.error) {
-                Object.keys(j).forEach(n => namesSet.add(n));
+            if (Array.isArray(j)) {
+                j.forEach(entry => { if (entry?.file_id) namesSet.add(entry.file_id); });
             }
         }
     } catch (_) {}
