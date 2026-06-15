@@ -297,9 +297,34 @@ export function mergeQuestUpdates(jsonText, memoText = null) {
 
     let changed = false;
     for (const update of updates) {
-        const quest = quests.find(q => q.id === update.id);
+        let quest = quests.find(q => q.id === update.id);
+        let objectiveDirectUpdate = null;
+        if (!quest) {
+            // Check if update.id is an objective ID belonging to some quest
+            for (const q of quests) {
+                const foundObj = q.objectives?.find(o => o.id === update.id);
+                if (foundObj) {
+                    quest = q;
+                    objectiveDirectUpdate = foundObj;
+                    break;
+                }
+            }
+        }
+
         if (!quest) continue;
         if (quest.status === 'failed') continue;
+
+        if (objectiveDirectUpdate) {
+            if (update.status && ['active', 'completed', 'failed'].includes(update.status)) {
+                objectiveDirectUpdate.status = update.status;
+                changed = true;
+            }
+            if (typeof update.progress === 'number') {
+                objectiveDirectUpdate.progress = update.progress;
+                changed = true;
+            }
+            continue;
+        }
 
         if (update.status && ['active', 'completed', 'past deadline', 'failed'].includes(update.status)) {
             let resolvedStatus = update.status;
@@ -667,6 +692,23 @@ export function parseQuestsFromMemo(memoText) {
  */
 export function syncQuestsFromMemo(memoText) {
     const settings = getSettings();
+
+    // Safety check: if memoText contains delta updates instead of full quests, do NOT clear active quests.
+    const match = (memoText || '').match(/\[QUESTS\]([\s\S]*?)\[\/QUESTS\]/i);
+    if (match) {
+        const content = match[1].trim();
+        if (!content.startsWith('QUEST:')) {
+            try {
+                const parsed = JSON.parse(content);
+                if (parsed && parsed.updates) {
+                    return; // delta updates block, ignore syncing to preserve existing state
+                }
+            } catch (e) {
+                // Ignore parse errors here, let parseQuestsFromMemo handle it
+            }
+        }
+    }
+
     const quests = parseQuestsFromMemo(memoText);
     const existingCompleted = (settings.quests || []).filter(q => q.status === 'completed');
     
