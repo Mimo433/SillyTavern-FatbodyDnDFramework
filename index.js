@@ -8462,7 +8462,7 @@ RULES:
         });
 
         $('#rpg_tracker_btn_reset_and_apply_sysprompt').on('click', async function () {
-            if (!confirm('This will:\n\n1. Reset the Core State Model prompt to built-in default\n2. Reset all Stock Module prompts, Active Modules, and Module Order to factory defaults\n3. Reset all Lorebook Agent prompts to factory defaults\n4. Fetch the latest sysprompt.txt and write it directly into your Quick Prompt "Main" box\n\nYour custom modules will NOT be affected. Proceed?')) return;
+            if (!confirm('This will:\n\n1. Reset the Core State Model prompt to built-in default\n2. Reset all Stock Module prompts, Active Modules, and Module Order to factory defaults\n3. Reset all Lorebook Agent prompts and World Progression prompts to factory defaults\n4. Fetch the latest sysprompt.txt and write it directly into your Quick Prompt "Main" box\n\nYour custom modules will NOT be affected. Proceed?')) return;
 
             const { extensionSettings } = SillyTavern.getContext();
 
@@ -8476,9 +8476,11 @@ RULES:
             delete extensionSettings[MODULE_NAME].blockOrder;
             delete extensionSettings[MODULE_NAME].modules;
 
-            // 3. Reset Lorebook Agent prompts
+            // 3. Reset Lorebook Agent prompts and World Progression prompts
             delete extensionSettings[MODULE_NAME].routerSystemPromptTemplate;
             delete extensionSettings[MODULE_NAME].routerModularPromptTemplate;
+            delete extensionSettings[MODULE_NAME].worldProgressionSystemPrompt;
+            delete extensionSettings[MODULE_NAME].worldProgressionSkeletonSystemPrompt;
 
             // Re-merge defaults
             const finalSettings = getSettings();
@@ -8494,6 +8496,13 @@ RULES:
             $routerModularPrompt.val(finalSettings.routerModularPromptTemplate);
             if (typeof (/** @type {any} */ ($routerModularPrompt)).trigger === 'function') {
                 (/** @type {any} */ ($routerModularPrompt)).trigger('autosize.resize');
+            }
+
+            // Update UI elements for World Progression prompts
+            const $wpPrompt = $('#rpg_world_progression_system_prompt');
+            $wpPrompt.val(finalSettings.worldProgressionSystemPrompt);
+            if (typeof (/** @type {any} */ ($wpPrompt)).trigger === 'function') {
+                (/** @type {any} */ ($wpPrompt)).trigger('autosize.resize');
             }
 
             // If legacy mode is on, the prompt is applied at runtime by buildModulesInstructionText
