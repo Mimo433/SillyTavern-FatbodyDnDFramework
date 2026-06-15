@@ -30,8 +30,8 @@ export const DEFAULT_STOCK_PROMPTS = {
     character: `Main character's core stats. Use this format:
 [CHARACTER]
 {{user}} (Class): current/max HP
-Combat: BAB: +X | Ranged: +X | Melee: +X
-Gear: Weapon1 (stats) | Weapon2, if exists, (stats), AC: Z (Armor Name)
+Combat: BAB: +X | Ranged: +X | Melee: +X | Base AC: X | Total AC: Z
+Gear: Weapon1 (stats) | Weapon2, if exists, (stats) | Armor Name (+Y AC)
 Proficiencies: Category1, Category2
 Attr: STR X (mod), DEX X (mod), CON X (mod), INT X (mod), WIS X (mod), CHA X (mod)
 Saves: Fort +X | Ref +X | Will +X
@@ -44,8 +44,8 @@ Status: Effect (duration Xh Xm)
 Upon LEVEL UP, incorporate attribute changes.`,
     party: `Companion/Party members. Use this format for each member:
 Name (Class): current/max HP
-Combat: BAB: +X | Ranged: +X | Melee: +X
-Gear: Weapon (stats), AC: Z (Armor Name)
+Combat: BAB: +X | Ranged: +X | Melee: +X | Base AC: X | Total AC: Z
+Gear: Weapon (stats) | Armor Name (+Y AC)
 Proficiencies: Category1, Category2
 Attr: STR X (mod), DEX X (mod), CON X (mod), INT X (mod), WIS X (mod), CHA X (mod)
 Saves: Fort +X | Ref +X | Will +X
@@ -64,8 +64,8 @@ Only remove party members if you see (X leaves the party.)
 PERSISTENCE: If the party changes, you MUST output the ENTIRE [PARTY] block including all existing characters. Never omit a character unless they leave the party.
 
 Example party: [PARTY]Elara (Ranger): 26/45 HP
-Combat: BAB: +3 | Ranged: +6 | Melee: +4
-Gear: Shortbow (1d6+3 P), AC: 15 (Leather Armor)
+Combat: BAB: +3 | Ranged: +6 | Melee: +4 | Base AC: 13 | Total AC: 15
+Gear: Shortbow (1d6+3 P) | Leather Armor (+2 AC)
 Proficiencies: Simple Weapons, Martial Weapons
 Attr: STR 12 (+1), DEX 16 (+3), CON 14 (+2), INT 10 (+0), WIS 14 (+2), CHA 12 (+1)
 Saves: Fort +3 | Ref +5 | Will +2
@@ -239,6 +239,7 @@ If a character or NPC possesses a non-standard, custom, or homebrew class (e.g.,
 <weapon_proficiencies>
 If a character attacks with a weapon not covered by their listed "Proficiencies:" categories (judged via your common sense, e.g. "Pistols" covers a Glock but not a sniper rifle), apply disadvantage on the attack roll and omit their attribute modifier from the damage calculation.
 If a character lacks a "Proficiencies:" line entirely, infer proficiency from their class archetype.
+Note: High-quality or magical weapons may have an inherent accuracy/damage modifier (e.g., a "+1 Longsword"). This bonus applies to both the attack roll and damage roll.
 </weapon_proficiencies>
 
 <saving_throws>
@@ -364,8 +365,8 @@ END OF EACH OUTPUT (required):
 When a character joins/leaves, explicitly state (Name joins/leaves the party).
 Declare their COMBAT PROFILE immediately:
 - Worn armor, AC, and Max HP.
-- Combat: BAB: +X | Ranged: +X | Melee: +X
-- Primary Weapon: (Attack Bonus / Damage Die + Mod / Damage Type).
+- Combat: BAB: +X | Ranged: +X | Melee: +X | Base AC: X | Total AC: Z
+- Primary Weapon: (Attack Bonus / Damage Die + Mod / Damage Type) | Armor Name (+Y AC)
 - Proficiencies: Category1, Category2
 - Attr: STR X (mod), DEX X (mod), CON X (mod), INT X (mod), WIS X (mod), CHA X (mod)
 - Saves: Fort +X | Ref +X | Will +X
@@ -607,8 +608,8 @@ END OF EACH OUTPUT (required):
 When a character joins/leaves, explicitly state (Name joins/leaves the party).
 Declare their COMBAT PROFILE immediately:
 - Worn armor, AC, and Max HP.
-- Combat: BAB: +X | Ranged: +X | Melee: +X
-- Primary Weapon: (Attack Bonus / Damage Die + Mod / Damage Type).
+- Combat: BAB: +X | Ranged: +X | Melee: +X | Base AC: X | Total AC: Z
+- Primary Weapon: (Attack Bonus / Damage Die + Mod / Damage Type) | Armor Name (+Y AC)
 - Proficiencies: Category1, Category2
 - Attr: STR X (mod), DEX X (mod), CON X (mod), INT X (mod), WIS X (mod), CHA X (mod)
 - Saves: Fort +X | Ref +X | Will +X
