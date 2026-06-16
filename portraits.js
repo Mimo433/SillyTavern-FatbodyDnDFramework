@@ -365,19 +365,62 @@ export async function generatePortraitDirect(prompt, entityName) {
         headers['Content-Type'] = 'application/json';
 
         const currentModel = s.pollinationsModel || 'flux';
-        const resp = await fetch(`/proxy/${targetUrl}`, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify({ prompt, model: currentModel, size: '512x512', response_format: 'b64_json' }),
-        });
-        if (!resp.ok) {
-            const errText = await resp.text().catch(() => 'Unknown error');
-            throw new Error(`Pollinations ${resp.status}: ${errText.substring(0, 300)}`);
+
+        const doRequest = async (modelName) => {
+            let resp;
+            try {
+                resp = await fetch(`/proxy/${targetUrl}`, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify({ prompt, model: modelName, size: '512x512', response_format: 'b64_json' }),
+                });
+                if (!resp.ok && resp.status === 404) {
+                    throw new Error('Proxy 404');
+                }
+            } catch (proxyError) {
+                console.warn(`[RPG Tracker] Pollinations proxy request failed for model ${modelName}, trying direct connection...`, proxyError);
+                const directHeaders = {
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Content-Type': 'application/json'
+                };
+                resp = await fetch(targetUrl, {
+                    method: 'POST',
+                    headers: directHeaders,
+                    body: JSON.stringify({ prompt, model: modelName, size: '512x512', response_format: 'b64_json' }),
+                });
+            }
+
+            if (!resp.ok) {
+                const errText = await resp.text().catch(() => 'Unknown error');
+                throw new Error(`Pollinations ${resp.status}: ${errText.substring(0, 300)}`);
+            }
+            const data = await resp.json();
+            const b64 = data?.data?.[0]?.b64_json;
+            if (!b64) throw new Error('No image data in API response');
+            return `data:image/png;base64,${b64}`;
+        };
+
+        try {
+            return await doRequest(currentModel);
+        } catch (err) {
+            console.warn(`[RPG Tracker] Generation failed for model "${currentModel}": ${err.message}. Trying fallback models...`);
+            
+            // If the custom model failed and it wasn't 'flux', try 'flux'
+            if (currentModel !== 'flux') {
+                try {
+                    return await doRequest('flux');
+                } catch (fallbackErr) {
+                    console.warn(`[RPG Tracker] Fallback to "flux" failed: ${fallbackErr.message}. Trying "turbo"...`);
+                }
+            }
+            
+            // Try 'turbo' (highly available SDXL model on Pollinations.ai)
+            try {
+                return await doRequest('turbo');
+            } catch (turboErr) {
+                throw new Error(`All model options failed. Original error: ${err.message}`);
+            }
         }
-        const data = await resp.json();
-        const b64 = data?.data?.[0]?.b64_json;
-        if (!b64) throw new Error('No image data in API response');
-        return `data:image/png;base64,${b64}`;
     }
 }
 
