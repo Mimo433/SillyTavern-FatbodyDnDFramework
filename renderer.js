@@ -881,7 +881,7 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                     // Currency detection map: pattern → { color, icon }
                     const CURRENCY_STYLES = [
                         { rx: /\b(gold|gp)\b/i,                               color: '#ffd700', icon: '💰' },
-                        { rx: /\b(dollar|usd|euro|eur|pound|gbp|£|\$|€)\b/i,  color: '#85bb65', icon: '💵' },
+                        { rx: /\b(dollar|usd|euro|eur|pound|gbp)s?\b|[$£€]/i,  color: '#85bb65', icon: '💵' },
                         { rx: /\b(silver|sp)\b/i,                              color: '#c0c0c0', icon: '🪙' },
                         { rx: /\b(bronze|copper|cp)\b/i,                       color: '#cd7f32', icon: '🪙' },
                     ];
@@ -925,7 +925,7 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                             totalCp += parseValueToCopper(cleanText);
                             const COIN_COLORS = [
                                 { rx: /\b(gold|gp)\b/i,                               color: '#ffd700' },
-                                { rx: /\b(dollar|usd|euro|eur|pound|gbp|£|\$|€)\b/i,  color: '#85bb65' },
+                                { rx: /\b(dollar|usd|euro|eur|pound|gbp)s?\b|[$£€]/i,  color: '#85bb65' },
                                 { rx: /\b(silver|sp)\b/i,                              color: '#c0c0c0' },
                                 { rx: /\b(bronze|copper|cp)\b/i,                       color: '#cd7f32' },
                             ];
