@@ -773,18 +773,66 @@ function wrapEntityHtml(entityName, contentHtml) {
 
                 const flushBullets = () => {
                     if (!pendingBullets.length) return;
+
+                    // Currency detection map: pattern → { color, icon }
+                    const CURRENCY_STYLES = [
+                        { rx: /\b(gold|gp)\b/i,                               color: '#ffd700', icon: '💰' },
+                        { rx: /\b(dollar|usd|euro|eur|pound|gbp|£|\$|€)\b/i,  color: '#85bb65', icon: '💵' },
+                        { rx: /\b(silver|sp)\b/i,                              color: '#c0c0c0', icon: '🪙' },
+                        { rx: /\b(bronze|copper|cp)\b/i,                       color: '#cd7f32', icon: '🪙' },
+                    ];
+
+                    // Bare currency item: a line that IS the currency (e.g. "45 GP", "💰 45 GP", "$500")
+                    // — no parenthesised worth annotation, just a number + currency unit
+                    const BARE_CURRENCY_RX = /^[^(]*?\d[\d,]*\s*(gp|sp|cp|gold|silver|bronze|copper|dollar|usd|euro|eur|pound|gbp|£|\$|€)\s*$/i;
+
+                    const worthMode = getSettings().inventoryWorthMode || 'hover'; // 'hover' | 'display'
+                    const worthRx = /\s*\(~([^)]+)\)\s*$|\s*\(Worth:\s*([^)]+)\)\s*$/i;
+
                     pendingBullets.forEach(i => {
-                        // Extract hidden worth: (~X GP), (~50 SP), (Worth: 120 GP), etc.
-                        const worthRx = /\s*\(~([^)]+)\)\s*$|\s*\(Worth:\s*([^)]+)\)\s*$/i;
                         const worthMatch = i.match(worthRx);
                         let displayText = i;
                         let titleAttr = '';
+                        let coinBadge = '';
+
                         if (worthMatch) {
+                            // Item has a (~X GP) or (Worth: X GP) annotation
                             const worthVal = (worthMatch[1] || worthMatch[2]).trim();
                             displayText = i.replace(worthRx, '').trim();
                             titleAttr = ` title="Worth: ${escapeHtml(worthVal)}"`;
+
+                            if (worthMode === 'display') {
+                                // Show coin badge inline next to item text
+                                const matched = CURRENCY_STYLES.find(s => s.rx.test(worthVal));
+                                if (matched) {
+                                    coinBadge = ` <span class="rt-coin-badge" style="color:${matched.color}; font-weight:bold; background:rgba(255,255,255,0.05); padding:1px 6px; border-radius:10px; border:1px solid ${matched.color}44; font-size:0.85em; margin-left:4px; white-space:nowrap;">${matched.icon} ${escapeHtml(worthVal)}</span>`;
+                                }
+                            }
+                            // In 'hover' mode: worth is tooltip only — no badge
+                            inventoryResults.push(`<div class="rt-card-item rt-inventory-item"${titleAttr}>${escapeHtmlWithColor(displayText)}${coinBadge}</div>`);
+                        } else if (BARE_CURRENCY_RX.test(i.trim())) {
+                            // This line IS a currency amount (e.g. "45 GP", "💰 45 GP")
+                            // Strip any leading bullet dash — safety guard (pendingBullets already strips it,
+                            // but comma-split path might not)
+                            const cleanText = i.trim().replace(/^\s*[-*]\s*/, '');
+                            const COIN_COLORS = [
+                                { rx: /\b(gold|gp)\b/i,                               color: '#ffd700' },
+                                { rx: /\b(dollar|usd|euro|eur|pound|gbp|£|\$|€)\b/i,  color: '#85bb65' },
+                                { rx: /\b(silver|sp)\b/i,                              color: '#c0c0c0' },
+                                { rx: /\b(bronze|copper|cp)\b/i,                       color: '#cd7f32' },
+                            ];
+                            const matchedCoin = COIN_COLORS.find(s => s.rx.test(cleanText));
+                            if (matchedCoin) {
+                                const c = matchedCoin.color;
+                                // Same outer wrapper as all other inventory items → keeps bullet • styling
+                                // Same badge style as display-mode worth badges → consistent shininess
+                                inventoryResults.push(`<div class="rt-card-item rt-inventory-item"><span class="rt-coin-badge" style="color:${c}; font-weight:bold; background:rgba(255,255,255,0.05); padding:1px 6px; border-radius:10px; border:1px solid ${c}44; font-size:0.85em; white-space:nowrap;">${escapeHtmlWithColor(cleanText)}</span></div>`);
+                            } else {
+                                inventoryResults.push(`<div class="rt-card-item rt-inventory-item">${escapeHtmlWithColor(cleanText)}</div>`);
+                            }
+                        } else {
+                            inventoryResults.push(`<div class="rt-card-item rt-inventory-item">${escapeHtmlWithColor(displayText)}</div>`);
                         }
-                        inventoryResults.push(`<div class="rt-card-item rt-inventory-item"${titleAttr}>${escapeHtmlWithColor(displayText)}</div>`);
                     });
                     pendingBullets.length = 0;
                 };

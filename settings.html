@@ -34,7 +34,26 @@
                                 title="Show portrait thumbnails on Character, Party, and Combat cards. Per-chat: each campaign retains its own portraits. Drag &amp; drop an image onto any portrait box, or click to paste a URL."></i>
                         </label>
 
+                        <div id="rpg_tracker_pollinations_group" style="margin-top: 2px; padding-left: 22px; margin-bottom: 6px;">
+                            <label style="font-size: 0.82em; opacity: 0.75; display: block; margin-bottom: 3px;">Pollinations API Key
+                                <i class="fa-solid fa-circle-question interactable"
+                                    title="Why Pollinations? Pollinations.ai was created to preserve free AI access. It is a non-profit project committed to remaining free forever. It offers generous hourly rate limits and only requires a GitHub account to get a permanent API key. Using budget models like ZImage, you can generate approximately 10–20 portraits per hour at no cost."></i>
+                            </label>
+                            <input id="rpg_tracker_pollinations_key" type="password" class="text_pole" placeholder="sk_… or pk_…" style="font-size: 0.85em;" />
+                            <div style="font-size: 0.72em; opacity: 0.5; margin-top: 2px;">
+                                Free key from <a href="https://enter.pollinations.ai/#keys" target="_blank" style="color: #7ec8e3;">enter.pollinations.ai</a> — a non-profit, forever-free AI image service. Only requires a GitHub account. ~10–20 portraits/hour with ZImage.
+                            </div>
+                        </div>
 
+                        <div style="margin-top: 6px; padding-left: 22px; margin-bottom: 2px; display: flex; align-items: center; gap: 8px;">
+                            <label style="font-size: 0.82em; opacity: 0.75; white-space: nowrap;">Item Worth
+                                <i class="fa-solid fa-circle-question interactable" title="Controls how item worth values (e.g. ~120 GP) are shown in Inventory. Hover: stripped from display, shown as a tooltip on hover. Display: shown as an inline coin badge next to the item. Bare currency items (e.g. '45 GP') always render as a coin badge regardless of this setting."></i>
+                            </label>
+                            <select id="rpg_tracker_inventory_worth_mode" class="text_pole" style="font-size: 0.82em; padding: 2px 4px; height: 24px; flex: 1;">
+                                <option value="hover">Hover (tooltip only)</option>
+                                <option value="display">Display (inline badge)</option>
+                            </select>
+                        </div>
 
                         <label class="checkbox_label" style="margin-top: 10px;">
                             <input id="rpg_tracker_custom_sysprompt" type="checkbox" />

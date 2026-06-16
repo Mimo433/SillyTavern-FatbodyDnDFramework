@@ -54,6 +54,9 @@ export function getSettings() {
         rngEnabled: true,
         diceFunctionTool: true,
         enablePortraits: true,
+        pollinationsApiKey: "",
+        pollinationsModel: "zimage",
+        inventoryWorthMode: "hover",   // 'hover' = worth shown as tooltip only | 'display' = coin badge shown inline
         barColors: {},
         modulePageSizes: {},
         customTheme: null,
