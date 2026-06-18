@@ -3579,7 +3579,7 @@ function createPanel() {
                             <span>Include hidden msgs (summarizer)</span>
                         </label>
 
-                        <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+                        <div style="display: flex; gap: 8px; margin-bottom: 10px; align-items: flex-end;">
                             <div style="flex: 1;" title="Max Turns: How many Thought/Action loops the agent can perform before timing out (Advanced Mode only).">
                                 <div style="margin-bottom: 5px; opacity: 0.8; font-size: 0.846em; color: var(--rt-text-muted);">Max Agent Turns:</div>
                                 <input type="text" inputmode="numeric" pattern="[0-9]*" id="rt-agent-router-max-turns" value="${settings.routerMaxTurns || 5}" style="width: 100%; background: var(--rt-card-bg); color: var(--rt-text); border: var(--rt-border); border-radius: 4px; padding: 4px; font-size: 0.846em; box-sizing: border-box;">
