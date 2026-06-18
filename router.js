@@ -577,7 +577,7 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
                                 },
                                 consolidate: {
                                     type: 'array',
-                                    description: 'Merge multiple entries of the SAME category into one (e.g. duplicate NPCs). Targets are deleted. Do NOT merge different categories (e.g. do NOT merge NPC into Quest). Do NOT merge distinct chronological events to reduce fragmentation.',
+                                    description: 'Merge multiple entries of the SAME category into one (e.g. duplicate NPCs). Targets are deleted. Do NOT merge different categories (e.g. do NOT merge NPC into Quest). Do NOT merge distinct chronological events to reduce fragmentation. Use rename in the same commit to give the survivor a new canonical label/keys after merging.',
                                     items: {
                                         type: 'object',
                                         properties: {
@@ -586,6 +586,19 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
                                             content:  { type: 'string', description: 'Merged content for survivor. You MUST compile and preserve all unique facts/details from the targets. Generic placeholders (e.g. "Merged data") are forbidden.' }
                                         },
                                         required: ['targets', 'survivor', 'content']
+                                    }
+                                },
+                                rename: {
+                                    type: 'array',
+                                    description: 'Change the display label and/or keyword list of an existing entry without modifying its content. Use when an entity is revealed, renamed, or destroyed, or to give a consolidation survivor a canonical label. Max 6 keywords per entry.',
+                                    items: {
+                                        type: 'object',
+                                        properties: {
+                                            id:    { type: 'string', description: 'Book::UID of the entry to rename.' },
+                                            label: { type: 'string', description: 'New display label. Omit to keep the current label.' },
+                                            keys:  { type: 'array', items: { type: 'string' }, description: 'Full replacement keyword list (max 6). Omit to keep current keywords.' }
+                                        },
+                                        required: ['id']
                                     }
                                 }
                             }
@@ -878,7 +891,7 @@ Thought: I see a new NPC named Barnaby in Khelt's Rust-Lantern District. I will 
                                 },
                                 consolidate: {
                                     type: 'array',
-                                    description: 'Merge multiple entries into one. All targets are deleted; the survivor gets the new content.',
+                                    description: 'Merge multiple entries into one. All targets are deleted; the survivor gets the new content. Use rename in the same commit to give the survivor a canonical label/keys after merging.',
                                     items: {
                                         type: 'object',
                                         properties: {
@@ -891,6 +904,19 @@ Thought: I see a new NPC named Barnaby in Khelt's Rust-Lantern District. I will 
                                             content:  { type: 'string', description: 'Full merged canonical content for the survivor.' }
                                         },
                                         required: ['targets', 'survivor', 'content']
+                                    }
+                                },
+                                rename: {
+                                    type: 'array',
+                                    description: 'Change the display label and/or keyword list of an existing entry without modifying its content. Use when an entity is revealed, renamed, or destroyed, or to give a consolidation survivor a canonical label. Max 6 keywords per entry — choose only the most essential trigger words.',
+                                    items: {
+                                        type: 'object',
+                                        properties: {
+                                            id:    { type: 'string', description: 'Book::UID of the entry to rename/rekey.' },
+                                            label: { type: 'string', description: 'New display label. Omit to keep the current label.' },
+                                            keys:  { type: 'array', items: { type: 'string' }, description: 'Full replacement keyword list (max 6). Replaces existing keywords entirely. Omit to keep current keywords.' }
+                                        },
+                                        required: ['id']
                                     }
                                 }
                             }
@@ -919,6 +945,7 @@ Campaign Root: "${prefix || 'World Archive'}"
   Locations -> "${prefix ? prefix + '_Locations' : 'Locations'}" (etc.)
 Location hierarchy: use " :: " separator in labels (e.g. "Khelt :: Rust-Lantern District :: The Guilded Anvil").
 Include the entity name/title itself (without timestamps like "[Day 1]") as a keyword, plus any ancestor location names (e.g. keys: ["The Guilded Anvil", "Khelt", "Rust-Lantern District", "tavern"]).
+**Keyword cap: maximum 6 per entry.** Keep only the most essential trigger words.
 
 ## FIELD INSTRUCTIONS
 ${Object.values(settings.routerModules || {}).filter(m => m.enabled).map(m => `- ${m.tag}: ${m.instruction}`).join('\n')}${(settings.routerCustomTags || []).length ? '\n\n### CUSTOM CATEGORIES\n' + (settings.routerCustomTags || []).map(m => `- ${m.tag.toUpperCase()}: ${m.instruction}`).join('\n') : ''}`;
@@ -948,10 +975,11 @@ Available actions:
 - grep_lore({"query": "..."}) ? search lorebooks for entries matching a keyword
 - inspect_book({"book_name": "..."}) ? list UIDs in a lorebook
 - read_entry({"uid": "Book::0"}) ? read full content of an entry
-- commit({"record": [...], "update": [...], "activate": [...], "deactivate": [...], "delete_ids": [...]}) ? write all changes and finish
+- commit({"record": [...], "update": [...], "rename": [...], "activate": [...], "deactivate": [...], "delete_ids": [...]}) ? write all changes and finish
 
 commit record items: {"label": "Name only (NO tag prefix)", "keys": ["kw1","kw2"], "content": "...", "category": "NPC|LOC|FAC|QUEST|EVENT"}
 commit update items: {"id": "Book::UID", "content": "new text to append"}
+commit rename items: {"id": "Book::UID", "label": "New Name (optional)", "keys": ["kw1","kw2"] (optional, max 6)}
 
 ## EXAMPLE
 Thought: I see a new faction called Iron Syndicate. I will record it.
@@ -1230,7 +1258,27 @@ async function applyAction(action, allBooks = {}, currentTime = '', breadcrumb =
         }
     }
 
-    // 2c. Consolidate (many-to-one merge with deletion)
+    // 2c. Rename (label and/or keyword list update — no content change)
+    const renameIds = [];
+    for (const rn of (action.rename || [])) {
+        if (!rn.id || !rn.id.includes('::')) {
+            errors.push(`Invalid rename ID format: ${rn.id}`);
+            continue;
+        }
+        const [bookName, uid] = rn.id.split('::');
+        const book = await ctx.loadWorldInfo(bookName);
+        if (book?.entries?.[uid]) {
+            if (rn.label !== undefined) book.entries[uid].comment = rn.label;
+            if (rn.keys  !== undefined) book.entries[uid].key = cleanKeys(rn.keys);
+            await ctx.saveWorldInfo(bookName, book);
+            renameIds.push(rn.id);
+            changed = true;
+        } else {
+            errors.push(`Rename target not found: ${rn.id}`);
+        }
+    }
+
+    // 2d. Consolidate (many-to-one merge with deletion)
     const consolidateIds = [];
     for (const op of (action.consolidate || [])) {
         // Update the survivor with merged content
@@ -1521,6 +1569,7 @@ async function applyAction(action, allBooks = {}, currentTime = '', breadcrumb =
             delete: deleteIds,
             rewrite: rewriteIds,
             consolidate: consolidateIds,
+            rename: renameIds,
             reason: action.reason || (settings.routerBasicMode ? "Tag-based update." : "Agent tool update.")
         });
         if (settings.routerLog.length > 50) settings.routerLog.length = 50;
@@ -2312,7 +2361,8 @@ export async function disableManagedEntries() {
  */
 function cleanKeys(keys) {
     if (!Array.isArray(keys)) return [];
-    return [...new Set(keys.map(k => k?.trim()).filter(Boolean))];
+    const unique = [...new Set(keys.map(k => k?.trim()).filter(Boolean))];
+    return unique.slice(0, 6); // Hard cap: max 6 keywords per entry to prevent keyword bloat
 }
 
 /**
