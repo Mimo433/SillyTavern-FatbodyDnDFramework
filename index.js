@@ -70,6 +70,9 @@ globalThis._rpgRenderRouterUI = () => { if (typeof renderRouterUI === 'function'
 let refreshAgentManifest = async () => { };
 globalThis._rpgRefreshAgentManifest = async () => { if (typeof refreshAgentManifest === 'function') await refreshAgentManifest(); };
 
+let updateAgentWorldStatusRef = null;
+let updateWorldProgressionLastFiredDisplayRef = null;
+
 /** Last lorebook /world sync diagnostics (JSON-serializable). */
 let _loreActivationDebugLast = /** @type {Record<string, any>|null} */ (null);
 
@@ -4380,6 +4383,7 @@ function createPanel() {
                     : 'font-size:0.692em; padding:1px 7px; border-radius:10px; font-weight:bold; cursor:pointer; user-select:none; background:rgba(255,255,255,0.06); color:rgba(255,255,255,0.35); border:1px solid rgba(255,255,255,0.1);';
             }
         }
+        updateAgentWorldStatusRef = updateAgentWorldStatus;
 
         // ── Agent World Interval input ──
         const worldIntervalInp = /** @type {HTMLInputElement|null} */ (agentPanel.querySelector('#rt-agent-world-interval'));
@@ -4388,6 +4392,10 @@ function createPanel() {
                 getSettings().worldProgressionIntervalHours = parseInt(worldIntervalInp.value) || 24;
                 saveSettings();
                 updateAgentWorldStatus();
+                $('#rpg_world_progression_interval').val(getSettings().worldProgressionIntervalHours);
+                if (typeof updateWorldProgressionLastFiredDisplayRef === 'function') {
+                    updateWorldProgressionLastFiredDisplayRef();
+                }
             });
         }
 
@@ -10222,12 +10230,18 @@ RULES:
             const intervalMinutes = intervalHours * 60;
             const nextMins = mins >= 0 ? mins + intervalMinutes : intervalMinutes;
             $wpNextReportVal.text(formatInWorldMinutes(nextMins));
+            if (typeof updateAgentWorldStatusRef === 'function') {
+                updateAgentWorldStatusRef();
+            }
         }
+        updateWorldProgressionLastFiredDisplayRef = updateWorldProgressionLastFiredDisplay;
 
         $wpEnabled.prop('checked', !!settings.worldProgressionEnabled).on('change', async function () {
             getSettings().worldProgressionEnabled = !!$(this).prop('checked');
             saveSettings();
-            updateAgentWorldStatus();
+            if (typeof updateAgentWorldStatusRef === 'function') {
+                updateAgentWorldStatusRef();
+            }
             if (_currentChatId) {
                 await syncCampaignPrefixAndWorldsForChat(_currentChatId, 'toggle-world-progression');
             }

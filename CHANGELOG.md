@@ -2,6 +2,12 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [3.6.2] - 2026-06-18
+
+### Fixed
+- **Settings Drawer Sync**: Corrected a ReferenceError that occurred when toggling "Enable World Progression" from the main Settings drawer. The settings change handler now correctly communicates with the Agent panel drawer via an established module-level reference.
+- **Bidirectional Value Synchronization**: Synchronized interval updates from the Agent panel drawer back to the settings page input field, ensuring that the last and next report times remain fully aligned across both views.
+
 ## [3.6.1] - 2026-06-18
 
 ### Added
