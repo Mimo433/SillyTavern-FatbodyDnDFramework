@@ -1875,7 +1875,8 @@
 /* ── Lorebook Agent panel: block flow in scroll area (all viewports; detached + desktop).
    .rpg-tracker-content defaults to flex column — as a flex item that breaks wrapped chip layout. */
 #rpg-tracker-agent .rpg-tracker-content {
-    display: block !important;
+    display: flex !important;
+    flex-direction: column !important;
     min-height: 0 !important;
     padding-bottom: 20px !important;
 }
