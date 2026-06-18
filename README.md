@@ -58,11 +58,12 @@ Together they solve the four core problems of LLM tabletop RP: the AI forgetting
 
 <div align="center">
   <figure>
-    <img width="1915" height="980" alt="Screenshot 2026-06-18 193647" src="https://github.com/user-attachments/assets/3593af7f-633b-4f78-a4a9-a99a4a692034" />
+    <img width="1918" height="982" alt="Screenshot 2026-06-18 195917" src="https://github.com/user-attachments/assets/a9778adb-8bdf-485e-ac96-973613321407" />
   </figure>
 </div>
 
 ---
+
 
 ## Installation
 
