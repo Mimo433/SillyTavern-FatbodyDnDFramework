@@ -472,9 +472,12 @@ Example: [[FAC: Iron Syndicate | ...]]  NOT  [[FAC: Khelt :: Iron Syndicate | ..
         }
     }
 
-    // Migrate NPC prompt to include appearance recording
-    if (s.routerModules?.npc?.instruction === 'Named characters. Do NOT create an entry for {{user}}. Mention {{user}} in EVENT or QUEST entries as needed.') {
-        s.routerModules.npc.instruction = DEFAULT_MODULES.npc.instruction;
+    // Migrate NPC prompt to include appearance recording (v3.5.2 one-time migration)
+    if (!s.settingsVersion || s.settingsVersion < '3.5.2') {
+        if (s.routerModules?.npc?.instruction === 'Named characters. Do NOT create an entry for {{user}}. Mention {{user}} in EVENT or QUEST entries as needed.') {
+            s.routerModules.npc.instruction = DEFAULT_MODULES.npc.instruction;
+        }
+        s.settingsVersion = '3.5.2';
     }
 
     // ── MIGRATION: Update system prompts with keywords instructions (v3.2.3+) ──────
