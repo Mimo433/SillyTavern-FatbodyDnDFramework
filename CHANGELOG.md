@@ -2,6 +2,11 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [3.5.2] - 2026-06-18
+
+### Changed
+- **Lorebook Agent NPC Prompt**: Updated the default NPC prompt instruction to require a short description of the NPC's appearance and vibe in a single sentence when recording them. Included automatic migration of existing configurations matching the legacy default.
+
 ## [3.5.1] - 2026-06-18
 
 ### Added

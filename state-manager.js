@@ -16,7 +16,7 @@ export const MODULE_NAME = 'rpg_tracker';
 
 // ── Default module definitions (single source of truth for reset logic) ─────────
 export const DEFAULT_MODULES = {
-    npc:   { enabled: true, tag: 'NPC',   format: 'Name | Description | Keywords',                    instruction: 'Named characters. Do NOT create an entry for {{user}}. Mention {{user}} in EVENT or QUEST entries as needed.' },
+    npc:   { enabled: true, tag: 'NPC',   format: 'Name | Description | Keywords',                    instruction: 'Named characters. Do NOT create an entry for {{user}}. Mention {{user}} in EVENT or QUEST entries as needed. When recording a new NPC, include a short description of their appearance and "vibe", in a single sentence.' },
     loc:   { enabled: true, tag: 'LOC',   format: 'Name | Description | Keywords',                    instruction: 'Named places. The Name MUST be the full hierarchical path using " :: " as the separator (e.g. "Khelt :: Rust-Lantern District :: Marrow-Deep Mines Office"). Include each ancestor name as a keyword (e.g. "Khelt, Rust-Lantern District, mines").' },
     fac:   { enabled: true, tag: 'FAC',   format: 'Name | Status | Description | Keywords',           instruction: 'Named factions, guilds, organisations. **Status**: short current-state line (standing with the party, active conflicts, what changed recently). **Description**: longer narrative (history, ideology, schemes, notable members). **Keywords**: comma-separated terms for discovery.' },
     quest: { enabled: true, tag: 'QUEST', format: 'Name | Location | Description | Keywords',         instruction: 'ONLY record a quest when the player explicitly accepts it. A quest being mentioned or offered is NOT enough.' },
@@ -470,6 +470,11 @@ Example: [[FAC: Iron Syndicate | ...]]  NOT  [[FAC: Khelt :: Iron Syndicate | ..
             ins = ins.replace(/\s{2,}/g, ' ').replace(/\.\s*\./g, '.').trim();
             s.routerModules.npc.instruction = ins;
         }
+    }
+
+    // Migrate NPC prompt to include appearance recording
+    if (s.routerModules?.npc?.instruction === 'Named characters. Do NOT create an entry for {{user}}. Mention {{user}} in EVENT or QUEST entries as needed.') {
+        s.routerModules.npc.instruction = DEFAULT_MODULES.npc.instruction;
     }
 
     // ── MIGRATION: Update system prompts with keywords instructions (v3.2.3+) ──────
