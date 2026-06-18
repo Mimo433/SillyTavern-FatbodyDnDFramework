@@ -3479,6 +3479,7 @@ function createPanel() {
                     <div class="rpg-tracker-status-indicator active" id="rpg-tracker-status"></div>
                     <button class="rpg-tracker-stop-btn" id="rpg-tracker-stop-btn" title="Stop Generation" style="display:none;">■</button>
                     <button class="rpg-tracker-icon-btn" id="rpg-tracker-chat-link-btn" style="font-size:13px;" title="Chat Link ON">🔗</button>
+                    <button class="rpg-tracker-icon-btn" id="rpg-tracker-agent-btn" title="Lorebook Agent">🤖</button>
                 </div>
                 <div class="rpg-tracker-header-center" id="rpg-tracker-pause-banner"></div>
                 <div class="rpg-tracker-header-right">
@@ -3488,7 +3489,6 @@ function createPanel() {
                     <button class="rpg-tracker-icon-btn" id="rpg-tracker-prompt-btn" title="Toggle direct prompt">💬</button>
                     <button class="rpg-tracker-icon-btn" id="rpg-tracker-view-btn" title="Toggle rendered view">⊞</button>
                     <button class="rpg-tracker-icon-btn" id="rpg-tracker-portraits-menu-btn" title="AI Portrait Actions">🖼️</button>
-                    <button class="rpg-tracker-icon-btn" id="rpg-tracker-agent-btn" title="Lorebook Agent">🤖</button>
                     <button class="rpg-tracker-icon-btn" id="rpg-tracker-debug-btn" title="Context Debugger" style="display:none;">🛠️</button>
                     <button class="rpg-tracker-icon-btn" id="rpg-tracker-collapse-btn" title="Collapse Panel"><i class="fa-solid ${settings.trackerCollapsed ? 'fa-chevron-down' : 'fa-chevron-up'}"></i></button>
                     <button class="rpg-tracker-icon-btn" id="rpg-tracker-close-btn" title="Hide panel">✕</button>
@@ -4000,9 +4000,19 @@ function createPanel() {
     // Assigned below when the agent panel is wired. Declared here so
     // nav handlers outside the wiring block can always call it safely.
     let refreshManifest = async (_source = 'uninitialized') => { };
+    let updateAgentBtnUI = () => { };
 
     if (agentBtn && agentPanel && agentCloseBtn) {
         const isAgentDetached = () => localStorage.getItem('rpg_tracker_agent_detached') === 'true';
+
+        updateAgentBtnUI = () => {
+            const isVisible = agentPanel.style.display !== 'none';
+            if (isVisible) {
+                agentBtn.classList.add('active');
+            } else {
+                agentBtn.classList.remove('active');
+            }
+        };
 
         agentBtn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -4038,12 +4048,14 @@ function createPanel() {
                     applyViewState();
                 }
             }
+            updateAgentBtnUI();
         });
         agentCloseBtn.addEventListener('click', () => {
             (/** @type {HTMLElement} */ (agentPanel)).style.display = 'none';
             if (!isAgentDetached()) {
                 applyViewState();
             }
+            updateAgentBtnUI();
         });
         const helpBtn = agentPanel.querySelector('#rt-agent-help-btn');
         if (helpBtn) {
@@ -5249,6 +5261,7 @@ function createPanel() {
                         applyViewState();
                     }
                 }
+                updateAgentBtnUI();
             };
 
             detachBtn.addEventListener('click', (e) => {
@@ -5486,6 +5499,9 @@ function createPanel() {
             rvEl.style.display = 'none';
             viewBtnEl.textContent = '⊞';
             viewBtnEl.title = 'Switch to Rendered view';
+        }
+        if (typeof updateAgentBtnUI === 'function') {
+            updateAgentBtnUI();
         }
     }
 

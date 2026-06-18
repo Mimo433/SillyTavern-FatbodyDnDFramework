@@ -422,6 +422,12 @@
     background: var(--rt-accent-bg);
 }
 
+.rpg-tracker-icon-btn.active {
+    color: var(--rt-accent);
+    background: var(--rt-accent-bg);
+    box-shadow: inset 0 0 0 1px var(--rt-accent-dim);
+}
+
 .rpg-tracker-content {
     flex: 1;
     display: flex;

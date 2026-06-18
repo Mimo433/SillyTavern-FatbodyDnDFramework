@@ -2,6 +2,12 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [3.5.6] - 2026-06-18
+
+### Changed
+- **Lorebook Agent Header Navigation**: Moved the Lorebook Agent button to the header-left group (next to Chat Link) for better layout consistency and prominence.
+- **Lorebook Agent Active Highlight**: Added a persistent active styling highlight/border glow to the Lorebook Agent button when the agent panel is visible.
+
 ## [3.5.5] - 2026-06-18
 
 ### Changed
