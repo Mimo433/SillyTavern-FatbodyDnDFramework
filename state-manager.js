@@ -544,12 +544,6 @@ Example: [[FAC: Iron Syndicate | ...]]  NOT  [[FAC: Khelt :: Iron Syndicate | ..
         s.stockPrompts.inventory = DEFAULT_STOCK_PROMPTS.inventory;
     }
 
-    // ── MIGRATION: INVENTORY prompt → [E] equipped tag + slot list (v3.7.4) ──────
-    if (s.stockPrompts?.inventory &&
-        s.stockPrompts.inventory.includes('Gear:') &&
-        !s.stockPrompts.inventory.includes('[E]')) {
-        s.stockPrompts.inventory = DEFAULT_STOCK_PROMPTS.inventory;
-    }
 
     return extensionSettings[MODULE_NAME];
 }

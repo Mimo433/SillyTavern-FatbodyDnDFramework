@@ -5328,6 +5328,7 @@ function createPanel() {
             });
         };
         renderAgentModules();
+        globalThis._rpgRenderAgentModules = renderAgentModules;
 
         const renderAgentCustomTags = () => {
             const s = getSettings();
@@ -7664,9 +7665,9 @@ function buildSysprompt(rawText) {
 
         const settings = getSettings();
 
-        // --- Automatic Prompt Update on Version Change ---
+        // --- Version Upgrade Prompt Reset Dialog ---
         {
-            let currentVersion = '3.6.4'; // Fallback
+            let currentVersion = '3.7.3'; // Fallback
             try {
                 const manifestUrl = new URL('./manifest.json', import.meta.url);
                 const response = await fetch(manifestUrl);
@@ -7678,39 +7679,285 @@ function buildSysprompt(rawText) {
                 console.warn('[RPG Tracker] Could not fetch manifest.json for version check', e);
             }
 
-            if (settings.lastResetVersion !== currentVersion) {
-                const { extensionSettings } = SillyTavern.getContext();
-                if (extensionSettings[MODULE_NAME]) {
-                    delete extensionSettings[MODULE_NAME].routerSystemPromptTemplate;
-                    delete extensionSettings[MODULE_NAME].routerModularPromptTemplate;
-                }
-                const fresh = getSettings();
-                fresh.lastResetVersion = currentVersion;
+            if (!settings.lastResetVersion) {
+                // Fresh install - set version silently
+                settings.lastResetVersion = currentVersion;
                 saveSettings();
+            } else if (settings.lastResetVersion !== currentVersion) {
+                if (settings.autoResetPromptsOnUpdate) {
+                    // Silently reset everything automatically
+                    (async () => {
+                        const { extensionSettings } = SillyTavern.getContext();
+                        const fresh = getSettings();
 
-                // If textareas are in DOM, sync their values
-                const $promptEl = $('#rpg_tracker_router_prompt');
-                if ($promptEl.length) {
-                    $promptEl.val(fresh.routerSystemPromptTemplate).trigger('input');
-                    if (typeof (/** @type {any} */ ($promptEl)).trigger === 'function') {
-                        (/** @type {any} */ ($promptEl)).trigger('autosize.resize');
+                        // 1. Main System Prompt
+                        fresh.customSysprompt = false;
+                        const customSyspromptCb = document.getElementById('rpg_tracker_custom_sysprompt');
+                        if (customSyspromptCb) {
+                            customSyspromptCb.checked = false;
+                            const narratorConfigBlock = document.getElementById('rpg_narrator_config_block');
+                            if (narratorConfigBlock) narratorConfigBlock.style.display = '';
+                        }
+                        await autoApplySysprompt();
+
+                        // 2. State Tracker
+                        if (extensionSettings[MODULE_NAME]) {
+                            delete extensionSettings[MODULE_NAME].systemPromptTemplate;
+                        }
+                        const sTempTracker = getSettings();
+                        sTempTracker.stockPrompts = JSON.parse(JSON.stringify(DEFAULT_STOCK_PROMPTS));
+                        const $corePromptEl = $('#rpg_tracker_core_prompt');
+                        if ($corePromptEl.length) {
+                            $corePromptEl.val(sTempTracker.systemPromptTemplate);
+                        }
+                        if (typeof refreshOrderList === 'function') refreshOrderList();
+
+                        // 3. Lorebook Agent
+                        if (extensionSettings[MODULE_NAME]) {
+                            delete extensionSettings[MODULE_NAME].routerSystemPromptTemplate;
+                            delete extensionSettings[MODULE_NAME].routerModularPromptTemplate;
+                        }
+                        for (const [id, def] of Object.entries(DEFAULT_MODULES)) {
+                            if (fresh.routerModules && fresh.routerModules[id]) {
+                                fresh.routerModules[id].instruction = def.instruction;
+                                fresh.routerModules[id].format = def.format;
+                            }
+                        }
+                        if (typeof globalThis._rpgRenderAgentModules === 'function') {
+                            globalThis._rpgRenderAgentModules();
+                        }
+                        const sTemp = getSettings();
+                        const $promptEl = $('#rpg_tracker_router_prompt');
+                        if ($promptEl.length) {
+                            $promptEl.val(sTemp.routerSystemPromptTemplate).trigger('input');
+                            if (typeof (/** @type {any} */ ($promptEl)).trigger === 'function') {
+                                (/** @type {any} */ ($promptEl)).trigger('autosize.resize');
+                            }
+                        }
+                        const $modularEl = $('#rpg_tracker_router_modular_prompt');
+                        if ($modularEl.length) {
+                            $modularEl.val(sTemp.routerModularPromptTemplate).trigger('input');
+                            if (typeof (/** @type {any} */ ($modularEl)).trigger === 'function') {
+                                (/** @type {any} */ ($modularEl)).trigger('autosize.resize');
+                            }
+                        }
+
+                        // 4. World Progression
+                        if (extensionSettings[MODULE_NAME]) {
+                            delete extensionSettings[MODULE_NAME].worldProgressionSystemPrompt;
+                            delete extensionSettings[MODULE_NAME].worldProgressionSkeletonSystemPrompt;
+                        }
+                        const $wpPromptEl = $('#rpg_world_progression_system_prompt');
+                        if ($wpPromptEl.length) {
+                            $wpPromptEl.val(sTemp.worldProgressionSystemPrompt).trigger('input');
+                        }
+                        const $wpSkelPromptEl = $('#rpg_world_progression_skeleton_system_prompt');
+                        if ($wpSkelPromptEl.length) {
+                            $wpSkelPromptEl.val(sTemp.worldProgressionSkeletonSystemPrompt).trigger('input');
+                        }
+
+                        fresh.lastResetVersion = currentVersion;
+                        saveSettings();
+                        toastr['info'](`Prompts auto-updated to version ${currentVersion} defaults.`, 'RPG Tracker');
+                        console.log(`[RPG Tracker] Automatically reset all prompts to defaults for version ${currentVersion}.`);
+                    })();
+                } else {
+                    const { Popup } = SillyTavern.getContext();
+                    if (Popup && Popup.show && Popup.show.confirm) {
+                        // Run asynchronously so main extension init/loading is not blocked
+                        (async () => {
+                            // Wait a short moment for the UI to be fully drawn
+                            await sleepMs(500);
+
+                            const popupHtml = `
+                                <div style="display:flex; flex-direction:column; gap:12px; text-align:left; font-size:13px; line-height:1.4; width:100%; box-sizing:border-box;">
+                                    <div>A new version of <b>Multihog D&D Framework</b> has been installed (v<b>${escapeHtml(currentVersion)}</b>).</div>
+                                    <div>Would you like to reset your custom prompts to the latest default versions? Select the prompts you wish to reset/update:</div>
+                                    <div style="margin-left: 10px; display:flex; flex-direction:column; gap:8px; background: rgba(0,0,0,0.15); padding: 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.05);">
+                                        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; user-select:none; margin: 0;">
+                                            <input type="checkbox" id="rt-reset-sysprompt" checked style="cursor:pointer;">
+                                            <span>Main System Prompt</span>
+                                        </label>
+                                        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; user-select:none; margin: 0;">
+                                            <input type="checkbox" id="rt-reset-tracker" checked style="cursor:pointer;">
+                                            <span>State Tracker Prompts</span>
+                                        </label>
+                                        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; user-select:none; margin: 0;">
+                                            <input type="checkbox" id="rt-reset-lorebook" checked style="cursor:pointer;">
+                                            <span>Lorebook Agent Prompts</span>
+                                        </label>
+                                        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; user-select:none; margin: 0;">
+                                            <input type="checkbox" id="rt-reset-world" checked style="cursor:pointer;">
+                                            <span>World Progression Prompts</span>
+                                        </label>
+                                    </div>
+                                    <hr style="border:0; border-top:1px solid rgba(255,255,255,0.1); margin: 2px 0;">
+                                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer; user-select:none; font-weight:bold; margin: 0;">
+                                        <input type="checkbox" id="rt-reset-all" checked style="cursor:pointer;">
+                                        <span>Reset/Update All</span>
+                                    </label>
+                                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer; user-select:none; margin: 0; opacity: 0.85;">
+                                        <input type="checkbox" id="rt-reset-always-auto" style="cursor:pointer;">
+                                        <span>Always update everything automatically / Don't ask again</span>
+                                    </label>
+                                </div>
+                            `;
+
+                            // Synchronize checkbox toggles in the DOM
+                            let sysReset = true;
+                            let trackerReset = true;
+                            let loreReset = true;
+                            let worldReset = true;
+                            let alwaysAuto = false;
+
+                            setTimeout(() => {
+                                const allCb = document.getElementById('rt-reset-all');
+                                const sysCb = document.getElementById('rt-reset-sysprompt');
+                                const trackerCb = document.getElementById('rt-reset-tracker');
+                                const loreCb = document.getElementById('rt-reset-lorebook');
+                                const worldCb = document.getElementById('rt-reset-world');
+                                const alwaysCb = document.getElementById('rt-reset-always-auto');
+                                const cbs = [sysCb, trackerCb, loreCb, worldCb];
+
+                                if (sysCb) sysCb.addEventListener('change', () => { sysReset = sysCb.checked; });
+                                if (trackerCb) trackerCb.addEventListener('change', () => { trackerReset = trackerCb.checked; });
+                                if (loreCb) loreCb.addEventListener('change', () => { loreReset = loreCb.checked; });
+                                if (worldCb) worldCb.addEventListener('change', () => { worldReset = worldCb.checked; });
+                                if (alwaysCb) alwaysCb.addEventListener('change', () => { alwaysAuto = alwaysCb.checked; });
+
+                                if (allCb) {
+                                    allCb.addEventListener('change', () => {
+                                        const val = allCb.checked;
+                                        cbs.forEach(cb => { if (cb) cb.checked = val; });
+                                        sysReset = val;
+                                        trackerReset = val;
+                                        loreReset = val;
+                                        worldReset = val;
+                                    });
+                                }
+
+                                cbs.forEach(cb => {
+                                    if (cb) {
+                                        cb.addEventListener('change', () => {
+                                            if (allCb) {
+                                                allCb.checked = cbs.every(c => c && c.checked);
+                                            }
+                                        });
+                                    }
+                                });
+                            }, 150);
+
+                            const confirmResult = await Popup.show.confirm('✨ RPG Tracker Update', popupHtml, {
+                                okButton: 'Yes (Reset Selected)',
+                                cancelButton: 'No (Keep Custom)'
+                            });
+
+                            const fresh = getSettings();
+                            if (alwaysAuto) {
+                                fresh.autoResetPromptsOnUpdate = true;
+                                const stCb = document.getElementById('rpg_tracker_auto_reset_prompts');
+                                if (stCb) stCb.checked = true;
+                            }
+
+                            if (confirmResult) {
+                                let resetCount = 0;
+
+                                const { extensionSettings } = SillyTavern.getContext();
+
+                                if (sysReset) {
+                                    fresh.customSysprompt = false;
+                                    const customSyspromptCb = document.getElementById('rpg_tracker_custom_sysprompt');
+                                    if (customSyspromptCb) {
+                                        customSyspromptCb.checked = false;
+                                        const narratorConfigBlock = document.getElementById('rpg_narrator_config_block');
+                                        if (narratorConfigBlock) narratorConfigBlock.style.display = '';
+                                    }
+                                    await autoApplySysprompt();
+                                    resetCount++;
+                                    console.log('[RPG Tracker] Main system prompt reset to defaults.');
+                                }
+
+                                if (trackerReset) {
+                                    if (extensionSettings[MODULE_NAME]) {
+                                        delete extensionSettings[MODULE_NAME].systemPromptTemplate;
+                                    }
+                                    const sTempTracker = getSettings();
+                                    sTempTracker.stockPrompts = JSON.parse(JSON.stringify(DEFAULT_STOCK_PROMPTS));
+                                    const $corePromptEl = $('#rpg_tracker_core_prompt');
+                                    if ($corePromptEl.length) {
+                                        $corePromptEl.val(sTempTracker.systemPromptTemplate);
+                                    }
+                                    if (typeof refreshOrderList === 'function') refreshOrderList();
+                                    resetCount++;
+                                    console.log('[RPG Tracker] State tracker prompts reset to defaults.');
+                                }
+
+                                if (loreReset) {
+                                    if (extensionSettings[MODULE_NAME]) {
+                                        delete extensionSettings[MODULE_NAME].routerSystemPromptTemplate;
+                                        delete extensionSettings[MODULE_NAME].routerModularPromptTemplate;
+                                    }
+                                    for (const [id, def] of Object.entries(DEFAULT_MODULES)) {
+                                        if (fresh.routerModules && fresh.routerModules[id]) {
+                                            fresh.routerModules[id].instruction = def.instruction;
+                                            fresh.routerModules[id].format = def.format;
+                                        }
+                                    }
+                                    if (typeof globalThis._rpgRenderAgentModules === 'function') {
+                                        globalThis._rpgRenderAgentModules();
+                                    }
+                                    const sTemp = getSettings();
+                                    const $promptEl = $('#rpg_tracker_router_prompt');
+                                    if ($promptEl.length) {
+                                        $promptEl.val(sTemp.routerSystemPromptTemplate).trigger('input');
+                                        if (typeof (/** @type {any} */ ($promptEl)).trigger === 'function') {
+                                            (/** @type {any} */ ($promptEl)).trigger('autosize.resize');
+                                        }
+                                    }
+                                    const $modularEl = $('#rpg_tracker_router_modular_prompt');
+                                    if ($modularEl.length) {
+                                        $modularEl.val(sTemp.routerModularPromptTemplate).trigger('input');
+                                        if (typeof (/** @type {any} */ ($modularEl)).trigger === 'function') {
+                                            (/** @type {any} */ ($modularEl)).trigger('autosize.resize');
+                                        }
+                                    }
+                                    resetCount++;
+                                    console.log('[RPG Tracker] Lorebook Agent prompts reset to defaults.');
+                                }
+
+                                if (worldReset) {
+                                    if (extensionSettings[MODULE_NAME]) {
+                                        delete extensionSettings[MODULE_NAME].worldProgressionSystemPrompt;
+                                        delete extensionSettings[MODULE_NAME].worldProgressionSkeletonSystemPrompt;
+                                    }
+                                    const sTemp = getSettings();
+                                    const $wpPromptEl = $('#rpg_world_progression_system_prompt');
+                                    if ($wpPromptEl.length) {
+                                        $wpPromptEl.val(sTemp.worldProgressionSystemPrompt).trigger('input');
+                                    }
+                                    const $wpSkelPromptEl = $('#rpg_world_progression_skeleton_system_prompt');
+                                    if ($wpSkelPromptEl.length) {
+                                        $wpSkelPromptEl.val(sTemp.worldProgressionSkeletonSystemPrompt).trigger('input');
+                                    }
+                                    resetCount++;
+                                    console.log('[RPG Tracker] World progression prompts reset to defaults.');
+                                }
+
+                                fresh.lastResetVersion = currentVersion;
+                                saveSettings();
+
+                                if (resetCount > 0) {
+                                    toastr['success'](`Successfully reset ${resetCount} prompt category/categories to defaults.`, 'RPG Tracker');
+                                } else {
+                                    toastr['info']('No prompts were selected for reset.', 'RPG Tracker');
+                                }
+                            } else {
+                                fresh.lastResetVersion = currentVersion;
+                                saveSettings();
+                                toastr['info']('Custom prompts kept intact.', 'RPG Tracker');
+                            }
+                        })();
                     }
-                }
-                const $modularEl = $('#rpg_tracker_router_modular_prompt');
-                if ($modularEl.length) {
-                    $modularEl.val(fresh.routerModularPromptTemplate).trigger('input');
-                    if (typeof (/** @type {any} */ ($modularEl)).trigger === 'function') {
-                        (/** @type {any} */ ($modularEl)).trigger('autosize.resize');
-                    }
-                }
-
-                console.log(`[RPG Tracker] Automatically reset Lorebook Agent prompts to defaults for version ${currentVersion}.`);
-                toastr['info'](`Lorebook Agent prompts have been updated to the latest version (${currentVersion}) defaults.`, 'RPG Tracker');
-
-                if (!fresh.customSysprompt) {
-                    await autoApplySysprompt();
-                    console.log(`[RPG Tracker] Automatically updated system prompt to version ${currentVersion} defaults.`);
-                    toastr['info'](`Main system prompt has been updated and reapplied.`, 'RPG Tracker');
                 }
             }
         }
@@ -7798,6 +8045,10 @@ function buildSysprompt(rawText) {
 
         $('#rpg_tracker_debug').prop('checked', settings.debugMode).on('change', function () {
             settings.debugMode = !!$(this).prop('checked');
+            saveSettings();
+        });
+        $('#rpg_tracker_auto_reset_prompts').prop('checked', !!settings.autoResetPromptsOnUpdate).on('change', function () {
+            settings.autoResetPromptsOnUpdate = !!$(this).prop('checked');
             saveSettings();
         });
 

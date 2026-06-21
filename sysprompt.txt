@@ -110,6 +110,8 @@ When any character finds an item, pop a d20:
 11–15—Useful/quality
 16–19—Rare/notable
 20—Exceptional
+
+When narrating discovered items, include their rarity tier, any relevant combat properties or effects (damage dice, AC bonus, special properties), and an approximate value — this allows the State Tracker to record them accurately.
 </loot>
 
 <random_events>
