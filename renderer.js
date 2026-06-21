@@ -596,7 +596,12 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
 }
 
     export function blockToItems(tag, content, renderTypeOverride = null) {
-        const lines = content.split('\n').map(l => l.trim()).filter(Boolean);
+        const rawLines = content.split('\n').map(l => l.trim()).filter(Boolean);
+        const lines = rawLines.map(line => {
+            // Strip leading bullet markers (-, *, +, •, en-dash, em-dash)
+            // but only if followed by space(s) or a letter (prevents stripping negative numbers like -5)
+            return line.replace(/^\s*[-*+•–—](?:\s+|(?=[A-Za-z]))/, '');
+        });
         let renderType = renderTypeOverride || tag;
         const customField = (getSettings().customFields || []).find(f => f.tag.toUpperCase() === tag);
         if (!renderTypeOverride && customField && customField.renderType) {
