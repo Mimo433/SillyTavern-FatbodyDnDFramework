@@ -1876,10 +1876,17 @@ function updatePanelStatus() {
     const sidebarEnableCheck = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_tracker_enabled'));
     if (sidebarEnableCheck) sidebarEnableCheck.checked = !!settings.enabled;
 
+    const agentPanels = document.querySelectorAll('.rpg-tracker-agent-panel');
+
     if (!settings.enabled) {
         // Fully disabled — transparent panel, no banner
         panel.classList.add('is-disabled');
         panel.classList.remove('is-paused');
+        agentPanels.forEach(ap => {
+            ap.classList.add('is-disabled');
+            const header = ap.querySelector('.rpg-tracker-header');
+            if (header) /** @type {HTMLElement} */ (header).style.pointerEvents = 'auto';
+        });
         indicator.classList.remove('active');
         // Always keep the header clickable so the user can re-enable (belt-and-suspenders over the CSS rule)
         const header = panel.querySelector('.rpg-tracker-header');
@@ -1891,6 +1898,9 @@ function updatePanelStatus() {
         // Paused — visible panel, pause banner shown
         panel.classList.remove('is-disabled');
         panel.classList.add('is-paused');
+        agentPanels.forEach(ap => {
+            ap.classList.remove('is-disabled');
+        });
         indicator.classList.add('active');
         pauseBtn.textContent = '▶';
         pauseBtn.title = 'Resume Tracker';
@@ -1899,6 +1909,9 @@ function updatePanelStatus() {
         // Active
         panel.classList.remove('is-disabled');
         panel.classList.remove('is-paused');
+        agentPanels.forEach(ap => {
+            ap.classList.remove('is-disabled');
+        });
         indicator.classList.add('active');
         pauseBtn.textContent = '⏸';
         pauseBtn.title = 'Pause Tracker';
@@ -8801,6 +8814,7 @@ function buildSysprompt(rawText) {
                 dp.className = dp.classList.contains('rpg-tracker-agent-panel')
                     ? `rpg-tracker-panel rpg-tracker-agent-panel ${isCollapsed ? 'rt-panel-collapsed ' : ''}${newTheme}`
                     : `rpg-tracker-panel rpg-tracker-detached-panel ${isCollapsed ? 'rt-panel-collapsed ' : ''}${newTheme}`;
+                if (!settings.enabled) dp.classList.add('is-disabled');
             });
         });
 
