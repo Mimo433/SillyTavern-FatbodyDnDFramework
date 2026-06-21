@@ -7667,7 +7667,7 @@ function buildSysprompt(rawText) {
 
         // --- Version Upgrade Prompt Reset Dialog ---
         {
-            let currentVersion = '3.7.6'; // Fallback
+            let currentVersion = '3.7.9'; // Fallback
             try {
                 const manifestUrl = new URL('./manifest.json', import.meta.url);
                 const response = await fetch(manifestUrl);
@@ -7847,7 +7847,7 @@ function buildSysprompt(rawText) {
                                 });
                             }, 150);
 
-                            const confirmResult = await Popup.show.confirm('✨ RPG Tracker Update', popupHtml, {
+                            const confirmResult = await Popup.show.confirm('✨ Multihog D&D Framework Update', popupHtml, {
                                 okButton: 'Yes (Reset Selected)',
                                 cancelButton: 'No (Keep Custom)'
                             });
