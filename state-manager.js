@@ -402,6 +402,7 @@ Example: [[FAC: Iron Syndicate | ...]]  NOT  [[FAC: Khelt :: Iron Syndicate | ..
         worldOpenaiModel: "",
         lastResetVersion: "",
         autoResetPromptsOnUpdate: false,
+        syspromptLayoutVersion: 2,
     };
 
     if (!extensionSettings[MODULE_NAME]) {
