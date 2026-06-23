@@ -2,6 +2,18 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [3.10.0] - 2026-06-23
+
+NPCs V2.
+
+**Revamped NPC AI Prompts**: The underlying instructions driving NPC generation have been rebuilt from the ground up to ensure the AI adheres strictly to your new token budgets and concisely captures the character's essence without purple prose.
+
+**Revamped NPC Pop Up menu**: The underlying instructions driving NPC generation have been rebuilt from the ground up to ensure the AI adheres strictly to your new token budgets and concisely captures the character's essence without purple prose.
+
+**Add NPC from Character Card (Experimental feature, disabled by default)**: A simple converter that allows inserting any character card you have on your SillyTavern folder into an on-going campaign, with an option to use AI to better fit it into the story. It's disabled by default because letting the Lorebook Agent create genuine NPCs is recommended over this, but is there in case you *really* want to see a card you like in the Multihog framework.
+
+**AI Portrait Generation**: High-quality AI portrait generation is now seamlessly integrated! Instantly generate visual representations of your NPCs and characters to bring your campaign to life.
+
 ## [3.8.1] - 2026-06-23
 
 ### Fixed

@@ -14,9 +14,28 @@ import { DEFAULT_STOCK_PROMPTS, BLOCK_ORDER } from './constants.js';
 // ── Module name (shared constant, settings key) ────────────────────────────────
 export const MODULE_NAME = 'rpg_tracker';
 
+/**
+ * Builds the NPC instruction string based on current NPC settings.
+ * @param {boolean} includeRelationships
+ * @param {number} majorTokens
+ * @param {number} minorTokens
+ * @returns {string}
+ */
+export function buildNpcInstruction(includeRelationships = false, majorTokens = 125, minorTokens = 100) {
+    let instruction = 'Named characters the party interacts with. Do NOT create an entry for {{user}}. Mention {{user}} in EVENT or QUEST entries as needed.\n\nIMPORTANT: The Description field inside the [[ ]] tags must contain ALL of the following structured sections. Do NOT place any content outside the tags. Everything goes inside the Description pipe.\n\nAppearance: Key visual identifiers only \u2014 race, build, most distinctive feature, weapon/armor if relevant.\nPersonality: Core temperament and primary motivation in a few words.\nBrief Background: Role in the world, why they matter to the story.\nHabits/Behaviors: One or two defining behaviors or combat tendencies.\nRelationship with {{user}}: Current standing and attitude.';
+    
+    if (includeRelationships) {
+        instruction += '\nFriendship/Rapport: 0/100\nAffection/Interest: 0/100\n\nThe Friendship and Affection values CAN be negative (e.g. -45/100) representing hostility or disgust. Range: -100 to 100. Start new NPCs at 0/100 for both. Update as interactions warrant.';
+    }
+
+    instruction += `\n\nBe concise and functional \u2014 every word should serve gameplay or characterization. Avoid adjective dumps and purple prose.\n\n[TOKEN LIMITS]\nMajor NPCs (recurring, plot-important): no more than ${majorTokens} tokens.\nMinor NPCs (shopkeepers, guards, one-off encounters): no more than ${minorTokens} tokens \u2014 use only Appearance and Personality for minor NPCs, skip other sections.`;
+    return instruction;
+}
+
+
 // ── Default module definitions (single source of truth for reset logic) ─────────
 export const DEFAULT_MODULES = {
-    npc:   { enabled: true, tag: 'NPC',   format: 'Name | Description | Keywords',                    instruction: 'Named characters. Do NOT create an entry for {{user}}. Mention {{user}} in EVENT or QUEST entries as needed. When recording a new NPC, include a short description of their appearance and "vibe", in a single sentence.' },
+    npc:   { enabled: true, tag: 'NPC',   format: 'Name | Description | Keywords',                    instruction: buildNpcInstruction(false) },
     loc:   { enabled: true, tag: 'LOC',   format: 'Name | Description | Keywords',                    instruction: 'Named places. The Name MUST be the full hierarchical path using " :: " as the separator (e.g. "Khelt :: Rust-Lantern District :: Marrow-Deep Mines Office"). Include each ancestor name as a keyword (e.g. "Khelt, Rust-Lantern District, mines").' },
     fac:   { enabled: true, tag: 'FAC',   format: 'Name | Status | Description | Keywords',           instruction: 'Named factions, guilds, organisations. **Status**: short current-state line (standing with the party, active conflicts, what changed recently). **Description**: longer narrative (history, ideology, schemes, notable members). **Keywords**: comma-separated terms for discovery.' },
     quest: { enabled: true, tag: 'QUEST', format: 'Name | Location | Description | Keywords',         instruction: 'ONLY record a quest if the tag [QUEST ACCEPTED] is outputted in the narrative. A quest being mentioned or offered is NOT enough.' },
@@ -66,6 +85,10 @@ export function getSettings() {
         pollinationsModel: "zimage",
         inventoryWorthMode: "hover",   // 'hover' = worth shown as tooltip only | 'display' = coin badge shown inline
         showTotalInventoryValue: true,
+        npcMajorTokens: 125,
+        npcMinorTokens: 100,
+        npcRelationshipBars: false,
+        experimentalNpcImport: false,
         barColors: {},
         modulePageSizes: {},
         customTheme: null,
@@ -490,6 +513,57 @@ Example: [[FAC: Iron Syndicate | ...]]  NOT  [[FAC: Khelt :: Iron Syndicate | ..
         }
         s.settingsVersion = '3.5.2';
     }
+
+    // Migrate NPC prompt to include Friendship/Affection relationship tracking (v3.6.0)
+    if (!s.settingsVersion || s.settingsVersion < '3.6.0') {
+        if (s.routerModules?.npc?.instruction && typeof s.routerModules.npc.instruction === 'string') {
+            const ins = s.routerModules.npc.instruction;
+            // Only migrate if it doesn't already mention Friendship/Rapport
+            if (!ins.includes('Friendship/Rapport')) {
+                s.routerModules.npc.instruction = ins.trimEnd() + ' At the end of every NPC entry, always include these two relationship metrics on separate lines:\nFriendship/Rapport: 0/100\nAffection/Interest: 0/100\nThese values CAN be negative (e.g., -45/100) representing hostility or disgust. Range: -100 to 100. Start new NPCs at 0/100 for both. Update as interactions warrant.';
+            }
+        }
+        s.settingsVersion = '3.6.0';
+    }
+
+    // Migrate NPC prompt to structured sections format (v3.7.0)
+    if (!s.settingsVersion || s.settingsVersion < '3.7.0') {
+        if (s.routerModules?.npc?.instruction && typeof s.routerModules.npc.instruction === 'string') {
+            // Replace wholesale — the new format is significantly different
+            s.routerModules.npc.instruction = DEFAULT_MODULES.npc.instruction;
+        }
+        s.settingsVersion = '3.7.0';
+    }
+
+    // Migrate NPC prompt — fix sections-outside-tags issue + remove sentence counts (v3.8.0)
+    if (!s.settingsVersion || s.settingsVersion < '3.8.0') {
+        if (s.routerModules?.npc?.instruction && typeof s.routerModules.npc.instruction === 'string') {
+            s.routerModules.npc.instruction = DEFAULT_MODULES.npc.instruction;
+        }
+        s.settingsVersion = '3.8.0';
+    }
+
+    // Migrate NPC prompt — tighter token defaults + conciseness emphasis (v3.9.0)
+    if (!s.settingsVersion || s.settingsVersion < '3.9.0') {
+        if (s.routerModules?.npc?.instruction && typeof s.routerModules.npc.instruction === 'string') {
+            s.routerModules.npc.instruction = DEFAULT_MODULES.npc.instruction;
+        }
+        s.settingsVersion = '3.9.0';
+    }
+
+    // Migrate NPC prompt — relationship bars off by default + settings-driven instruction (v3.10.0)
+    if (!s.settingsVersion || s.settingsVersion < '3.10.0') {
+        // Ensure NPC settings exist with defaults
+        if (s.npcMajorTokens === undefined) s.npcMajorTokens = 125;
+        if (s.npcMinorTokens === undefined) s.npcMinorTokens = 100;
+        if (s.npcRelationshipBars === undefined) s.npcRelationshipBars = false;
+        // Rebuild instruction from current settings
+        if (s.routerModules?.npc) {
+            s.routerModules.npc.instruction = buildNpcInstruction(s.npcRelationshipBars, s.npcMajorTokens, s.npcMinorTokens);
+        }
+        s.settingsVersion = '3.10.0';
+    }
+
 
     // ── MIGRATION: Update system prompts with keywords instructions (v3.2.3+) ──────
     if (s.routerSystemPromptTemplate && !s.routerSystemPromptTemplate.includes('IMPORTANT FOR KEYWORDS')) {

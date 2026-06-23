@@ -2570,3 +2570,483 @@
     opacity: 1 !important;
 }
 
+/* ════════════════════════════════════════════════════════════════════════════
+   NPC CAMPAIGN RECORDS — Visual Overhaul
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* ── NPC Folder Header Accent ── */
+.rt-npc-folder-hdr {
+    border-left: 3px solid #d4a940 !important;
+    background: linear-gradient(90deg, rgba(212, 169, 64, 0.08), rgba(255,255,255,0.04)) !important;
+    transition: background 0.2s ease, border-color 0.2s ease;
+}
+.rt-npc-folder-hdr:hover {
+    background: linear-gradient(90deg, rgba(212, 169, 64, 0.14), rgba(255,255,255,0.06)) !important;
+}
+.rt-npc-folder-hdr .rt-npc-folder-icon {
+    color: #d4a940;
+    font-size: 10px;
+    flex-shrink: 0;
+}
+
+/* ── NPC Card Grid ── */
+.rt-npc-card-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 4px 0;
+}
+
+/* ── NPC Card ── */
+.rt-npc-card {
+    display: flex;
+    gap: 8px;
+    padding: 8px;
+    border-radius: 6px;
+    border: 1px solid rgba(212, 169, 64, 0.18);
+    background: linear-gradient(135deg, rgba(212, 169, 64, 0.05), rgba(255, 255, 255, 0.02));
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+    position: relative;
+    overflow: visible;
+}
+.rt-npc-card:hover {
+    background: linear-gradient(135deg, rgba(212, 169, 64, 0.1), rgba(255, 255, 255, 0.04));
+    border-color: rgba(212, 169, 64, 0.32);
+    box-shadow: 0 2px 8px rgba(212, 169, 64, 0.08);
+}
+.rt-npc-card.open {
+    border-color: rgba(212, 169, 64, 0.35);
+    background: linear-gradient(135deg, rgba(212, 169, 64, 0.08), rgba(255, 255, 255, 0.03));
+}
+
+/* ── NPC Portrait ── */
+.rt-npc-portrait-wrap {
+    width: 64px;
+    height: 64px;
+    min-width: 64px;
+    border-radius: 6px;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(212, 169, 64, 0.2);
+    position: relative;
+    flex-shrink: 0;
+}
+.rt-npc-portrait-wrap img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+.rt-npc-portrait-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    opacity: 0.3;
+    user-select: none;
+}
+.rt-npc-portrait-gen-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    cursor: pointer;
+    border-radius: 5px;
+    font-size: 16px;
+    color: #d4a940;
+}
+.rt-npc-portrait-wrap:hover .rt-npc-portrait-gen-overlay {
+    opacity: 1;
+}
+
+/* ── NPC Info Area ── */
+.rt-npc-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    justify-content: center;
+}
+.rt-npc-name {
+    font-size: 11px;
+    font-weight: bold;
+    color: var(--rt-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.3;
+}
+.rt-npc-desc {
+    font-size: 9px;
+    color: var(--rt-text-muted);
+    line-height: 1.3;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.rt-npc-status-badge {
+    display: inline-block;
+    font-size: 8px;
+    padding: 1px 5px;
+    border-radius: 8px;
+    font-weight: bold;
+    white-space: nowrap;
+    margin-top: 1px;
+    width: fit-content;
+}
+.rt-npc-status-badge.active {
+    background: rgba(0, 255, 170, 0.12);
+    color: var(--rt-accent);
+    border: 1px solid rgba(0, 255, 170, 0.25);
+}
+.rt-npc-status-badge.inactive {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--rt-text-muted);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* ── NPC Relationship Bars ── */
+.rt-npc-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin-top: 3px;
+    width: 100%;
+}
+.rt-npc-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 8px;
+    color: var(--rt-text-muted);
+}
+.rt-npc-bar-icon {
+    flex-shrink: 0;
+    width: 12px;
+    text-align: center;
+    font-size: 9px;
+}
+.rt-npc-bar-track {
+    flex: 1;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 3px;
+    position: relative;
+    overflow: hidden;
+}
+.rt-npc-bar-center-marker {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: rgba(255, 255, 255, 0.15);
+    z-index: 1;
+}
+.rt-npc-bar-fill {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    border-radius: 3px;
+    transition: width 0.3s ease, left 0.3s ease, background 0.3s ease;
+}
+/* Positive fill: grows from center to right */
+.rt-npc-bar-fill.positive {
+    left: 50%;
+}
+/* Negative fill: grows from center to left */
+.rt-npc-bar-fill.negative {
+    right: 50%;
+}
+.rt-npc-bar-fill.friendship-pos { background: linear-gradient(90deg, #4ade8088, #4ade80); }
+.rt-npc-bar-fill.friendship-neg { background: linear-gradient(270deg, #ef444488, #ef4444); }
+.rt-npc-bar-fill.affection-pos  { background: linear-gradient(90deg, #f472b688, #f472b6); }
+.rt-npc-bar-fill.affection-neg  { background: linear-gradient(270deg, #a855f788, #a855f7); }
+
+.rt-npc-bar-value {
+    flex-shrink: 0;
+    width: 26px;
+    text-align: right;
+    font-family: var(--rt-font-mono);
+    font-size: 8px;
+    font-weight: bold;
+    line-height: 1;
+}
+.rt-npc-bar-value.val-positive { color: #4ade80; }
+.rt-npc-bar-value.val-negative { color: #ef4444; }
+.rt-npc-bar-value.val-zero     { color: var(--rt-text-muted); }
+.rt-npc-bar-value.val-affection-positive { color: #f472b6; }
+.rt-npc-bar-value.val-affection-negative { color: #a855f7; }
+
+/* ── NPC Card Actions ── */
+.rt-npc-actions {
+    display: flex;
+    gap: 3px;
+    margin-top: 2px;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+.rt-npc-card:hover .rt-npc-actions {
+    opacity: 1;
+}
+.rt-npc-action-btn {
+    background: none;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--rt-text-muted);
+    cursor: pointer;
+    font-size: 9px;
+    padding: 2px 5px;
+    border-radius: 4px;
+    transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    white-space: nowrap;
+}
+.rt-npc-action-btn:hover {
+    color: var(--rt-text);
+    border-color: rgba(255, 255, 255, 0.25);
+    background: rgba(255, 255, 255, 0.05);
+}
+.rt-npc-action-btn.gen-portrait {
+    color: #d4a940;
+    border-color: rgba(212, 169, 64, 0.25);
+}
+.rt-npc-action-btn.gen-portrait:hover {
+    background: rgba(212, 169, 64, 0.1);
+    border-color: rgba(212, 169, 64, 0.4);
+    color: #ecc050;
+}
+
+/* ── NPC Add Button ── */
+.rt-npc-add-btn {
+    background: rgba(212, 169, 64, 0.08);
+    border: 1px dashed rgba(212, 169, 64, 0.3);
+    color: #d4a940;
+    cursor: pointer;
+    font-size: 9px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+    margin-top: 4px;
+    font-weight: bold;
+}
+.rt-npc-add-btn:hover {
+    background: rgba(212, 169, 64, 0.15);
+    border-color: rgba(212, 169, 64, 0.5);
+    color: #ecc050;
+}
+
+/* ── Character Card Picker Popup ── */
+.rt-charpicker-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+}
+.rt-charpicker-popup {
+    background: var(--rt-bg, rgba(20, 20, 20, 0.96));
+    border: 1px solid rgba(212, 169, 64, 0.25);
+    border-radius: 10px;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6), 0 0 20px rgba(212, 169, 64, 0.08);
+    width: 460px;
+    max-width: 92vw;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    color: var(--rt-text, #eee);
+    font-family: var(--rt-font, system-ui, sans-serif);
+}
+.rt-charpicker-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(212, 169, 64, 0.15);
+    background: rgba(212, 169, 64, 0.05);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+}
+.rt-charpicker-header h3 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: bold;
+    color: #d4a940;
+}
+.rt-charpicker-close {
+    background: none;
+    border: none;
+    color: var(--rt-text-muted, #888);
+    font-size: 16px;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: color 0.15s ease;
+}
+.rt-charpicker-close:hover {
+    color: var(--rt-text, #eee);
+}
+.rt-charpicker-search {
+    margin: 10px 16px 6px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(0, 0, 0, 0.3);
+    color: var(--rt-text, #eee);
+    font-size: 12px;
+    outline: none;
+    width: calc(100% - 32px);
+    box-sizing: border-box;
+    transition: border-color 0.2s ease;
+    flex-shrink: 0;
+}
+.rt-charpicker-search:focus {
+    border-color: rgba(212, 169, 64, 0.4);
+}
+.rt-charpicker-search::placeholder {
+    color: rgba(255, 255, 255, 0.3);
+    font-style: italic;
+}
+.rt-charpicker-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.rt-charpicker-empty {
+    text-align: center;
+    opacity: 0.5;
+    font-size: 12px;
+    padding: 20px;
+}
+.rt-charpicker-item {
+    display: flex;
+    gap: 10px;
+    padding: 8px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    background: rgba(255, 255, 255, 0.02);
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+.rt-charpicker-item:hover {
+    background: rgba(212, 169, 64, 0.06);
+    border-color: rgba(212, 169, 64, 0.2);
+}
+.rt-charpicker-avatar {
+    width: 48px;
+    height: 48px;
+    min-width: 48px;
+    border-radius: 6px;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.rt-charpicker-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+.rt-charpicker-avatar-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    opacity: 0.3;
+}
+.rt-charpicker-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    justify-content: center;
+}
+.rt-charpicker-name {
+    font-size: 12px;
+    font-weight: bold;
+    color: var(--rt-text, #eee);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.rt-charpicker-desc {
+    font-size: 10px;
+    color: var(--rt-text-muted, #888);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    line-height: 1.3;
+}
+.rt-charpicker-btns {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex-shrink: 0;
+    justify-content: center;
+}
+.rt-charpicker-add-btn {
+    font-size: 9px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    border: 1px solid;
+    font-weight: bold;
+    white-space: nowrap;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+.rt-charpicker-add-btn.direct {
+    background: rgba(0, 255, 170, 0.08);
+    border-color: rgba(0, 255, 170, 0.25);
+    color: var(--rt-accent, #00ffaa);
+}
+.rt-charpicker-add-btn.direct:hover {
+    background: rgba(0, 255, 170, 0.15);
+    border-color: rgba(0, 255, 170, 0.4);
+}
+.rt-charpicker-add-btn.ai-adapt {
+    background: rgba(212, 169, 64, 0.08);
+    border-color: rgba(212, 169, 64, 0.25);
+    color: #d4a940;
+}
+.rt-charpicker-add-btn.ai-adapt:hover {
+    background: rgba(212, 169, 64, 0.15);
+    border-color: rgba(212, 169, 64, 0.4);
+}
+.rt-charpicker-load-more {
+    text-align: center;
+    padding: 8px;
+    font-size: 10px;
+    color: var(--rt-text-muted, #888);
+    cursor: pointer;
+    border: 1px dashed rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+.rt-charpicker-load-more:hover {
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--rt-text, #eee);
+}
+

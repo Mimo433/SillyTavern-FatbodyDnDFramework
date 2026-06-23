@@ -1,5 +1,5 @@
 import { EXAMPLES, COLOR_EXAMPLES, DEFAULT_STOCK_PROMPTS, RT_PROMPTS, BLOCK_ICONS, BLOCK_ORDER, PAGE_SIZE, NO_PAGINATE, QUESTS_NARRATOR_MODERN, QUESTS_NARRATOR_LEGACY } from './constants.js';
-import { MODULE_NAME, DEFAULT_MODULES, getSettings, getBarBackground, migrateCustomFields, saveChatState, saveProfile, deleteProfile, getEffectiveRouterCampaignPrefix, sanitizeCampaignPrefixString } from './state-manager.js';
+import { MODULE_NAME, DEFAULT_MODULES, getSettings, getBarBackground, migrateCustomFields, saveChatState, saveProfile, deleteProfile, getEffectiveRouterCampaignPrefix, sanitizeCampaignPrefixString, buildNpcInstruction } from './state-manager.js';
 import { sendStateRequest, fetchOllamaModels, fetchOpenAIModels, testOpenAIConnection, getConnectionProfiles, getCurrentCompletionPreset, setCompletionPreset } from './llm-client.js';
 import { getDiceToolName, getDiceCommandName, getDiceCommandAliases, doDiceRoll, registerDiceFunctionTool, registerDiceSlashCommand, installInterceptor, getNarrativeBlocks, onGenerationStarted, onGenerationEnded, resetRouterTick, makeRngQueue, buildRngBlock, RNG_QUEUE_LEN } from './narrative-hooks.js';
 import { deduplicateMemo, mergeMemo, computeDelta, escapeHtml, escapeRegex, highlightParens, cleanToolCallMessage, cleanMessageContent, getLastUserAction, buildLorebookContext, buildModulesInstructionText, buildModuleFormatInstruction, parseQuestsFromMemo, syncQuestsFromMemo, syncQuestsToMemo, writeQuestsToMemo, getQuestMood, extractCurrentTimeStr, stripCompletedQuestsFromMemo, parseInWorldTime } from './memo-processor.js';
@@ -8,7 +8,7 @@ import { registerLogQuestTool, checkQuestDeadlines, renderQuestsAsPlainText } fr
 import { initializeDebugViewer, toggleDebugViewer } from './debug-viewer.js';
 import { runRouterPass, rollbackRouterPass, reapplyRouterPass, getLorebookManifest, deleteLorebookEntry, updateLorebookEntry, disableManagedEntries, isRouterRunning, stopRouterPass } from './router.js';
 import { getRequestHeaders } from '../../../../script.js';
-import { fileToDataUrl, scaleImageTo512Square, applyPortraitData, generatePortraitPrompt, showPortraitPromptPopup, generatePortraitDirect, autoGeneratePartyPortraits, removeAllPortraits, checkAndTriggerAutoGenerations, autoGenerateEnemyPortraits, forceCheckAutoGenerations, resetAutoGenerationTracking } from './portraits.js';
+import { fileToDataUrl, scaleImageTo512Square, applyPortraitData, generatePortraitPrompt, generateNpcPortraitPrompt, showPortraitPromptPopup, generatePortraitDirect, autoGeneratePartyPortraits, removeAllPortraits, checkAndTriggerAutoGenerations, autoGenerateEnemyPortraits, forceCheckAutoGenerations, resetAutoGenerationTracking } from './portraits.js';
 
 export const RENDERING_TAGS_LIBRARY = [
     'Health: ((BAR)) 50/100',
@@ -4861,19 +4861,28 @@ function createPanel() {
                     const totalTokens = items.reduce((sum, item) => sum + Math.round((item.content || '').length / 4), 0);
                     const isOpen = _manifestOpenFolders.has(bookName);
 
+                    // ── Detect NPC books ──
+                    const bookNameLowerFull = bookName.toLowerCase();
+                    const displayNameLower = displayName.toLowerCase();
+                    const isNpcBook = displayNameLower === 'npcs' || displayNameLower === 'npc' ||
+                                      bookNameLowerFull.endsWith('_npcs') || bookNameLowerFull.endsWith('_npc');
+
                     const folder = document.createElement('div');
                     folder.style.cssText = 'flex-shrink: 0; margin-bottom: 2px;';
 
                     const folderHdr = document.createElement('div');
                     folderHdr.style.cssText = 'display:flex; align-items:center; gap:6px; padding:5px 6px; cursor:pointer; border-radius:4px; background:rgba(255,255,255,0.04);';
+                    if (isNpcBook) folderHdr.classList.add('rt-npc-folder-hdr');
                     folderHdr.innerHTML = `
+                            ${isNpcBook ? '<span class="rt-npc-folder-icon">👤</span>' : ''}
                             <span class="rt-mf-icon" style="font-size:9px; opacity:0.5; width:10px; flex-shrink:0; font-family:monospace;">${isOpen ? '▼' : '▶'}</span>
                             <span style="font-weight:bold; font-size:11px; flex:1; color:var(--rt-text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(displayName)}</span>
                             <span style="font-size:9px; opacity:0.45; color:var(--rt-text-muted); flex-shrink:0;">${activeCount}/${items.length} (${totalTokens}t)</span>
+                            ${isNpcBook ? '<button class="rt-npc-settings-btn" title="NPC Settings" style="background:none;border:none;cursor:pointer;font-size:12px;opacity:0.5;padding:2px 4px;color:var(--rt-text-muted);flex-shrink:0;" onclick="event.stopPropagation()">⚙️</button>' : ''}
                         `;
 
                     const folderBody = document.createElement('div');
-                    folderBody.style.cssText = `display:${isOpen ? 'flex' : 'none'}; flex-direction:column; border-left:1px solid rgba(255,255,255,0.07); margin-left:10px; padding-left:6px; gap:1px; padding-top:3px; padding-bottom:3px;`;
+                    folderBody.style.cssText = `display:${isOpen ? 'flex' : 'none'}; flex-direction:column; ${isNpcBook ? 'padding:4px 0;' : 'border-left:1px solid rgba(255,255,255,0.07); margin-left:10px; padding-left:6px;'} gap:${isNpcBook ? '4' : '1'}px; padding-top:3px; padding-bottom:3px;`;
 
                     folderHdr.addEventListener('click', () => {
                         const opening = folderBody.style.display === 'none';
@@ -4882,6 +4891,431 @@ function createPanel() {
                         if (opening) _manifestOpenFolders.add(bookName);
                         else _manifestOpenFolders.delete(bookName);
                     });
+
+                    // NPC settings gear button handler
+                    if (isNpcBook) {
+                        const settingsBtn = folderHdr.querySelector('.rt-npc-settings-btn');
+                        if (settingsBtn) {
+                            settingsBtn.addEventListener('click', async (e) => {
+                                e.stopPropagation();
+                                const ctx = SillyTavern.getContext();
+                                if (!ctx.callGenericPopup) return;
+                                const curS = getSettings();
+
+                                const popupHtml = `<div style="padding:16px;width:320px;text-align:left;font-family:var(--rt-font, system-ui, sans-serif);">
+                                    <div style="font-size:16px;font-weight:bold;color:#d4a940;margin-bottom:16px;">⚙️ NPC Settings</div>
+
+                                    <div style="margin-bottom:14px;">
+                                        <label style="font-size:12px;color:rgba(255,255,255,0.7);display:block;margin-bottom:4px;">Major NPC Token Limit</label>
+                                        <input type="number" id="rt-npc-major-tokens" value="${curS.npcMajorTokens ?? 125}" min="50" max="1000" step="25"
+                                            style="width:100%;background:rgba(0,0,0,0.4);color:white;border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:6px 10px;font-size:13px;box-sizing:border-box;">
+                                        <div style="font-size:10px;color:rgba(255,255,255,0.35);margin-top:2px;">Recurring, plot-important NPCs. Default: 125</div>
+                                    </div>
+
+                                    <div style="margin-bottom:14px;">
+                                        <label style="font-size:12px;color:rgba(255,255,255,0.7);display:block;margin-bottom:4px;">Minor NPC Token Limit</label>
+                                        <input type="number" id="rt-npc-minor-tokens" value="${curS.npcMinorTokens ?? 100}" min="30" max="500" step="10"
+                                            style="width:100%;background:rgba(0,0,0,0.4);color:white;border:1px solid rgba(255,255,255,0.15);border-radius:6px;padding:6px 10px;font-size:13px;box-sizing:border-box;">
+                                        <div style="font-size:10px;color:rgba(255,255,255,0.35);margin-top:2px;">Shopkeepers, guards, one-off encounters. Default: 100</div>
+                                    </div>
+
+                                    <div style="margin-bottom:6px;display:flex;align-items:center;gap:10px;">
+                                        <label style="font-size:12px;color:rgba(255,255,255,0.7);flex:1;">Relationship Bars</label>
+                                        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                                            <input type="checkbox" id="rt-npc-rel-bars" ${curS.npcRelationshipBars ? 'checked' : ''}
+                                                style="width:16px;height:16px;accent-color:#d4a940;cursor:pointer;">
+                                            <span style="font-size:11px;color:rgba(255,255,255,0.5);">${curS.npcRelationshipBars ? 'Enabled' : 'Disabled'}</span>
+                                        </label>
+                                    </div>
+                                    <div style="font-size:10px;color:rgba(255,255,255,0.35);margin-bottom:14px;">Shows Friendship/Affection tracking bars on NPC cards and popups. Also adds relationship fields to the AI instruction.</div>
+
+                                    <div style="margin-bottom:6px;display:flex;align-items:center;gap:10px;">
+                                        <label style="font-size:12px;color:rgba(255,255,255,0.7);flex:1;">Character Card Converter</label>
+                                        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                                            <input type="checkbox" id="rt-npc-card-import" ${curS.experimentalNpcImport ? 'checked' : ''}
+                                                style="width:16px;height:16px;accent-color:#d4a940;cursor:pointer;">
+                                            <span style="font-size:11px;color:rgba(255,255,255,0.5);">${curS.experimentalNpcImport ? 'Enabled' : 'Disabled'}</span>
+                                        </label>
+                                    </div>
+                                    <div style="font-size:10px;color:rgba(255,255,255,0.35);margin-bottom:10px;">Shows the "Add NPC from Character Card" button. <b>Recommended: Disabled</b> (organic NPC creation prevents context bloat).</div>
+                                </div>`;
+
+                                const result = await ctx.callGenericPopup(popupHtml, ctx.POPUP_TYPE?.CONFIRM ?? 3, '', {
+                                    okButton: 'Save', cancelButton: 'Cancel', wide: false,
+                                });
+
+                                if (result) {
+                                    const majorEl = document.getElementById('rt-npc-major-tokens');
+                                    const minorEl = document.getElementById('rt-npc-minor-tokens');
+                                    const relEl = document.getElementById('rt-npc-rel-bars');
+                                    const importEl = document.getElementById('rt-npc-card-import');
+                                    const newMajor = Math.max(50, Math.min(1000, parseInt(majorEl?.value, 10) || 125));
+                                    const newMinor = Math.max(30, Math.min(500, parseInt(minorEl?.value, 10) || 100));
+                                    const newRel = relEl?.checked ?? false;
+                                    const newImport = importEl?.checked ?? false;
+
+                                    const updS = getSettings();
+                                    updS.experimentalNpcImport = newImport;
+                                    updS.npcMajorTokens = newMajor;
+                                    updS.npcMinorTokens = newMinor;
+                                    updS.npcRelationshipBars = newRel;
+
+                                    // Rebuild the NPC instruction from settings
+                                    if (updS.routerModules?.npc) {
+                                        updS.routerModules.npc.instruction = buildNpcInstruction(newRel, newMajor, newMinor);
+                                    }
+
+                                    SillyTavern.getContext().saveSettingsDebounced?.();
+                                    toastr['success']('NPC settings saved.', 'NPC Settings');
+                                    await refreshManifest();
+                                }
+                            });
+                        }
+                    }
+
+                    // ════════════════════════════════════════════════════════════
+                    //  NPC CARD GRID RENDERING
+                    // ════════════════════════════════════════════════════════════
+                    if (isNpcBook) {
+
+                        const npcGrid = document.createElement('div');
+                        npcGrid.className = 'rt-npc-card-grid';
+
+                        // Helper: parse relationship values from NPC content
+                        const parseRelationship = (content) => {
+                            const friendMatch = content.match(/Friendship\/Rapport:\s*(-?\d+)\s*\/\s*100/i);
+                            const affectMatch = content.match(/Affection\/Interest:\s*(-?\d+)\s*\/\s*100/i);
+                            return {
+                                friendship: friendMatch ? parseInt(friendMatch[1], 10) : 0,
+                                affection: affectMatch ? parseInt(affectMatch[1], 10) : 0,
+                            };
+                        };
+
+                        // Helper: render a dual-direction bar (always renders, even at 0)
+                        const renderRelBar = (value, type) => {
+                            const clamped = Math.max(-100, Math.min(100, value));
+                            const pct = Math.abs(clamped) / 2; // 50% of track = full
+                            const icon = type === 'friendship' ? '🤝' : '💗';
+                            const isPositive = clamped >= 0;
+                            const fillClass = isPositive
+                                ? `${type}-pos positive`
+                                : `${type}-neg negative`;
+                            const valClass = type === 'friendship'
+                                ? (clamped > 0 ? 'val-positive' : clamped < 0 ? 'val-negative' : 'val-zero')
+                                : (clamped > 0 ? 'val-affection-positive' : clamped < 0 ? 'val-affection-negative' : 'val-zero');
+                            return `<div class="rt-npc-bar-row">
+                                <span class="rt-npc-bar-icon">${icon}</span>
+                                <div class="rt-npc-bar-track">
+                                    <div class="rt-npc-bar-center-marker"></div>
+                                    <div class="rt-npc-bar-fill ${fillClass}" style="width:${pct}%;"></div>
+                                </div>
+                                <span class="rt-npc-bar-value ${valClass}">${clamped > 0 ? '+' : ''}${clamped}</span>
+                            </div>`;
+                        };
+
+                        // Helper: get brief synopsis for the card (pulls from Appearance section or first text)
+                        const getNpcDescription = (content) => {
+                            if (!content) return '';
+                            // Try to extract Appearance section content first
+                            const appMatch = content.match(/Appearance:\s*(.+?)(?=\s*(?:Personality|Brief Background|Habits|Behaviors|Relationship with|Friendship\/Rapport|Affection\/Interest):|$)/is);
+                            if (appMatch && appMatch[1].trim()) {
+                                return appMatch[1].trim().substring(0, 140);
+                            }
+                            // Fallback: first meaningful text
+                            const lines = content.split('\n').map(l => l.trim())
+                                .filter(l => l && !/^\[ID:/i.test(l) && !/^Friendship\/Rapport:/i.test(l) && !/^Affection\/Interest:/i.test(l));
+                            return lines.slice(0, 2).join(' ').substring(0, 140);
+                        };
+
+                        // Helper: parse NPC content into structured sections for the detail popup
+                        // Handles both newline-separated AND single-line content (sections on same line)
+                        const parseNpcSections = (content) => {
+                            const sections = {};
+                            if (!content) return sections;
+
+                            // Pre-split: inject newlines before known section markers so they become separate lines
+                            // Use negative lookbehind so standalone "Behaviors" doesn't match inside "Habits/Behaviors"
+                            const sectionMarkers = /(?=(?:Appearance|Personality|Brief Background|Habits\/Behaviors|(?<!Habits\/)Behaviors|Relationship with\s*\{\{user\}\}|(?<!Friendship\/|Affection\/)Relationship)\s*:)/gi;
+                            const normalized = content.replace(sectionMarkers, '\n');
+
+                            const lines = normalized.split('\n');
+                            let currentSection = 'General';
+                            const sectionPattern = /^(Appearance|Personality|Brief Background|Habits\/Behaviors|(?<!Habits\/)Behaviors|Relationship with\s*\{\{user\}\}|(?<!Friendship\/|Affection\/)Relationship)\s*:/i;
+
+                            for (const line of lines) {
+                                const trimmed = line.trim();
+                                if (!trimmed || /^\[ID:/i.test(trimmed) || /^Friendship\/Rapport:/i.test(trimmed) || /^Affection\/Interest:/i.test(trimmed)) continue;
+                                const match = trimmed.match(sectionPattern);
+                                if (match) {
+                                    currentSection = match[1].replace(/\s*\{\{user\}\}/, '');
+                                    const afterColon = trimmed.substring(match[0].length).trim();
+                                    if (afterColon) {
+                                        if (!sections[currentSection]) sections[currentSection] = [];
+                                        sections[currentSection].push(afterColon);
+                                    }
+                                } else {
+                                    if (!sections[currentSection]) sections[currentSection] = [];
+                                    sections[currentSection].push(trimmed);
+                                }
+                            }
+                            return sections;
+                        };
+
+
+                        // Helper: section icon map
+                        const sectionIcons = {
+                            'General': '📋', 'Appearance': '👁️', 'Personality': '🧠',
+                            'Brief Background': '📜', 'Habits/Behaviors': '🔄', 'Habits': '🔄',
+                            'Behaviors': '🔄', 'Relationship': '❤️',
+                        };
+
+                        // Helper: open NPC detail popup
+                        const openNpcDetailPopup = (item, rel) => {
+                            const ctx = SillyTavern.getContext();
+                            if (!ctx.callGenericPopup) return;
+                            const portraitSrc = s.customPortraits?.[item.label] || '';
+                            const sections = parseNpcSections(item.content);
+
+                            // Build sections HTML
+                            let sectionsHtml = '';
+                            for (const [name, lines] of Object.entries(sections)) {
+                                const icon = sectionIcons[name] || '📋';
+                                const sectionColor = name === 'Appearance' ? '#d4a940' :
+                                                     name === 'Personality' ? '#8b5cf6' :
+                                                     name === 'Brief Background' ? '#3b82f6' :
+                                                     name.includes('Habit') || name.includes('Behavior') ? '#10b981' :
+                                                     name === 'Relationship' ? '#f472b6' : 'rgba(255,255,255,0.5)';
+                                sectionsHtml += `<div style="margin-bottom:18px;">
+                                    <div style="font-size:14px;font-weight:bold;color:${sectionColor};text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;display:flex;align-items:center;gap:7px;">
+                                        <span style="font-size:16px;">${icon}</span> ${escapeHtml(name)}
+                                    </div>
+                                    <div style="font-size:15px;line-height:1.6;color:rgba(255,255,255,0.88);border-left:3px solid ${sectionColor}44;margin-left:3px;padding:6px 0 6px 14px;">
+                                        ${lines.map(l => escapeHtml(l)).join('<br>')}
+                                    </div>
+                                </div>`;
+                            }
+
+                            // Friendship/Affection bars for popup (large version)
+                            const makeBigBar = (val, label, colorPos, colorNeg, icon) => {
+                                const clamped = Math.max(-100, Math.min(100, val));
+                                const pct = Math.abs(clamped) / 2;
+                                const isPos = clamped >= 0;
+                                const bgColor = isPos ? colorPos : colorNeg;
+                                const valColor = clamped === 0 ? 'rgba(255,255,255,0.4)' : bgColor;
+                                return `<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
+                                    <span style="font-size:20px;">${icon}</span>
+                                    <span style="font-size:13px;width:80px;color:rgba(255,255,255,0.6);font-weight:500;">${label}</span>
+                                    <div style="flex:1;height:12px;background:rgba(255,255,255,0.06);border-radius:6px;position:relative;overflow:hidden;">
+                                        <div style="position:absolute;left:50%;top:0;bottom:0;width:1px;background:rgba(255,255,255,0.2);"></div>
+                                        <div style="position:absolute;top:0;bottom:0;border-radius:6px;background:${bgColor};${isPos ? `left:50%;width:${pct}%;` : `right:50%;width:${pct}%;`}transition:width 0.3s ease;"></div>
+                                    </div>
+                                    <span style="font-size:15px;font-weight:bold;width:40px;text-align:right;color:${valColor};font-family:monospace;">${clamped > 0 ? '+' : ''}${clamped}</span>
+                                </div>`;
+                            };
+
+                            const barsHtml = `
+                                ${makeBigBar(rel.friendship, 'Friendship', '#4ade80', '#ef4444', '🤝')}
+                                ${makeBigBar(rel.affection, 'Affection', '#f472b6', '#a855f7', '💗')}
+                            `;
+
+                            // Full-size portrait (512px stored, display at native res)
+                            const portraitEl = portraitSrc
+                                ? `<img src="${escapeHtml(portraitSrc)}" style="width:100%;height:auto;aspect-ratio:1;object-fit:cover;border-radius:12px;border:2px solid rgba(212,169,64,0.3);box-shadow:0 4px 20px rgba(0,0,0,0.4);" alt="${escapeHtml(item.label)}">`
+                                : `<div style="width:100%;aspect-ratio:1;border-radius:12px;background:rgba(0,0,0,0.3);border:2px solid rgba(212,169,64,0.2);display:flex;align-items:center;justify-content:center;font-size:64px;opacity:0.25;">👤</div>`;
+
+                            const popupHtml = `<div style="width:100%;box-sizing:border-box;padding:24px;text-align:left;max-height:80vh;overflow-y:auto;font-family:var(--rt-font, system-ui, sans-serif);">
+                                <div style="display:flex;gap:24px;margin-bottom:20px;align-items:flex-start;flex-wrap:wrap;">
+                                    <div style="flex-shrink:0;width:280px;">
+                                        ${portraitEl}
+                                    </div>
+                                    <div style="flex:1;min-width:220px;">
+                                        <div style="font-size:24px;font-weight:bold;color:#d4a940;margin-bottom:8px;line-height:1.2;">${escapeHtml(item.label)}</div>
+                                        <span style="font-size:11px;padding:3px 10px;border-radius:10px;font-weight:bold;${item.is_active ? 'background:rgba(0,255,170,0.12);color:#00ffaa;border:1px solid rgba(0,255,170,0.25);' : 'background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.4);border:1px solid rgba(255,255,255,0.1);'}">${item.is_active ? '● Active' : '○ Inactive'}</span>
+                                        ${s.npcRelationshipBars ? `<div style="margin-top:20px;">${barsHtml}</div>` : ''}
+                                    </div>
+                                </div>
+                                <div style="border-top:2px solid rgba(212,169,64,0.15);padding-top:18px;">
+                                    ${sectionsHtml || `<div style="font-size:14px;color:rgba(255,255,255,0.5);font-style:italic;padding:16px 0;">No structured sections found. Edit the entry to add Appearance, Personality, and other sections.</div>`}
+                                </div>
+                            </div>`;
+
+
+                            ctx.callGenericPopup(popupHtml, ctx.POPUP_TYPE?.TEXT ?? 1, '', {
+                                okButton: 'Close', cancelButton: false, wide: true, large: true,
+                            });
+                        };
+
+                        for (const item of items) {
+                            const rel = parseRelationship(item.content || '');
+                            const desc = getNpcDescription(item.content);
+                            const portraitSrc = s.customPortraits?.[item.label] || '';
+                            const isDirty = _dirtyEntries.has(item.id);
+
+                            const card = document.createElement('div');
+                            card.className = 'rt-npc-card';
+                            card.dataset.entryId = item.id;
+
+                            // Portrait area
+                            const portraitHtml = portraitSrc
+                                ? `<img src="${escapeHtml(portraitSrc)}" alt="${escapeHtml(item.label)}">`
+                                : `<div class="rt-npc-portrait-placeholder">👤</div>`;
+
+                            card.innerHTML = `
+                                <div class="rt-npc-portrait-wrap">
+                                    ${portraitHtml}
+                                    <div class="rt-npc-portrait-gen-overlay" title="Generate portrait">🎨</div>
+                                </div>
+                                <div class="rt-npc-info">
+                                    <div class="rt-npc-name">${escapeHtml(item.label)}${isDirty ? ' <span style="color:#ffa500; font-size:8px;" title="Unsaved edits">●</span>' : ''}</div>
+                                    <div class="rt-npc-desc">${escapeHtml(desc)}</div>
+                                    <span class="rt-npc-status-badge ${item.is_active ? 'active' : 'inactive'}">${item.is_active ? '● Active' : '○ Inactive'}</span>
+                                    ${s.npcRelationshipBars ? `<div class="rt-npc-bars">
+                                        ${renderRelBar(rel.friendship, 'friendship')}
+                                        ${renderRelBar(rel.affection, 'affection')}
+                                    </div>` : ''}
+                                    <div class="rt-npc-actions">
+                                        <button class="rt-npc-action-btn rt-npc-edit" data-id="${item.id}" title="Edit entry"><i class="fa-solid fa-pen-to-square"></i></button>
+                                        <button class="rt-npc-action-btn rt-npc-clean" data-id="${item.id}" title="Cleanup entry"><i class="fa-solid fa-broom"></i></button>
+                                        <button class="rt-npc-action-btn rt-npc-delete" data-id="${item.id}" title="Delete entry"><i class="fa-solid fa-trash"></i></button>
+                                    </div>
+                                </div>
+                            `;
+
+                            // Entry body (edit pane) — reuse existing buildEntryBody
+                            let entryBody = null;
+                            const dirtySnap = isDirty ? _dirtyEntries.get(item.id) : null;
+                            const fakeHdr = document.createElement('div'); // placeholder for buildEntryBody
+                            entryBody = buildEntryBody(item, fakeHdr, {
+                                stale: !!isDirty,
+                                dirty: dirtySnap || null,
+                            });
+                            entryBody.style.display = _openEntries.has(item.id) ? 'flex' : 'none';
+                            entryBody.style.marginTop = '6px';
+                            entryBody.style.borderTop = '1px solid rgba(212, 169, 64, 0.1)';
+                            entryBody.style.paddingTop = '6px';
+                            if (_openEntries.has(item.id)) card.classList.add('open');
+
+                            // Click card body → open rich NPC detail popup
+                            card.addEventListener('click', (e) => {
+                                if (/** @type {HTMLElement} */ (e.target).closest('.rt-npc-portrait-gen-overlay, .rt-npc-action-btn, .rt-npc-edit, .rt-npc-clean, .rt-npc-delete, textarea, input, button, select')) return;
+                                openNpcDetailPopup(item, rel);
+                            });
+
+
+                            // Portrait generate overlay click
+                            const genOverlay = card.querySelector('.rt-npc-portrait-gen-overlay');
+                            if (genOverlay) {
+                                genOverlay.addEventListener('click', async (e) => {
+                                    e.stopPropagation();
+                                    try {
+                                        toastr['info'](`Generating portrait prompt for ${item.label}...`, 'NPC Portrait');
+                                        const prompt = await generateNpcPortraitPrompt(item.label, item.content || '');
+                                        if (!prompt) {
+                                            toastr['warning']('Could not generate portrait prompt.', 'NPC Portrait');
+                                            return;
+                                        }
+                                        await showPortraitPromptPopup(prompt, item.label, (src) => {
+                                            applyPortraitData(item.label, src);
+                                        }, () => refreshManifest());
+                                    } catch (err) {
+                                        toastr['error'](`Portrait generation failed: ${String(err.message || err).substring(0, 120)}`, 'NPC Portrait');
+                                    }
+                                });
+                            }
+
+                            // Action button handlers
+                            const editBtn = card.querySelector('.rt-npc-edit');
+                            if (editBtn) editBtn.addEventListener('click', (e) => {
+                                e.stopPropagation();
+                                // Always open the entry body
+                                entryBody.style.display = 'flex';
+                                _openEntries.add(item.id);
+                                card.classList.add('open');
+                                // Trigger the internal edit mode (switch from readPane to editPane)
+                                const internalEditBtn = entryBody.querySelector('.rt-agent-entry-edit');
+                                if (internalEditBtn) {
+                                    internalEditBtn.click();
+                                } else {
+                                    // Fallback: directly toggle panes if no internal button
+                                    const readPane = entryBody.querySelector('.rt-agent-manifest-read');
+                                    const editPane = entryBody.querySelector('.rt-agent-manifest-edit');
+                                    if (readPane) readPane.style.display = 'none';
+                                    if (editPane) editPane.style.display = 'flex';
+                                }
+                            });
+
+                            const cleanBtn = card.querySelector('.rt-npc-clean');
+                            if (cleanBtn) cleanBtn.addEventListener('click', async (e) => {
+                                e.stopPropagation();
+                                if (isRouterRunning()) { toastr['warning']('Agent is busy.'); return; }
+                                const [bk, uid] = item.id.split('::');
+                                await runRouterPass(null, `__CLEANUP__::${bk}::${uid}`, null, true);
+                                await refreshManifest();
+                            });
+
+                            const delBtn = card.querySelector('.rt-npc-delete');
+                            if (delBtn) delBtn.addEventListener('click', async (e) => {
+                                e.stopPropagation();
+                                if (confirm(`Delete NPC "${item.label}"?`)) {
+                                    const ok = await deleteLorebookEntry(item.id);
+                                    if (ok) {
+                                        _dirtyEntries.delete(item.id);
+                                        _openEntries.delete(item.id);
+                                        await refreshManifest();
+                                        toastr['success'](`Deleted "${item.label}"`, 'NPCs');
+                                    }
+                                }
+                            });
+
+                            // Portrait drag-and-drop
+                            const portraitWrap = card.querySelector('.rt-npc-portrait-wrap');
+                            if (portraitWrap) {
+                                portraitWrap.addEventListener('dragover', (e) => { e.preventDefault(); portraitWrap.style.borderColor = '#d4a940'; });
+                                portraitWrap.addEventListener('dragleave', () => { portraitWrap.style.borderColor = ''; });
+                                portraitWrap.addEventListener('drop', async (e) => {
+                                    e.preventDefault();
+                                    portraitWrap.style.borderColor = '';
+                                    const file = e.dataTransfer?.files?.[0];
+                                    if (!file || !file.type.startsWith('image/')) return;
+                                    try {
+                                        const dataUrl = await fileToDataUrl(file);
+                                        const scaled = await scaleImageTo512Square(dataUrl);
+                                        applyPortraitData(item.label, scaled);
+                                        toastr['success'](`Portrait applied for ${item.label}`, 'NPC Portrait');
+                                        await refreshManifest();
+                                    } catch (err) {
+                                        toastr['error']('Failed to apply portrait.', 'NPC Portrait');
+                                    }
+                                });
+                            }
+
+                            npcGrid.appendChild(card);
+                            npcGrid.appendChild(entryBody);
+                        }
+
+                        folderBody.appendChild(npcGrid);
+
+                        // ── "Add NPC" button ──
+                        if (s.experimentalNpcImport) {
+                            const addNpcBtn = document.createElement('div');
+                            addNpcBtn.className = 'rt-npc-add-btn';
+                            addNpcBtn.innerHTML = '<i class="fa-solid fa-user-plus"></i> Add NPC from Character Card';
+                            addNpcBtn.addEventListener('click', (e) => {
+                                e.stopPropagation();
+                                openNpcCharacterPicker(bookName, prefix);
+                            });
+                            folderBody.appendChild(addNpcBtn);
+                        }
+
+                        folder.appendChild(folderHdr);
+                        folder.appendChild(folderBody);
+                        list.appendChild(folder);
+                        continue; // skip default tree rendering for NPC books
+                    }
+
+                    // ════════════════════════════════════════════════════════════
+                    //  DEFAULT TREE RENDERING (non-NPC books)
+                    // ════════════════════════════════════════════════════════════
 
                     // Define TreeNode class locally
                     class TreeNode {
@@ -4894,6 +5328,7 @@ function createPanel() {
                             this.parent = null;
                         }
                     }
+
 
                     const getNodePath = (node, bookName) => {
                         const parts = [];
@@ -5151,6 +5586,491 @@ function createPanel() {
         };
 
         refreshAgentManifest = refreshManifest;
+
+        // ════════════════════════════════════════════════════════════════════
+        //  NPC Character Card Picker + AI Adaptation
+        // ════════════════════════════════════════════════════════════════════
+
+        /**
+         * Creates an NPC lorebook entry from a character card.
+         * @param {object} charCard - The SillyTavern character card object
+         * @param {string} bookName - Target lorebook book name
+         * @param {string|null} adaptedContent - If provided, use this instead of raw card data
+         */
+        const createNpcFromCharCard = async (charCard, bookName, adaptedContent = null) => {
+            const ctx = SillyTavern.getContext();
+            const s = getSettings();
+            const name = charCard.name || 'Unnamed NPC';
+
+            // Build NPC entry content
+            let content;
+            if (adaptedContent) {
+                content = adaptedContent;
+            } else {
+                // Direct add: use name, description, personality (NOT scenario/first_mes)
+                const parts = [];
+                if (charCard.description) parts.push(charCard.description.substring(0, 1500));
+                if (charCard.personality) parts.push(`Personality: ${charCard.personality.substring(0, 500)}`);
+                if (s.npcRelationshipBars) {
+                    parts.push('Friendship/Rapport: 0/100');
+                    parts.push('Affection/Interest: 0/100');
+                }
+                content = parts.join('\n');
+            }
+
+            // Ensure relationship fields are present even in adapted content (only if bars enabled)
+            if (s.npcRelationshipBars && adaptedContent && !/Friendship\/Rapport:/i.test(content)) {
+                content += '\nFriendship/Rapport: 0/100\nAffection/Interest: 0/100';
+            }
+
+
+            const keys = [name];
+            // Add first name as keyword too
+            const firstName = name.split(/\s+/)[0];
+            if (firstName && firstName !== name) keys.push(firstName);
+
+            // Load or create the book
+            let bookData = null;
+            try { bookData = await ctx.loadWorldInfo(bookName); } catch (_) {}
+            if (!bookData) {
+                try {
+                    const res = await fetch('/api/worldinfo/get', {
+                        method: 'POST', headers: getRequestHeaders(),
+                        body: JSON.stringify({ name: bookName })
+                    });
+                    if (res.ok) { const d = await res.json(); if (d?.entries) bookData = d; }
+                } catch (_) {}
+            }
+            if (!bookData) {
+                bookData = { entries: {}, name: bookName, scan_depth: 4, token_budget: 400, recursive: false, extensions: {} };
+            }
+
+            // Check for duplicate
+            const cleanLabel = name.toLowerCase().trim();
+            for (const [, entry] of Object.entries(bookData.entries)) {
+                const entryLabel = (entry.comment || '').replace(/^\[.*?\]\s*/i, '').toLowerCase().trim();
+                if (entryLabel === cleanLabel) {
+                    toastr['warning'](`NPC "${name}" already exists in this lorebook.`, 'NPC Import');
+                    return false;
+                }
+            }
+
+            // Create new entry
+            const uids = Object.keys(bookData.entries).map(Number).filter(n => !isNaN(n));
+            const nextUid = uids.length > 0 ? Math.max(...uids) + 1 : 0;
+            bookData.entries[nextUid] = {
+                uid: nextUid,
+                key: keys,
+                keysecondary: [],
+                comment: name,
+                content: content,
+                constant: false,
+                selective: false, selectiveLogic: 0, addMemo: true,
+                order: s.routerDefaultOrder ?? 100,
+                position: s.routerDefaultPosition ?? 0,
+                disable: !s.routerNativeKeywordActivation,
+                probability: 100, useProbability: false,
+                depth: s.routerDefaultDepth ?? 4,
+                role: (s.routerDefaultPosition === 4) ? (s.routerDefaultRole ?? 0) : null,
+                group: '', groupOverride: false, groupWeight: 100,
+            };
+
+            // Save via HTTP API
+            const saveRes = await fetch('/api/worldinfo/edit', {
+                method: 'POST', headers: getRequestHeaders(),
+                body: JSON.stringify({ name: bookName, data: bookData })
+            });
+            if (!saveRes.ok) {
+                toastr['error']('Failed to save NPC entry.', 'NPC Import');
+                return false;
+            }
+
+            // Sync in-memory cache
+            if (typeof ctx.saveWorldInfo === 'function') {
+                try { await ctx.saveWorldInfo(bookName, bookData); } catch (_) {}
+            }
+
+            // Activate the book
+            if (typeof ctx.executeSlashCommandsWithOptions === 'function') {
+                await new Promise(r => setTimeout(r, 300));
+                if (typeof ctx.updateWorldInfoList === 'function') await ctx.updateWorldInfoList();
+                await ctx.executeSlashCommandsWithOptions(`/world state=on silent=true "${bookName}"`);
+            }
+
+            // Activate the new entry key
+            const fullId = `${bookName}::${nextUid}`;
+            if (!s.activeRouterKeys.includes(fullId)) {
+                s.activeRouterKeys.push(fullId);
+            }
+
+            // Embed avatar as portrait
+            if (charCard.avatar) {
+                try {
+                    const avatarUrl = `/characters/${encodeURIComponent(charCard.avatar)}`;
+                    const resp = await fetch(avatarUrl);
+                    if (resp.ok) {
+                        const blob = await resp.blob();
+                        if (blob.size > 0) {
+                            const dataUrl = await new Promise((resolve, reject) => {
+                                const reader = new FileReader();
+                                reader.onloadend = () => resolve(reader.result);
+                                reader.onerror = reject;
+                                reader.readAsDataURL(blob);
+                            });
+                            const scaled = await scaleImageTo512Square(dataUrl);
+                            applyPortraitData(name, scaled);
+                        }
+                    }
+                } catch (err) {
+                    console.warn('[RPG Tracker] Failed to embed character avatar as NPC portrait:', err);
+                }
+            }
+
+            return true;
+        };
+
+        /**
+         * Sends character card data + campaign context to the AI for adaptation.
+         * Returns the adapted NPC content string.
+         * @param {object} charCard
+         * @returns {Promise<string|null>}
+         */
+        const adaptNpcWithAI = async (charCard) => {
+            const s = getSettings();
+            const ctx = SillyTavern.getContext();
+            const name = charCard.name || 'Unnamed';
+
+            // Gather context
+            const contextParts = [];
+
+            // Character card data
+            contextParts.push(`CHARACTER CARD:\nName: ${name}\nDescription: ${(charCard.description || '').substring(0, 2000)}\nPersonality: ${(charCard.personality || '').substring(0, 500)}\nScenario: ${(charCard.scenario || '').substring(0, 500)}\nFirst Message: ${(charCard.first_mes || '').substring(0, 500)}`);
+
+            // Current game state
+            if (s.currentMemo) {
+                contextParts.push(`CURRENT GAME STATE:\n${s.currentMemo.substring(0, 2000)}`);
+            }
+
+            // Recent chat
+            if (ctx.chat && Array.isArray(ctx.chat)) {
+                const msgs = ctx.chat.filter(m => !m.is_system && m.mes?.trim()).slice(-10);
+                if (msgs.length > 0) {
+                    const msgText = msgs.map(m => `${m.name || (m.is_user ? 'User' : 'Character')}: ${m.mes}`).join('\n\n');
+                    contextParts.push(`RECENT CHAT (for setting context):\n${msgText.substring(0, 6000)}`);
+                }
+            }
+
+            // Narrator card
+            try {
+                const charData = ctx.characters?.[ctx.characterId];
+                if (charData?.description) {
+                    contextParts.push(`NARRATOR/WORLD CARD:\n${charData.description.substring(0, 1500)}`);
+                }
+            } catch (_) {}
+
+            // Existing lorebook summaries for setting context
+            try {
+                if (s.activeRouterKeys?.length > 0) {
+                    const summaries = [];
+                    const loaded = {};
+                    for (const k of s.activeRouterKeys.slice(0, 15)) {
+                        const [bk, uid] = k.split('::');
+                        if (!loaded[bk]) loaded[bk] = await ctx.loadWorldInfo(bk);
+                        const entry = loaded[bk]?.entries?.[uid];
+                        if (entry) summaries.push(`[${entry.comment || 'Entry'}]: ${(entry.content || '').substring(0, 200)}`);
+                    }
+                    if (summaries.length > 0) {
+                        contextParts.push(`ACTIVE LOREBOOK ENTRIES (world context):\n${summaries.join('\n')}`);
+                    }
+                }
+            } catch (_) {}
+
+            const systemPrompt = `You are an NPC Adaptation Agent. Given a character card from a different source and the current RPG campaign context, adapt the character to fit naturally into the ongoing story.
+
+Rules:
+- If the character is from a different era/genre (e.g., modern character in a medieval fantasy), translate their skills, equipment, backstory, and background to fit the current world setting.
+- Preserve the character's core personality, motivations, and distinguishing traits.
+- Write a concise NPC lorebook entry (4-8 sentences covering appearance, personality, role in the world, and any notable equipment/abilities adapted to the setting).
+- End the entry with these two lines:
+  Friendship/Rapport: 0/100
+  Affection/Interest: 0/100
+- Output ONLY the adapted NPC entry content. No preamble, no explanation, no tags.`;
+
+            const userPrompt = contextParts.join('\n\n---\n\n');
+
+            // Use router connection settings for the AI call
+            const aiSettings = {
+                connectionSource: s.routerConnectionSource ?? 'default',
+                connectionProfileId: s.routerConnectionProfileId || '',
+                completionPresetId: s.routerCompletionPresetId || '',
+                ollamaUrl: s.routerOllamaUrl || 'http://localhost:11434',
+                ollamaModel: s.routerOllamaModel || '',
+                openaiUrl: s.routerOpenaiUrl || '',
+                openaiKey: s.routerOpenaiKey || '',
+                openaiModel: s.routerOpenaiModel || '',
+                maxTokens: s.routerMaxTokens || 0,
+                debugMode: s.debugMode,
+            };
+
+            try {
+                const result = await sendStateRequest(aiSettings, systemPrompt, userPrompt);
+                return (result || '').trim() || null;
+            } catch (err) {
+                toastr['error'](`AI adaptation failed: ${String(err.message || err).substring(0, 120)}`, 'NPC Import');
+                return null;
+            }
+        };
+
+        /**
+         * Opens the character card picker popup for adding NPCs.
+         * @param {string} bookName - Target lorebook name
+         * @param {string} prefix - Campaign prefix
+         */
+        const openNpcCharacterPicker = async (bookName, prefix) => {
+            const ctx = SillyTavern.getContext();
+
+            // Fetch character list with timeout to prevent UI hang
+            let allChars = [];
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 15000);
+                const res = await fetch('/api/characters/all', {
+                    method: 'POST', headers: getRequestHeaders(),
+                    body: JSON.stringify({}),
+                    signal: controller.signal,
+                });
+                clearTimeout(timeoutId);
+                if (res.ok) {
+                    const raw = await res.json();
+                    // Strip heavy fields to reduce memory — keep only what we need
+                    allChars = (Array.isArray(raw) ? raw : []).map(c => ({
+                        name: c.name || '',
+                        avatar: c.avatar || '',
+                        description: (c.description || '').substring(0, 1500),
+                        personality: (c.personality || '').substring(0, 500),
+                        scenario: (c.scenario || '').substring(0, 500),
+                        first_mes: (c.first_mes || '').substring(0, 500),
+                        date_added: c.date_added || 0,
+                    }));
+                    allChars.sort((a, b) => (b.date_added || 0) - (a.date_added || 0));
+                }
+            } catch (err) {
+                if (err.name === 'AbortError') {
+                    toastr['error']('Character list request timed out. Try again.', 'NPC Import');
+                } else {
+                    toastr['error']('Failed to load character cards.', 'NPC Import');
+                }
+                return;
+            }
+
+
+            if (allChars.length === 0) {
+                toastr['info']('No character cards found.', 'NPC Import');
+                return;
+            }
+
+            // Build popup
+            const overlay = document.createElement('div');
+            overlay.className = 'rt-charpicker-overlay';
+
+            const popup = document.createElement('div');
+            popup.className = 'rt-charpicker-popup';
+
+            // Header
+            const header = document.createElement('div');
+            header.className = 'rt-charpicker-header';
+            header.innerHTML = `<h3>👤 Add NPC from Character Card</h3>`;
+            const closeBtn = document.createElement('button');
+            closeBtn.className = 'rt-charpicker-close';
+            closeBtn.textContent = '✕';
+            closeBtn.addEventListener('click', () => overlay.remove());
+            header.appendChild(closeBtn);
+
+            // Search
+            const searchInput = document.createElement('input');
+            searchInput.className = 'rt-charpicker-search';
+            searchInput.type = 'text';
+            searchInput.placeholder = '🔍 Search characters by name...';
+
+            // List container
+            const listContainer = document.createElement('div');
+            listContainer.className = 'rt-charpicker-list';
+
+            popup.appendChild(header);
+            popup.appendChild(searchInput);
+            popup.appendChild(listContainer);
+            overlay.appendChild(popup);
+
+            // Close on backdrop click
+            overlay.addEventListener('click', (e) => {
+                if (e.target === overlay) overlay.remove();
+            });
+
+            // State
+            let currentFilter = '';
+            let displayCount = 10;
+
+            const renderList = () => {
+                listContainer.innerHTML = '';
+                const filtered = currentFilter
+                    ? allChars.filter(c => (c.name || '').toLowerCase().includes(currentFilter.toLowerCase()))
+                    : allChars;
+
+                if (filtered.length === 0) {
+                    listContainer.innerHTML = '<div class="rt-charpicker-empty">No characters match your search.</div>';
+                    return;
+                }
+
+                const visible = filtered.slice(0, displayCount);
+
+                for (const char of visible) {
+                    const item = document.createElement('div');
+                    item.className = 'rt-charpicker-item';
+
+                    // Avatar
+                    const avatarDiv = document.createElement('div');
+                    avatarDiv.className = 'rt-charpicker-avatar';
+                    if (char.avatar && char.avatar !== 'none') {
+                        const img = document.createElement('img');
+                        img.src = `/characters/${encodeURIComponent(char.avatar)}`;
+                        img.loading = 'lazy';
+                        img.alt = char.name;
+                        img.onerror = () => { img.replaceWith(Object.assign(document.createElement('div'), { className: 'rt-charpicker-avatar-placeholder', textContent: '👤' })); };
+                        avatarDiv.appendChild(img);
+                    } else {
+                        avatarDiv.innerHTML = '<div class="rt-charpicker-avatar-placeholder">👤</div>';
+                    }
+
+                    // Info
+                    const infoDiv = document.createElement('div');
+                    infoDiv.className = 'rt-charpicker-info';
+                    const nameEl = document.createElement('div');
+                    nameEl.className = 'rt-charpicker-name';
+                    nameEl.textContent = char.name || 'Unnamed';
+                    const descEl = document.createElement('div');
+                    descEl.className = 'rt-charpicker-desc';
+                    descEl.textContent = (char.description || char.personality || 'No description').substring(0, 120);
+                    infoDiv.appendChild(nameEl);
+                    infoDiv.appendChild(descEl);
+
+                    // Buttons
+                    const btnsDiv = document.createElement('div');
+                    btnsDiv.className = 'rt-charpicker-btns';
+
+                    const directBtn = document.createElement('button');
+                    directBtn.className = 'rt-charpicker-add-btn direct';
+                    directBtn.textContent = '+ Add NPC';
+                    directBtn.addEventListener('click', async () => {
+                        directBtn.disabled = true;
+                        directBtn.textContent = '⏳ Adding...';
+                        try {
+                            const ok = await createNpcFromCharCard(char, bookName);
+                            if (ok) {
+                                toastr['success'](`Added "${char.name}" as NPC.`, 'NPC Import');
+                                overlay.remove();
+                                await refreshManifest();
+                            }
+                        } catch (err) {
+                            toastr['error'](`Failed: ${String(err.message || err).substring(0, 100)}`, 'NPC Import');
+                        } finally {
+                            directBtn.disabled = false;
+                            directBtn.textContent = '+ Add NPC';
+                        }
+                    });
+
+                    const aiBtn = document.createElement('button');
+                    aiBtn.className = 'rt-charpicker-add-btn ai-adapt';
+                    aiBtn.textContent = '🤖 Fit into Story';
+                    aiBtn.addEventListener('click', async () => {
+                        aiBtn.disabled = true;
+                        aiBtn.textContent = '⏳ Adapting...';
+                        try {
+                            const adapted = await adaptNpcWithAI(char);
+                            if (!adapted) {
+                                aiBtn.disabled = false;
+                                aiBtn.textContent = '🤖 Fit into Story';
+                                return;
+                            }
+
+                            // Show preview popup
+                            if (ctx.callGenericPopup) {
+                                const taId = `rt-npc-adapt-preview-${Date.now()}`;
+                                const previewHtml = `<div style="padding:10px;min-width:320px;max-width:500px;">
+                                    <b style="display:block;margin-bottom:8px;">🤖 Adapted NPC — ${escapeHtml(char.name)}</b>
+                                    <div style="font-size:0.8em;opacity:0.6;margin-bottom:8px;">Review the AI-adapted entry below. Edit if needed, then confirm.</div>
+                                    <textarea id="${taId}" style="width:100%;min-height:140px;resize:vertical;font-size:0.9em;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.2);background:rgba(0,0,0,0.3);color:inherit;box-sizing:border-box;">${escapeHtml(adapted)}</textarea>
+                                </div>`;
+
+                                let finalContent = adapted;
+                                setTimeout(() => {
+                                    const ta = document.getElementById(taId);
+                                    if (ta) {
+                                        ta.addEventListener('input', () => { finalContent = ta.value; });
+                                        ta.focus();
+                                    }
+                                }, 0);
+
+                                const result = await ctx.callGenericPopup(previewHtml, ctx.POPUP_TYPE?.CONFIRM ?? 1, '', {
+                                    okButton: '✅ Add NPC', cancelButton: 'Cancel', wide: false,
+                                });
+
+                                if (result) {
+                                    const ok = await createNpcFromCharCard(char, bookName, finalContent);
+                                    if (ok) {
+                                        toastr['success'](`Added adapted "${char.name}" as NPC.`, 'NPC Import');
+                                        overlay.remove();
+                                        await refreshManifest();
+                                    }
+                                }
+                            }
+                        } catch (err) {
+                            toastr['error'](`Adaptation failed: ${String(err.message || err).substring(0, 100)}`, 'NPC Import');
+                        } finally {
+                            aiBtn.disabled = false;
+                            aiBtn.textContent = '🤖 Fit into Story';
+                        }
+                    });
+
+                    btnsDiv.appendChild(directBtn);
+                    btnsDiv.appendChild(aiBtn);
+
+                    item.appendChild(avatarDiv);
+                    item.appendChild(infoDiv);
+                    item.appendChild(btnsDiv);
+                    listContainer.appendChild(item);
+                }
+
+                // Load more button
+                if (visible.length < filtered.length) {
+                    const loadMore = document.createElement('div');
+                    loadMore.className = 'rt-charpicker-load-more';
+                    loadMore.textContent = `Show more (${visible.length} of ${filtered.length})`;
+                    loadMore.addEventListener('click', () => {
+                        displayCount += 10;
+                        renderList();
+                    });
+                    listContainer.appendChild(loadMore);
+                }
+            };
+
+            // Search handler with debounce
+            let searchTimeout = null;
+            searchInput.addEventListener('input', () => {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(() => {
+                    currentFilter = searchInput.value.trim();
+                    displayCount = 10;
+                    renderList();
+                }, 200);
+            });
+
+            // Initial render
+            renderList();
+
+            // Add to DOM
+            document.body.appendChild(overlay);
+            searchInput.focus();
+        };
 
         const refreshBtn = agentPanel.querySelector('#rt-agent-manifest-refresh');
         if (refreshBtn) refreshBtn.addEventListener('click', () => refreshManifest('manual-button'));

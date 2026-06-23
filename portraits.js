@@ -246,6 +246,89 @@ Rules:
 }
 
 /**
+ * Generates a portrait prompt specifically for an NPC lorebook entry.
+ * Unlike generatePortraitPrompt() which scans CHARACTER/PARTY/COMBAT blocks,
+ * this receives the NPC's lorebook entry content directly.
+ * @param {string} entityName - The NPC's display name
+ * @param {string} npcContent - The full lorebook entry content for this NPC
+ * @returns {Promise<string>} The generated image prompt text
+ */
+export async function generateNpcPortraitPrompt(entityName, npcContent) {
+    const s = getSettings();
+    const ctx = SillyTavern.getContext();
+
+    let contextParts = [`NPC Name: ${entityName}`];
+
+    // 1. NPC lorebook entry content (primary source)
+    if (npcContent && npcContent.trim()) {
+        contextParts.push(`NPC Lorebook Entry:\n${npcContent.trim()}`);
+    }
+
+    // 2. Persona — for art style context
+    try {
+        const persona = ctx.substituteParams?.('{{persona}}') || '';
+        if (persona.trim()) {
+            contextParts.push(`User Persona (for art style context):\n${persona.trim()}`);
+        }
+    } catch { /* substituteParams may not exist */ }
+
+    // 3. Character card description — for setting/world context
+    try {
+        const charId = ctx.characterId;
+        const charData = ctx.characters?.[charId];
+        if (charData?.description) {
+            contextParts.push(`Narrator Card Description (for world context):\n${charData.description.substring(0, 1500)}`);
+        }
+    } catch { /* ignore */ }
+
+    // 4. Last 3 chat messages for scene context
+    try {
+        if (ctx.chat && Array.isArray(ctx.chat)) {
+            const filteredMsgs = ctx.chat.filter(m => !m.is_system && m.mes && m.mes.trim());
+            const lastMsgs = filteredMsgs.slice(-3);
+            if (lastMsgs.length > 0) {
+                const msgText = lastMsgs.map(m => `${m.name || (m.is_user ? 'User' : 'Character')}: ${m.mes}`).join('\n\n');
+                contextParts.push(`Recent Scene Context:\n${msgText.substring(0, 4000)}`);
+            }
+        }
+    } catch { /* ignore */ }
+
+    const systemPrompt = `You are a portrait prompt generator for AI image models. Given an NPC's lorebook description from an RPG campaign, output a single detailed image generation prompt.
+
+Focus on:
+- Physical appearance (race, build, facial features, skin color, hair) — draw primarily from the NPC's lorebook entry
+- Clothing, armor, equipment visible on the character
+- Pose and expression appropriate to the character's personality
+- Art style: high-quality fantasy portrait, dramatic lighting, detailed
+
+Rules:
+- Output ONLY the prompt text, nothing else. No preamble, no explanation.
+- Keep it under 200 words.
+- The NPC lorebook entry is your PRIMARY source of truth for this character's appearance.
+- Use the narrator card and scene context only for world setting/art style guidance.
+- Focus on visual details. Do not include game stats, relationship values, or non-visual information.`;
+
+    const userPrompt = contextParts.join('\n\n---\n\n');
+
+    const portraitSettings = {
+        connectionSource: s.portraitConnectionSource ?? 'default',
+        connectionProfileId: s.portraitConnectionProfileId || '',
+        completionPresetId: s.portraitCompletionPresetId || '',
+        ollamaUrl: s.portraitOllamaUrl || 'http://localhost:11434',
+        ollamaModel: s.portraitOllamaModel || '',
+        openaiUrl: s.portraitOpenaiUrl || '',
+        openaiKey: s.portraitOpenaiKey || '',
+        openaiModel: s.portraitOpenaiModel || '',
+        maxTokens: s.maxTokens,
+        debugMode: s.debugMode,
+    };
+
+    const result = await sendStateRequest(portraitSettings, systemPrompt, userPrompt);
+    return (result || '').trim();
+}
+
+
+/**
  * Shows the generated prompt in an editable popup with Copy + Generate options.
  * @param {string} prompt
  * @param {string} entityName
@@ -571,6 +654,7 @@ export async function generateWithPollinations(prompt, entityName, localApply, r
                 const dataUrl = await genPromise;
                 const scaled = await scaleImageTo512Square(dataUrl);
                 localApply(scaled);
+                if (typeof refresh === 'function') refresh();
                 toastr['success'](`Portrait applied for ${entityName}!`, 'RPG Tracker');
             } catch (err) {
                 toastr['error']('Cannot apply — generation failed: ' + err.message, 'RPG Tracker');
@@ -660,6 +744,7 @@ export async function generateWithNativeExtension(prompt, entityName, localApply
                 const imageUrl = await genPromise;
                 const scaled = await scaleImageTo512Square(imageUrl);
                 localApply(scaled);
+                if (typeof refresh === 'function') refresh();
                 toastr['success'](`Portrait applied for ${entityName}!`, 'RPG Tracker');
             } catch (err) {
                 toastr['error']('Cannot apply — generation failed: ' + err.message, 'RPG Tracker');
