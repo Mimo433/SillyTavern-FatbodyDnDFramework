@@ -2,6 +2,16 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [3.8.8] - 2026-06-24
+
+### Removed
+- **Apply Sysprompt Button**:
+  - Removed the **Apply Sysprompt** button from the main settings (General & Visuals) as well, completely removing manual sysprompt application buttons from the extension UI.
+
+### Changed
+- **Auto-Apply on Custom Sysprompt Toggle**:
+  - Configured the **Custom Sysprompt Mode** checkbox to immediately re-apply the correct system prompt according to active settings when it is unchecked.
+
 ## [3.8.7] - 2026-06-24
 
 ### Removed
