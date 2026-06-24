@@ -69,6 +69,8 @@ globalThis._rpgRenderRouterUI = () => { if (typeof renderRouterUI === 'function'
 /** Rebuilds CAMPAIGN RECORDS; assigned in createPanel when the agent panel is wired. */
 let refreshAgentManifest = async () => { };
 globalThis._rpgRefreshAgentManifest = async () => { if (typeof refreshAgentManifest === 'function') await refreshAgentManifest(); };
+/** Refreshes the NPC card grid; assigned in createPanel so module-level code can call it. */
+let refreshNpcManifest = async () => { };
 
 let updateAgentWorldStatusRef = null;
 let updateWorldProgressionLastFiredDisplayRef = null;
@@ -2643,6 +2645,179 @@ async function showComponentsExplanation() {
     await Popup.show.confirm('🧩 Components Explained', popupBody, { okButton: 'Got it', cancelButton: false });
 }
 
+async function showPortraitSettingsMenu(entityName, onRefresh, npcContent = null) {
+    const refresh = onRefresh || refreshRenderedView;
+    const s = getSettings();
+    const normName = entityName.replace(/\s*\(.*?\)/g, '').trim();
+    const currentSrc = (s.customPortraits || {})[normName] || '';
+    const previewHtml = currentSrc
+        ? `<img src="${currentSrc}" style="max-width:128px;max-height:128px;border-radius:6px;display:block;margin:0 auto 10px;"/>`
+        : `<div style="text-align:center;opacity:0.5;margin-bottom:10px;">No portrait set</div>`;
+    const inputId     = `rt-portrait-url-${Date.now()}`;
+    const fileId      = `rt-portrait-file-${Date.now()}`;
+    const browseBtnId = `rt-portrait-browse-${Date.now()}`;
+    const popupContent = `<div style="padding:10px;min-width:270px;">
+            <b style="display:block;margin-bottom:8px;">Set Portrait — ${entityName}</b>
+            ${previewHtml}
+            <label style="display:block;margin-bottom:4px;font-size:0.85em;opacity:0.8;">Image URL (https://…)</label>
+            <div style="display:flex;gap:6px;align-items:center;">
+                <input id="${inputId}" type="text" class="text_pole" placeholder="Paste an image URL…" value="${currentSrc.startsWith('http') ? currentSrc : ''}" style="flex:1;box-sizing:border-box;"/>
+                <button id="${browseBtnId}" class="menu_button" style="white-space:nowrap;flex-shrink:0;">Browse…</button>
+            </div>
+            <input id="${fileId}" type="file" accept="image/*" style="display:none"/>
+            <div style="font-size:0.78em;opacity:0.55;margin-top:5px;">Or drag &amp; drop onto the portrait box / paste (Ctrl+V) anywhere on this screen.</div>
+        </div>`;
+    const ctx = SillyTavern.getContext();
+    if (!ctx.callGenericPopup) { toastr['warning']('Popup API not available.', 'RPG Tracker'); return; }
+    const popupOpts = { okButton: 'Apply', cancelButton: 'Cancel', wide: false,
+        customButtons: [
+            { text: '🤖 AI Generate', result: 4, classes: ['menu_button'] },
+        ],
+    };
+    if (currentSrc) {
+        popupOpts.customButtons.push({ text: '✂️ Crop Existing', result: 5, classes: ['menu_button'] });
+        popupOpts.customButtons.push({ text: '🗑 Clear Portrait', result: 2, classes: ['menu_button'] });
+    }
+
+    const localApply = (src) => {
+        applyPortraitData(entityName, src);
+        refresh();
+        void refreshNpcManifest().catch(() => {});
+    };
+
+    let capturedUrl    = currentSrc.startsWith('http') ? currentSrc : '';
+    let capturedRawUrl = '';
+
+    const popupPasteHandler = async (ev) => {
+        const file = ev.clipboardData?.files?.[0];
+        if (file && file.type.startsWith('image/')) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            try {
+                capturedRawUrl = await fileToDataUrl(file);
+                capturedUrl    = '';
+                const urlInput = /** @type {HTMLInputElement|null} */ (document.getElementById(inputId));
+                if (urlInput) urlInput.value = '(image pasted — click Apply to crop ✔)';
+            } catch (err) {
+                console.error(err);
+                toastr['warning']('Could not read image from clipboard.', 'RPG Tracker');
+            }
+        }
+    };
+
+    setTimeout(() => {
+        const fileInput = /** @type {HTMLInputElement|null} */ (document.getElementById(fileId));
+        const browseBtn = document.getElementById(browseBtnId);
+        const urlInput  = /** @type {HTMLInputElement|null} */ (document.getElementById(inputId));
+
+        if (urlInput) {
+            urlInput.addEventListener('input', () => {
+                capturedUrl    = urlInput.value.trim();
+                capturedRawUrl = '';
+            });
+        }
+
+        if (browseBtn && fileInput) {
+            browseBtn.addEventListener('click', (ev) => {
+                ev.preventDefault();
+                ev.stopPropagation();
+                fileInput.click();
+            });
+            fileInput.addEventListener('change', async () => {
+                const file = fileInput.files?.[0];
+                if (!file) return;
+                try {
+                    capturedRawUrl = await fileToDataUrl(file);
+                    capturedUrl    = '';
+                    if (urlInput) urlInput.value = '(file selected — click Apply to crop ✔)';
+                } catch (err) {
+                    console.error(err);
+                    toastr['warning']('Could not read image file.', 'RPG Tracker');
+                }
+            });
+        }
+
+        document.addEventListener('paste', popupPasteHandler);
+    }, 0);
+
+    const result = await ctx.callGenericPopup(popupContent, ctx.POPUP_TYPE?.CONFIRM ?? 1, '', popupOpts);
+
+    document.removeEventListener('paste', popupPasteHandler);
+
+    if (result === 2) {
+        localApply(null);
+    } else if (result === 5) {
+        try {
+            const cropped = await ctx.callGenericPopup(
+                'Set the crop position of the portrait',
+                ctx.POPUP_TYPE?.CROP ?? 4,
+                '',
+                { cropImage: currentSrc, cropAspect: 1 }
+            );
+            if (cropped) {
+                const scaled = await scaleImageTo512Square(cropped);
+                localApply(scaled);
+            }
+        } catch (err) {
+            console.error(err);
+            toastr['warning']('Could not crop existing image.', 'RPG Tracker');
+        }
+    } else if (result === 4) {
+        try {
+            if (s.portraitSkipPromptDialog) {
+                toastr['info'](`Generating portrait for ${entityName} in background…`, 'RPG Tracker');
+                const aiPrompt = npcContent !== null
+                    ? await generateNpcPortraitPrompt(entityName, npcContent)
+                    : await generatePortraitPrompt(entityName);
+                if (!aiPrompt) {
+                    toastr['warning']('Could not generate prompt — no context found.', 'RPG Tracker');
+                    return;
+                }
+                toastr['info'](`Generating image for ${entityName}…`, 'RPG Tracker');
+                const dataUrl = await generatePortraitDirect(aiPrompt, entityName);
+                const scaled = await scaleImageTo512Square(dataUrl);
+                localApply(scaled);
+                toastr['success'](`Portrait auto-generated and applied for ${entityName}!`, 'RPG Tracker');
+            } else {
+                toastr['info']('Generating portrait prompt…', 'RPG Tracker');
+                const aiPrompt = npcContent !== null
+                    ? await generateNpcPortraitPrompt(entityName, npcContent)
+                    : await generatePortraitPrompt(entityName);
+                if (aiPrompt) {
+                    await showPortraitPromptPopup(aiPrompt, entityName, localApply, refresh);
+                } else {
+                    toastr['warning']('Could not generate prompt — no context found.', 'RPG Tracker');
+                }
+            }
+        } catch (err) {
+            console.error('[RPG Tracker] AI portrait error:', err);
+            toastr['error']('AI portrait generation failed: ' + (err.message || err), 'RPG Tracker');
+        }
+    } else if (result) {
+        if (capturedRawUrl) {
+            try {
+                const cropped = await ctx.callGenericPopup(
+                    'Set the crop position of the portrait',
+                    ctx.POPUP_TYPE?.CROP ?? 4,
+                    '',
+                    { cropImage: capturedRawUrl, cropAspect: 1 }
+                );
+                if (cropped) {
+                    const scaled = await scaleImageTo512Square(cropped);
+                    localApply(scaled);
+                }
+            } catch (err) {
+                console.error(err);
+                toastr['warning']('Could not crop image.', 'RPG Tracker');
+            }
+        } else if (capturedUrl && (capturedUrl.startsWith('data:image/') || /^https?:\/\//i.test(capturedUrl))) {
+            localApply(capturedUrl);
+        } else if (capturedUrl) {
+            toastr['warning']('Please enter a valid https:// URL or use the Browse button.', 'RPG Tracker');
+        }
+    }
+}
+
 function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRefresh = null) {
     const refresh = onRefresh || refreshRenderedView;
     el.querySelectorAll('.rt-random-char-btn').forEach(btn => {
@@ -3038,6 +3213,7 @@ Saves: Fort +X | Ref +X | Will +X`;
         const localApply = (src) => {
             applyPortraitData(entityName, src);
             refresh();
+            void refreshNpcManifest().catch(() => {});
         };
 
         container.addEventListener('dragover', (e) => {
@@ -3086,176 +3262,7 @@ Saves: Fort +X | Ref +X | Will +X`;
 
         container.addEventListener('click', async (e) => {
             e.stopPropagation();
-            const s = getSettings();
-            const currentSrc = (s.customPortraits || {})[entityName] || '';
-            const previewHtml = currentSrc
-                ? `<img src="${currentSrc}" style="max-width:128px;max-height:128px;border-radius:6px;display:block;margin:0 auto 10px;"/>`
-                : `<div style="text-align:center;opacity:0.5;margin-bottom:10px;">No portrait set</div>`;
-            const inputId     = `rt-portrait-url-${Date.now()}`;
-            const fileId      = `rt-portrait-file-${Date.now()}`;
-            const browseBtnId = `rt-portrait-browse-${Date.now()}`;
-            const popupContent = `<div style="padding:10px;min-width:270px;">
-                    <b style="display:block;margin-bottom:8px;">Set Portrait — ${entityName}</b>
-                    ${previewHtml}
-                    <label style="display:block;margin-bottom:4px;font-size:0.85em;opacity:0.8;">Image URL (https://…)</label>
-                    <div style="display:flex;gap:6px;align-items:center;">
-                        <input id="${inputId}" type="text" class="text_pole" placeholder="Paste an image URL…" value="${currentSrc.startsWith('http') ? currentSrc : ''}" style="flex:1;box-sizing:border-box;"/>
-                        <button id="${browseBtnId}" class="menu_button" style="white-space:nowrap;flex-shrink:0;">Browse…</button>
-                    </div>
-                    <input id="${fileId}" type="file" accept="image/*" style="display:none"/>
-                    <div style="font-size:0.78em;opacity:0.55;margin-top:5px;">Or drag &amp; drop onto the portrait box / paste (Ctrl+V) anywhere on this screen.</div>
-                </div>`;
-            const ctx = SillyTavern.getContext();
-            if (!ctx.callGenericPopup) { toastr['warning']('Popup API not available.', 'RPG Tracker'); return; }
-            const popupOpts = { okButton: 'Apply', cancelButton: 'Cancel', wide: false,
-                customButtons: [
-                    { text: '🤖 AI Generate', result: 4, classes: ['menu_button'] },
-                ],
-            };
-            if (currentSrc) {
-                popupOpts.customButtons.push({ text: '✂️ Crop Existing', result: 5, classes: ['menu_button'] });
-                popupOpts.customButtons.push({ text: '🗑 Clear Portrait', result: 2, classes: ['menu_button'] });
-            }
-
-            // capturedUrl: final ready-to-save value (URL string or already-cropped data URL)
-            // capturedRawUrl: full-res image data URL that still needs cropping (set by browse/paste)
-            let capturedUrl    = currentSrc.startsWith('http') ? currentSrc : '';
-            let capturedRawUrl = '';
-
-            // Define paste handler for this popup session.
-            // We only read the file here — the crop popup opens AFTER this dialog closes.
-            const popupPasteHandler = async (ev) => {
-                const file = ev.clipboardData?.files?.[0];
-                if (file && file.type.startsWith('image/')) {
-                    ev.preventDefault();
-                    ev.stopPropagation();
-                    try {
-                        capturedRawUrl = await fileToDataUrl(file);
-                        capturedUrl    = ''; // cleared so the raw url is used after closing
-                        const urlInput = /** @type {HTMLInputElement|null} */ (document.getElementById(inputId));
-                        if (urlInput) urlInput.value = '(image pasted — click Apply to crop ✔)';
-                    } catch (err) {
-                        console.error(err);
-                        toastr['warning']('Could not read image from clipboard.', 'RPG Tracker');
-                    }
-                }
-            };
-
-            setTimeout(() => {
-                const fileInput = /** @type {HTMLInputElement|null} */ (document.getElementById(fileId));
-                const browseBtn = document.getElementById(browseBtnId);
-                const urlInput  = /** @type {HTMLInputElement|null} */ (document.getElementById(inputId));
-
-                // Track whatever the user types into the URL field
-                if (urlInput) {
-                    urlInput.addEventListener('input', () => {
-                        capturedUrl    = urlInput.value.trim();
-                        capturedRawUrl = ''; // URL typed — no raw image pending
-                    });
-                }
-
-                if (browseBtn && fileInput) {
-                    browseBtn.addEventListener('click', (ev) => {
-                        ev.preventDefault();
-                        ev.stopPropagation();
-                        fileInput.click();
-                    });
-                    // Read file at full resolution; crop popup will open after this dialog closes.
-                    fileInput.addEventListener('change', async () => {
-                        const file = fileInput.files?.[0];
-                        if (!file) return;
-                        try {
-                            capturedRawUrl = await fileToDataUrl(file);
-                            capturedUrl    = ''; // cleared so the raw url is used after closing
-                            if (urlInput) urlInput.value = '(file selected — click Apply to crop ✔)';
-                        } catch (err) {
-                            console.error(err);
-                            toastr['warning']('Could not read image file.', 'RPG Tracker');
-                        }
-                    });
-                }
-
-                // Attach paste event listener to document
-                document.addEventListener('paste', popupPasteHandler);
-            }, 0);
-
-            const result = await ctx.callGenericPopup(popupContent, ctx.POPUP_TYPE?.CONFIRM ?? 1, '', popupOpts);
-
-            // Clean up paste event listener immediately after portrait popup closes
-            document.removeEventListener('paste', popupPasteHandler);
-
-            if (result === 2) {
-                localApply(null);
-            } else if (result === 5) {
-                // Crop Existing — open the crop popup for the current image
-                try {
-                    const cropped = await ctx.callGenericPopup(
-                        'Set the crop position of the portrait',
-                        ctx.POPUP_TYPE?.CROP ?? 4,
-                        '',
-                        { cropImage: currentSrc, cropAspect: 1 }
-                    );
-                    if (cropped) {
-                        const scaled = await scaleImageTo512Square(cropped);
-                        localApply(scaled);
-                    }
-                } catch (err) {
-                    console.error(err);
-                    toastr['warning']('Could not crop existing image.', 'RPG Tracker');
-                }
-            } else if (result === 4) {
-                // AI Generate — launch the prompt generation flow
-                try {
-                    if (s.portraitSkipPromptDialog) {
-                        toastr['info'](`Generating portrait for ${entityName} in background…`, 'RPG Tracker');
-                        const aiPrompt = await generatePortraitPrompt(entityName);
-                        if (!aiPrompt) {
-                            toastr['warning']('Could not generate prompt — no context found.', 'RPG Tracker');
-                            return;
-                        }
-                        toastr['info'](`Generating image for ${entityName}…`, 'RPG Tracker');
-                        const dataUrl = await generatePortraitDirect(aiPrompt, entityName);
-                        const scaled = await scaleImageTo512Square(dataUrl);
-                        localApply(scaled);
-                        toastr['success'](`Portrait auto-generated and applied for ${entityName}!`, 'RPG Tracker');
-                    } else {
-                        toastr['info']('Generating portrait prompt…', 'RPG Tracker');
-                        const aiPrompt = await generatePortraitPrompt(entityName);
-                        if (aiPrompt) {
-                            await showPortraitPromptPopup(aiPrompt, entityName, localApply, refresh);
-                        } else {
-                            toastr['warning']('Could not generate prompt — no context found.', 'RPG Tracker');
-                        }
-                    }
-                } catch (err) {
-                    console.error('[RPG Tracker] AI portrait error:', err);
-                    toastr['error']('AI portrait generation failed: ' + (err.message || err), 'RPG Tracker');
-                }
-            } else if (result) {
-                if (capturedRawUrl) {
-                    // A local file or pasted image is pending — open the crop popup NOW as a
-                    // standalone dialog (portrait popup is already closed at this point).
-                    try {
-                        const cropped = await ctx.callGenericPopup(
-                            'Set the crop position of the portrait',
-                            ctx.POPUP_TYPE?.CROP ?? 4,
-                            '',
-                            { cropImage: capturedRawUrl, cropAspect: 1 }
-                        );
-                        if (cropped) {
-                            const scaled = await scaleImageTo512Square(cropped);
-                            localApply(scaled);
-                        }
-                    } catch (err) {
-                        console.error(err);
-                        toastr['warning']('Could not crop image.', 'RPG Tracker');
-                    }
-                } else if (capturedUrl && (capturedUrl.startsWith('data:image/') || /^https?:\/\//i.test(capturedUrl))) {
-                    localApply(capturedUrl);
-                } else if (capturedUrl) {
-                    toastr['warning']('Please enter a valid https:// URL or use the Browse button.', 'RPG Tracker');
-                }
-            }
+            await showPortraitSettingsMenu(entityName, refresh);
         });
 
     });
@@ -5050,13 +5057,15 @@ function createPanel() {
                         // Helper: get brief synopsis for the card (pulls from Appearance section or first text)
                         const getNpcDescription = (content) => {
                             if (!content) return '';
+                            // Strip [LORE] and [/LORE] tags before parsing
+                            const cleanContent = content.replace(/\[\/?LORE\]/gi, '');
                             // Try to extract Appearance section content first
-                            const appMatch = content.match(/Appearance:\s*(.+?)(?=\s*(?:Personality|Brief Background|Habits|Behaviors|Relationship with|Friendship\/Rapport|Affection\/Interest):|$)/is);
+                            const appMatch = cleanContent.match(/Appearance:\s*(.+?)(?=\s*(?:Personality|Brief Background|Habits|Behaviors|Relationship with|Friendship\/Rapport|Affection\/Interest):|$)/is);
                             if (appMatch && appMatch[1].trim()) {
                                 return appMatch[1].trim().substring(0, 140);
                             }
                             // Fallback: first meaningful text
-                            const lines = content.split('\n').map(l => l.trim())
+                            const lines = cleanContent.split('\n').map(l => l.trim())
                                 .filter(l => l && !/^\[ID:/i.test(l) && !/^Friendship\/Rapport:/i.test(l) && !/^Affection\/Interest:/i.test(l));
                             return lines.slice(0, 2).join(' ').substring(0, 140);
                         };
@@ -5067,10 +5076,13 @@ function createPanel() {
                             const sections = {};
                             if (!content) return sections;
 
+                            // Strip [LORE] and [/LORE] tags before parsing
+                            const cleanContent = content.replace(/\[\/?LORE\]/gi, '');
+
                             // Pre-split: inject newlines before known section markers so they become separate lines
                             // Use negative lookbehind so standalone "Behaviors" doesn't match inside "Habits/Behaviors"
                             const sectionMarkers = /(?=(?:Appearance|Personality|Brief Background|Habits\/Behaviors|(?<!Habits\/)Behaviors|Relationship with\s*\{\{user\}\}|(?<!Friendship\/|Affection\/)Relationship)\s*:)/gi;
-                            const normalized = content.replace(sectionMarkers, '\n');
+                            const normalized = cleanContent.replace(sectionMarkers, '\n');
 
                             const lines = normalized.split('\n');
                             let currentSection = 'General';
@@ -5081,7 +5093,7 @@ function createPanel() {
                                 if (!trimmed || /^\[ID:/i.test(trimmed) || /^Friendship\/Rapport:/i.test(trimmed) || /^Affection\/Interest:/i.test(trimmed)) continue;
                                 const match = trimmed.match(sectionPattern);
                                 if (match) {
-                                    currentSection = match[1].replace(/\s*\{\{user\}\}/, '');
+                                    currentSection = match[1].replace(/\s*\{\{user\}\}/, '').replace(/\s+with$/i, '').trim();
                                     const afterColon = trimmed.substring(match[0].length).trim();
                                     if (afterColon) {
                                         if (!sections[currentSection]) sections[currentSection] = [];
@@ -5107,7 +5119,8 @@ function createPanel() {
                         const openNpcDetailPopup = (item, rel) => {
                             const ctx = SillyTavern.getContext();
                             if (!ctx.callGenericPopup) return;
-                            const portraitSrc = s.customPortraits?.[item.label] || '';
+                            const normLabel = item.label.replace(/\s*\(.*?\)/g, '').trim();
+                            const portraitSrc = s.customPortraits?.[normLabel] || '';
                             const sections = parseNpcSections(item.content);
 
                             // Build sections HTML
@@ -5118,12 +5131,12 @@ function createPanel() {
                                                      name === 'Personality' ? '#8b5cf6' :
                                                      name === 'Brief Background' ? '#3b82f6' :
                                                      name.includes('Habit') || name.includes('Behavior') ? '#10b981' :
-                                                     name === 'Relationship' ? '#f472b6' : 'rgba(255,255,255,0.5)';
+                                                     name === 'Relationship' ? '#f472b6' : 'var(--SmartThemeEmColor, var(--SmartThemeBodyColorTextMuted, rgba(128,128,128,0.5)))';
                                 sectionsHtml += `<div style="margin-bottom:18px;">
                                     <div style="font-size:14px;font-weight:bold;color:${sectionColor};text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;display:flex;align-items:center;gap:7px;">
                                         <span style="font-size:16px;">${icon}</span> ${escapeHtml(name)}
                                     </div>
-                                    <div style="font-size:15px;line-height:1.6;color:rgba(255,255,255,0.88);border-left:3px solid ${sectionColor}44;margin-left:3px;padding:6px 0 6px 14px;">
+                                    <div style="font-size:15px;line-height:1.6;color:var(--SmartThemeBodyColor, inherit);border-left:3px solid ${sectionColor}44;margin-left:3px;padding:6px 0 6px 14px;">
                                         ${lines.map(l => escapeHtml(l)).join('<br>')}
                                     </div>
                                 </div>`;
@@ -5135,12 +5148,12 @@ function createPanel() {
                                 const pct = Math.abs(clamped) / 2;
                                 const isPos = clamped >= 0;
                                 const bgColor = isPos ? colorPos : colorNeg;
-                                const valColor = clamped === 0 ? 'rgba(255,255,255,0.4)' : bgColor;
+                                const valColor = clamped === 0 ? 'var(--SmartThemeEmColor, inherit)' : bgColor;
                                 return `<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
                                     <span style="font-size:20px;">${icon}</span>
-                                    <span style="font-size:13px;width:80px;color:rgba(255,255,255,0.6);font-weight:500;">${label}</span>
-                                    <div style="flex:1;height:12px;background:rgba(255,255,255,0.06);border-radius:6px;position:relative;overflow:hidden;">
-                                        <div style="position:absolute;left:50%;top:0;bottom:0;width:1px;background:rgba(255,255,255,0.2);"></div>
+                                    <span style="font-size:13px;width:80px;color:var(--SmartThemeBodyColor, inherit);opacity:0.65;font-weight:500;">${label}</span>
+                                    <div style="flex:1;height:12px;background:var(--SmartThemeBorderColor, rgba(128,128,128,0.15));border-radius:6px;position:relative;overflow:hidden;">
+                                        <div style="position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--SmartThemeBorderColor, rgba(128,128,128,0.25));"></div>
                                         <div style="position:absolute;top:0;bottom:0;border-radius:6px;background:${bgColor};${isPos ? `left:50%;width:${pct}%;` : `right:50%;width:${pct}%;`}transition:width 0.3s ease;"></div>
                                     </div>
                                     <span style="font-size:15px;font-weight:bold;width:40px;text-align:right;color:${valColor};font-family:monospace;">${clamped > 0 ? '+' : ''}${clamped}</span>
@@ -5155,21 +5168,21 @@ function createPanel() {
                             // Full-size portrait (512px stored, display at native res)
                             const portraitEl = portraitSrc
                                 ? `<img src="${escapeHtml(portraitSrc)}" style="width:100%;height:auto;aspect-ratio:1;object-fit:cover;border-radius:12px;border:2px solid rgba(212,169,64,0.3);box-shadow:0 4px 20px rgba(0,0,0,0.4);" alt="${escapeHtml(item.label)}">`
-                                : `<div style="width:100%;aspect-ratio:1;border-radius:12px;background:rgba(0,0,0,0.3);border:2px solid rgba(212,169,64,0.2);display:flex;align-items:center;justify-content:center;font-size:64px;opacity:0.25;">👤</div>`;
+                                : `<div style="width:100%;aspect-ratio:1;border-radius:12px;background:var(--SmartThemeBorderColor, rgba(128,128,128,0.1));border:2px solid rgba(212,169,64,0.2);display:flex;align-items:center;justify-content:center;font-size:64px;opacity:0.25;color:var(--SmartThemeBodyColor, inherit);">👤</div>`;
 
-                            const popupHtml = `<div style="width:100%;box-sizing:border-box;padding:24px;text-align:left;max-height:80vh;overflow-y:auto;font-family:var(--rt-font, system-ui, sans-serif);">
+                            const popupHtml = `<div style="width:100%;box-sizing:border-box;padding:24px;text-align:left;max-height:80vh;overflow-y:auto;font-family:var(--rt-font, system-ui, sans-serif);color:var(--SmartThemeBodyColor, inherit);">
                                 <div style="display:flex;gap:24px;margin-bottom:20px;align-items:flex-start;flex-wrap:wrap;">
                                     <div style="flex-shrink:0;width:280px;">
                                         ${portraitEl}
                                     </div>
                                     <div style="flex:1;min-width:220px;">
                                         <div style="font-size:24px;font-weight:bold;color:#d4a940;margin-bottom:8px;line-height:1.2;">${escapeHtml(item.label)}</div>
-                                        <span style="font-size:11px;padding:3px 10px;border-radius:10px;font-weight:bold;${item.is_active ? 'background:rgba(0,255,170,0.12);color:#00ffaa;border:1px solid rgba(0,255,170,0.25);' : 'background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.4);border:1px solid rgba(255,255,255,0.1);'}">${item.is_active ? '● Active' : '○ Inactive'}</span>
+                                        <span style="font-size:11px;padding:3px 10px;border-radius:10px;font-weight:bold;${item.is_active ? 'background:rgba(0,255,170,0.12);color:#00ffaa;border:1px solid rgba(0,255,170,0.25);' : 'background:var(--SmartThemeBorderColor, rgba(128,128,128,0.1));color:var(--SmartThemeBodyColor, inherit);opacity:0.65;border:1px solid var(--SmartThemeBorderColor, rgba(128,128,128,0.2));'}">${item.is_active ? '● Active' : '○ Inactive'}</span>
                                         ${s.npcRelationshipBars ? `<div style="margin-top:20px;">${barsHtml}</div>` : ''}
                                     </div>
                                 </div>
                                 <div style="border-top:2px solid rgba(212,169,64,0.15);padding-top:18px;">
-                                    ${sectionsHtml || `<div style="font-size:14px;color:rgba(255,255,255,0.5);font-style:italic;padding:16px 0;">No structured sections found. Edit the entry to add Appearance, Personality, and other sections.</div>`}
+                                    ${sectionsHtml || `<div style="font-size:14px;color:var(--SmartThemeBodyColor, inherit);opacity:0.5;font-style:italic;padding:16px 0;">No structured sections found. Edit the entry to add Appearance, Personality, and other sections.</div>`}
                                 </div>
                             </div>`;
 
@@ -5182,7 +5195,8 @@ function createPanel() {
                         for (const item of items) {
                             const rel = parseRelationship(item.content || '');
                             const desc = getNpcDescription(item.content);
-                            const portraitSrc = s.customPortraits?.[item.label] || '';
+                            const normLabel = item.label.replace(/\s*\(.*?\)/g, '').trim();
+                            const portraitSrc = s.customPortraits?.[normLabel] || '';
                             const isDirty = _dirtyEntries.has(item.id);
 
                             const card = document.createElement('div');
@@ -5197,7 +5211,7 @@ function createPanel() {
                             card.innerHTML = `
                                 <div class="rt-npc-portrait-wrap">
                                     ${portraitHtml}
-                                    <div class="rt-npc-portrait-gen-overlay" title="Generate portrait">🎨</div>
+                                    <div class="rt-npc-portrait-gen-overlay" title="${portraitSrc ? 'Manage portrait' : 'Generate portrait'}">${portraitSrc ? '⚙️' : '🎨'}</div>
                                 </div>
                                 <div class="rt-npc-info">
                                     <div class="rt-npc-name">${escapeHtml(item.label)}${isDirty ? ' <span style="color:#ffa500; font-size:8px;" title="Unsaved edits">●</span>' : ''}</div>
@@ -5208,6 +5222,7 @@ function createPanel() {
                                         ${renderRelBar(rel.affection, 'affection')}
                                     </div>` : ''}
                                     <div class="rt-npc-actions">
+                                        <button class="rt-npc-action-btn rt-npc-view" data-id="${item.id}" title="View NPC card"><i class="fa-solid fa-address-card"></i></button>
                                         <button class="rt-npc-action-btn rt-npc-edit" data-id="${item.id}" title="Edit entry"><i class="fa-solid fa-pen-to-square"></i></button>
                                         <button class="rt-npc-action-btn rt-npc-clean" data-id="${item.id}" title="Cleanup entry"><i class="fa-solid fa-broom"></i></button>
                                         <button class="rt-npc-action-btn rt-npc-delete" data-id="${item.id}" title="Delete entry"><i class="fa-solid fa-trash"></i></button>
@@ -5229,35 +5244,72 @@ function createPanel() {
                             entryBody.style.paddingTop = '6px';
                             if (_openEntries.has(item.id)) card.classList.add('open');
 
-                            // Click card body → open rich NPC detail popup
+                            // Click card body → toggle inline view
                             card.addEventListener('click', (e) => {
-                                if (/** @type {HTMLElement} */ (e.target).closest('.rt-npc-portrait-gen-overlay, .rt-npc-action-btn, .rt-npc-edit, .rt-npc-clean, .rt-npc-delete, textarea, input, button, select')) return;
-                                openNpcDetailPopup(item, rel);
+                                if (/** @type {HTMLElement} */ (e.target).closest('.rt-npc-portrait-wrap, .rt-npc-portrait-gen-overlay, .rt-npc-action-btn, .rt-npc-view, .rt-npc-edit, .rt-npc-clean, .rt-npc-delete, textarea, input, button, select')) return;
+                                const opening = entryBody.style.display === 'none';
+                                entryBody.style.display = opening ? 'flex' : 'none';
+                                if (opening) {
+                                    _openEntries.add(item.id);
+                                    card.classList.add('open');
+                                } else {
+                                    _openEntries.delete(item.id);
+                                    card.classList.remove('open');
+                                }
                             });
 
 
-                            // Portrait generate overlay click
-                            const genOverlay = card.querySelector('.rt-npc-portrait-gen-overlay');
-                            if (genOverlay) {
-                                genOverlay.addEventListener('click', async (e) => {
+                            // Portrait click/generate overlay handlers
+                            const portraitWrap = card.querySelector('.rt-npc-portrait-wrap');
+                            if (portraitWrap) {
+                                portraitWrap.addEventListener('click', async (e) => {
                                     e.stopPropagation();
-                                    try {
-                                        toastr['info'](`Generating portrait prompt for ${item.label}...`, 'NPC Portrait');
-                                        const prompt = await generateNpcPortraitPrompt(item.label, item.content || '');
-                                        if (!prompt) {
-                                            toastr['warning']('Could not generate portrait prompt.', 'NPC Portrait');
-                                            return;
+                                    if (portraitSrc) {
+                                        await showPortraitSettingsMenu(item.label, refreshManifest, item.content || '');
+                                    } else {
+                                        try {
+                                            if (s.portraitSkipPromptDialog) {
+                                                toastr['info'](`Generating portrait for ${item.label} in background…`, 'NPC Portrait');
+                                                const prompt = await generateNpcPortraitPrompt(item.label, item.content || '');
+                                                if (!prompt) {
+                                                    toastr['warning']('Could not generate portrait prompt.', 'NPC Portrait');
+                                                    return;
+                                                }
+                                                toastr['info'](`Generating image for ${item.label}…`, 'NPC Portrait');
+                                                const dataUrl = await generatePortraitDirect(prompt, item.label);
+                                                const scaled = await scaleImageTo512Square(dataUrl);
+                                                applyPortraitData(item.label, scaled);
+                                                toastr['success'](`Portrait auto-generated and applied for ${item.label}!`, 'NPC Portrait');
+                                                await refreshManifest();
+                                                refreshRenderedView();
+                                            } else {
+                                                toastr['info'](`Generating portrait prompt for ${item.label}...`, 'NPC Portrait');
+                                                const prompt = await generateNpcPortraitPrompt(item.label, item.content || '');
+                                                if (!prompt) {
+                                                    toastr['warning']('Could not generate portrait prompt.', 'NPC Portrait');
+                                                    return;
+                                                }
+                                                await showPortraitPromptPopup(prompt, item.label, (src) => {
+                                                    applyPortraitData(item.label, src);
+                                                }, () => {
+                                                    void refreshManifest().catch(() => {});
+                                                    refreshRenderedView();
+                                                });
+                                            }
+                                        } catch (err) {
+                                            toastr['error'](`Portrait generation failed: ${String(err.message || err).substring(0, 120)}`, 'NPC Portrait');
                                         }
-                                        await showPortraitPromptPopup(prompt, item.label, (src) => {
-                                            applyPortraitData(item.label, src);
-                                        }, () => refreshManifest());
-                                    } catch (err) {
-                                        toastr['error'](`Portrait generation failed: ${String(err.message || err).substring(0, 120)}`, 'NPC Portrait');
                                     }
                                 });
                             }
 
                             // Action button handlers
+                            const viewBtn = card.querySelector('.rt-npc-view');
+                            if (viewBtn) viewBtn.addEventListener('click', (e) => {
+                                e.stopPropagation();
+                                openNpcDetailPopup(item, rel);
+                            });
+
                             const editBtn = card.querySelector('.rt-npc-edit');
                             if (editBtn) editBtn.addEventListener('click', (e) => {
                                 e.stopPropagation();
@@ -5302,7 +5354,6 @@ function createPanel() {
                             });
 
                             // Portrait drag-and-drop
-                            const portraitWrap = card.querySelector('.rt-npc-portrait-wrap');
                             if (portraitWrap) {
                                 portraitWrap.addEventListener('dragover', (e) => { e.preventDefault(); portraitWrap.style.borderColor = '#d4a940'; });
                                 portraitWrap.addEventListener('dragleave', () => { portraitWrap.style.borderColor = ''; });
@@ -5317,6 +5368,7 @@ function createPanel() {
                                         applyPortraitData(item.label, scaled);
                                         toastr['success'](`Portrait applied for ${item.label}`, 'NPC Portrait');
                                         await refreshManifest();
+                                        refreshRenderedView();
                                     } catch (err) {
                                         toastr['error']('Failed to apply portrait.', 'NPC Portrait');
                                     }
@@ -5620,6 +5672,7 @@ function createPanel() {
         };
 
         refreshAgentManifest = refreshManifest;
+        refreshNpcManifest = refreshManifest;
 
         // ════════════════════════════════════════════════════════════════════
         //  NPC Character Card Picker + AI Adaptation
@@ -5658,9 +5711,10 @@ function createPanel() {
                 }
             } else {
                 // Direct add: use name, description, personality (NOT scenario/first_mes)
-                const parts = [];
+                const parts = ['[LORE]'];
                 if (charCard.description) parts.push(charCard.description.substring(0, 1500));
                 if (charCard.personality) parts.push(`Personality: ${charCard.personality.substring(0, 500)}`);
+                parts.push('[/LORE]');
                 if (s.npcRelationshipBars) {
                     parts.push('Friendship/Rapport: 0/100');
                     parts.push('Affection/Interest: 0/100');
@@ -5671,6 +5725,25 @@ function createPanel() {
             // Ensure relationship fields are present even in adapted content (only if bars enabled)
             if (s.npcRelationshipBars && adaptedContent && !/Friendship\/Rapport:/i.test(content)) {
                 content += '\nFriendship/Rapport: 0/100\nAffection/Interest: 0/100';
+            }
+
+            // Ensure the content has a [LORE] wrap around the persistent sections
+            if (!/\[LORE\]/i.test(content)) {
+                const lines = content.split('\n');
+                const loreLines = [];
+                const relLines = [];
+                for (const line of lines) {
+                    const trimmed = line.trim();
+                    if (/^Friendship\/Rapport:/i.test(trimmed) || /^Affection\/Interest:/i.test(trimmed)) {
+                        relLines.push(trimmed);
+                    } else if (trimmed || loreLines.length > 0) {
+                        loreLines.push(line);
+                    }
+                }
+                while (loreLines.length > 0 && !loreLines[loreLines.length - 1].trim()) {
+                    loreLines.pop();
+                }
+                content = `[LORE]\n${loreLines.join('\n')}\n[/LORE]` + (relLines.length > 0 ? '\n' + relLines.join('\n') : '');
             }
 
             // Load or create the book
@@ -5846,7 +5919,7 @@ Rules:
 - Your output MUST be strictly formatted as a lorebook entry tag. It MUST look EXACTLY like this:
   [[NPC: Name | Description | keywords]]
 - Replace "Name" with the character's name.
-- Replace "Description" with the full formatted description section. DO NOT use the "|" character inside the Description; separate the internal sections (Appearance, Personality, etc.) using newlines.
+- Replace "Description" with the full formatted description section. Wrap all the persistent sections (Appearance, Personality, Brief Background, Habits/Behaviors, Relationship with {{user}}) inside a single [LORE] and [/LORE] tag block within the Description. DO NOT use the "|" character inside the Description; separate the internal sections using newlines.
 - Replace "keywords" with a comma-separated list of keywords including their name.
 - Output ONLY this single [[NPC: ...]] string. No preamble, no explanation, no other tags.`;
 
@@ -7101,10 +7174,13 @@ Rules:
         const choice = await ctx.callGenericPopup(popupContent, ctx.POPUP_TYPE?.TEXT ?? 1, '', popupOpts);
         if (choice === 1001) {
             await autoGeneratePartyPortraits(refreshRenderedView);
+            if (typeof refreshManifest === 'function') void refreshManifest().catch(() => {});
         } else if (choice === 1002) {
             removeAllPortraits(refreshRenderedView);
+            if (typeof refreshManifest === 'function') void refreshManifest().catch(() => {});
         } else if (choice === 1003) {
             await autoGenerateEnemyPortraits(refreshRenderedView);
+            if (typeof refreshManifest === 'function') void refreshManifest().catch(() => {});
         }
     });
 

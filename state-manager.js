@@ -22,13 +22,13 @@ export const MODULE_NAME = 'rpg_tracker';
  * @returns {string}
  */
 export function buildNpcInstruction(includeRelationships = false, majorTokens = 125, minorTokens = 100) {
-    let instruction = 'Named characters the party interacts with. Do NOT create an entry for {{user}}. Mention {{user}} in EVENT or QUEST entries as needed.\n\nIMPORTANT: The Description field inside the [[ ]] tags must contain ALL of the following structured sections. Do NOT place any content outside the tags. Everything goes inside the Description pipe.\n\nAppearance: Key visual identifiers only \u2014 race, build, most distinctive feature, weapon/armor if relevant.\nPersonality: Core temperament and primary motivation in a few words.\nBrief Background: Role in the world, why they matter to the story.\nHabits/Behaviors: One or two defining behaviors or combat tendencies.\nRelationship with {{user}}: Current standing and attitude.';
+    let instruction = 'Named characters the party interacts with. Do NOT create an entry for {{user}}. Mention {{user}} in EVENT or QUEST entries as needed.\n\nIMPORTANT: Wrap the persistent lore sections (Appearance, Personality, Brief Background, Habits/Behaviors, Relationship with {{user}}) inside a single `[LORE]` and `[/LORE]` tag block. The Description field inside the [[ ]] tags must contain this block.\n\n[LORE]\nAppearance: Key visual identifiers only — race, build, most distinctive feature, weapon/armor if relevant.\nPersonality: Core temperament and primary motivation in a few words.\nBrief Background: Role in the world, why they matter to the story.\nHabits/Behaviors: One or two defining behaviors or combat tendencies.\nRelationship with {{user}}: Current standing and attitude.\n[/LORE]';
     
     if (includeRelationships) {
         instruction += '\nFriendship/Rapport: 0/100\nAffection/Interest: 0/100\n\nThe Friendship and Affection values CAN be negative (e.g. -45/100) representing hostility or disgust. Range: -100 to 100. Start new NPCs at 0/100 for both. Update as interactions warrant.';
     }
 
-    instruction += `\n\nBe concise and functional \u2014 every word should serve gameplay or characterization. Avoid adjective dumps and purple prose.\n\n[TOKEN LIMITS]\nMajor NPCs (recurring, plot-important): no more than ${majorTokens} tokens.\nMinor NPCs (shopkeepers, guards, one-off encounters): no more than ${minorTokens} tokens \u2014 use only Appearance and Personality for minor NPCs, skip other sections.`;
+    instruction += `\n\nBe concise and functional — every word should serve gameplay or characterization. Avoid adjective dumps and purple prose.\n\n[TOKEN LIMITS]\nMajor NPCs (recurring, plot-important): no more than ${majorTokens} tokens.\nMinor NPCs (shopkeepers, guards, one-off encounters): no more than ${minorTokens} tokens — use only Appearance and Personality for minor NPCs (also wrapped in [LORE]...[/LORE]), skip other sections.`;
     return instruction;
 }
 

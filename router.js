@@ -473,7 +473,9 @@ export async function runRouterPass(narrativeOutput, manualPrompt = null, custom
 7. Do NOT activate, deactivate, record, or delete entries except via CONSOLIDATE targets.
 8. Do NOT consolidate entries of different categories (e.g., do NOT merge an NPC or Location into a Quest or Event). Consolidation is strictly for true duplicates representing the exact same entity or concept (e.g., two entries for the same NPC).
 9. Do NOT merge multiple distinct chronological events into a single entry to "reduce fragmentation". Each distinct event must remain as a separate entry so it triggers on its own keywords.
-10. Output your reasoning first, then the tags.`;
+10. NEVER modify, shorten, or delete content within \`[LORE] ... [/LORE]\` blocks under any circumstances. Keep the tags and their inner content completely unchanged.
+11. For legacy NPC entries lacking these tags, identify their persistent sections (Appearance, Personality, Brief Background, Habits/Behaviors, Relationship with {{user}}) and wrap them inside a \`[LORE] ... [/LORE]\` block to protect them from future passes. Keep relationship bars (e.g., Friendship/Rapport, Affection/Interest) outside the \`[LORE]\` block.
+12. Output your reasoning first, then the tags.`;
 
             let agentInstructionPrompt = `You are the Lorebook Archivist. Consolidate bloated lorebook entries using the tools provided.
 
@@ -492,7 +494,9 @@ For each flagged entry:
 6. Do NOT activate, deactivate, record, or create new entries.
 7. Do NOT consolidate entries of different categories (e.g., do NOT merge an NPC or Location into a Quest or Event). Consolidation is strictly for true duplicates representing the exact same entity (e.g., two entries for the same NPC).
 8. Do NOT merge multiple distinct chronological events into a single entry to "reduce fragmentation". Each distinct historical event must remain as its own entry so it triggers on its specific keywords.
-9. Call commit exactly once at the end. Do not call it per-entry.`;
+9. NEVER modify, shorten, or delete content within \`[LORE] ... [/LORE]\` blocks under any circumstances. Keep the tags and their inner content completely unchanged.
+10. For legacy NPC entries lacking these tags, identify their persistent sections (Appearance, Personality, Brief Background, Habits/Behaviors, Relationship with {{user}}) and wrap them inside a \`[LORE] ... [/LORE]\` block to protect them from future passes. Keep relationship bars (e.g., Friendship/Rapport, Affection/Interest) outside the \`[LORE]\` block.
+11. Call commit exactly once at the end. Do not call it per-entry.`;
 
             if (customInstructions) {
                 const overrideText = `\n\n## USER CUSTOM REQUIREMENTS\nYou MUST adhere strictly to these custom compression instructions:\n- ${customInstructions}`;

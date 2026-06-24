@@ -32,13 +32,19 @@ export function scaleImageTo512Square(dataUrl) {
     });
 }
 
+export function normalizeEntityName(name) {
+    if (!name) return '';
+    return name.replace(/\s*\(.*?\)/g, '').trim();
+}
+
 export function applyPortraitData(entityName, src) {
     const s = getSettings();
     if (!s.customPortraits) s.customPortraits = {};
+    const normName = normalizeEntityName(entityName);
     if (src) {
-        s.customPortraits[entityName] = src;
+        s.customPortraits[normName] = src;
     } else {
-        delete s.customPortraits[entityName];
+        delete s.customPortraits[normName];
     }
     saveSettings();
 }
@@ -909,7 +915,8 @@ const activeGenerations = new Set();
  */
 export function hasPortrait(name) {
     const s = getSettings();
-    return !!(s.customPortraits && s.customPortraits[name]);
+    const normName = normalizeEntityName(name);
+    return !!(s.customPortraits && s.customPortraits[normName]);
 }
 
 /**

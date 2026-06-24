@@ -474,7 +474,8 @@ const DEFAULT_XP_COLOR = 'linear-gradient(90deg, #0088ff, #00d4ff)';
  */
 function renderPortraitHtml(entityName) {
     const s = getSettings();
-    const src = (s.customPortraits || {})[entityName];
+    const normName = entityName.replace(/\s*\(.*?\)/g, '').trim();
+    const src = (s.customPortraits || {})[normName];
     if (src) {
         return `<img class="rt-entity-portrait" src="${escapeHtml(src)}" alt="${escapeHtml(entityName)}" />`;
     }
