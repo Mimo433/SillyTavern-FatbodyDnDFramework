@@ -2,6 +2,12 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [3.8.9] - 2026-06-24
+
+### Added
+- **Library Reset Button**:
+  - Added a red reset button (`#rpg_tracker_btn_reset_sysprompt_library`) inside the **Sysprompt Editor** drawer, placed side-by-side with the Custom Sysprompt Library button. This button disables all custom sections in the library and immediately auto-applies the default system prompt template based on active settings.
+
 ## [3.8.8] - 2026-06-24
 
 ### Removed

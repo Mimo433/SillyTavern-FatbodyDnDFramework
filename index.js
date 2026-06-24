@@ -7617,7 +7617,7 @@ function buildSysprompt(rawText) {
 
         // --- Version Upgrade Prompt Reset Dialog ---
         {
-            let currentVersion = '3.8.8'; // Fallback
+            let currentVersion = '3.8.9'; // Fallback
             try {
                 const manifestUrl = new URL('./manifest.json', import.meta.url);
                 const response = await fetch(manifestUrl);
@@ -9569,6 +9569,18 @@ RULES:
                     toastr['success']('Library prompts applied to Sysprompt! \u2705', 'Sysprompt Library');
                 }
             }
+        });
+
+        $('#rpg_tracker_btn_reset_sysprompt_library').on('click', async function () {
+            if (!confirm('This will disable all custom sections in your Sysprompt Library and restore the D&D system prompt to its clean defaults. Proceed?')) return;
+            const settings = getSettings();
+            if (settings.customSyspromptLibrary) {
+                settings.customSyspromptLibrary.forEach(p => p.enabled = false);
+            }
+            settings._customLibraryLastInjection = '';
+            saveSettings();
+            await autoApplySysprompt();
+            toastr['success']('All library sections disabled & Sysprompt reset to defaults! 🔄', 'Sysprompt Editor');
         });
 
         // ── AI Section Builder ──
