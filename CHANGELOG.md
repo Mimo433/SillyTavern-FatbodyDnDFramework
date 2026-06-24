@@ -2,6 +2,13 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [3.8.7] - 2026-06-24
+
+### Removed
+- **Sysprompt Editor Button**:
+  - Removed the duplicate **Apply Sysprompt** button from the **Sysprompt Editor** (SUB-DRAWER 5) completely, leaving it solely under the **Narrator Configuration** block in **General & Visuals**.
+  - Renamed the drawer from **Sysprompt Editor & Reset** to **Sysprompt Editor** to reflect the button removals.
+
 ## [3.8.6] - 2026-06-24
 
 ### Changed
