@@ -799,63 +799,31 @@ export async function processRelationshipTags() {
 
     const ctx = SillyTavern.getContext();
     if (!ctx.chat || ctx.chat.length === 0) return;
-    const chat = ctx.chat;
-
-    // Indestructible regex: Matches [REL: A | B | C] regardless of spacing, case, or invisible chars
-    const REL_RE = /\[REL:\s*([^|]+)\|\s*([^|]+)\|\s*([^\]]+)\]/gi;
     
+    // 1. IT SEES LAST CHAT MESSAGE. ONLY
+    const lastMsg = ctx.chat[ctx.chat.length - 1];
+    if (!lastMsg || !lastMsg.mes) return;
+    if (!/\[REL:/i.test(lastMsg.mes)) return;
+
+    // 2. Extracts data using indestructible regex
+    const REL_RE = /\[REL:\s*([^|]+)\|\s*([^|]+)\|\s*([^\]]+)\]/gi;
     const matches = [];
-    let lastMsg = null;
-    let anyChanged = false;
+    let match;
+    
+    while ((match = REL_RE.exec(lastMsg.mes)) !== null) {
+        const cleanName = match[1].replace(/[\u200B\uFEFF]/g, '').trim();
+        const cleanField = match[2].replace(/[^a-z]/gi, '').toLowerCase();
+        const cleanDeltaStr = match[3].replace(/[^\d+-]/g, '');
+        const parsedDelta = parseInt(cleanDeltaStr, 10);
 
-    // Scan the last 3 messages (catches AI outputs AND user-typed manual overrides)
-    for (let i = chat.length - 1; i >= Math.max(0, chat.length - 3); i--) {
-        const msg = chat[i];
-        if (!msg || !msg.mes) continue;
-        if (!/\[REL:/i.test(msg.mes)) continue;
-
-        let msgHasMatch = false;
-        
-        const newMes = msg.mes.replace(REL_RE, (matchStr, name, field, delta, offset, fullString) => {
-            // Clean the extracted values to be completely indestructible against LLM formatting quirks
-            const cleanName = name.replace(/[\u200B\uFEFF]/g, '').trim();
-            const cleanField = field.replace(/[^a-z]/gi, '').toLowerCase();
-            const cleanDeltaStr = delta.replace(/[^\d+-]/g, '');
-            const parsedDelta = parseInt(cleanDeltaStr, 10);
-
-            if ((cleanField === 'friendship' || cleanField === 'affection') && !isNaN(parsedDelta)) {
-                matches.push({ 
-                    name: cleanName, 
-                    field: cleanField, 
-                    delta: parsedDelta 
-                });
-                msgHasMatch = true;
-                
-                // Mark as processed to prevent infinite loops on rescans
-                const processedStr = matchStr.replace(/\[REL:/i, '[PROCESSED_REL:');
-                
-                // If it is ALREADY inside an HTML comment (e.g. generated inside <!--TRACKER:), 
-                // do NOT wrap it again to prevent illegal nested comments.
-                const before = fullString.substring(0, offset);
-                if (before.lastIndexOf('<!--') > before.lastIndexOf('-->')) {
-                    return processedStr; 
-                }
-
-                // If it's visible text, wrap it in standard HTML comments so ST hides it natively
-                return `<!-- ${processedStr} -->`;
-            }
-
-            return matchStr; // If it was malformed beyond repair, don't touch it
-        });
-
-        if (msgHasMatch) {
-            msg.mes = newMes.trimEnd();
-            lastMsg = msg;
+        if ((cleanField === 'friendship' || cleanField === 'affection') && !isNaN(parsedDelta)) {
+            matches.push({ name: cleanName, field: cleanField, delta: parsedDelta });
         }
     }
 
     if (matches.length === 0) return;
 
+    // Load active entries to resolve NPC IDs
     const activeKeys = [...(settings.activeRouterKeys || []), ...(settings.activeWorldKeys || [])];
     const bookCache = {};
     const activeEntries = [];
@@ -874,22 +842,7 @@ export async function processRelationshipTags() {
         activeEntries.push({ id, displayName, keywords, comment: (entry.comment || '').toLowerCase() });
     }
 
-    try {
-        // Force the DOM to hide it immediately if it's in the last message
-        const lastMesEls = document.querySelectorAll('#chat .mes .mes_text');
-        for (const el of lastMesEls) {
-            if (el.innerHTML.includes('[REL:')) {
-                el.innerHTML = el.innerHTML.replace(REL_RE, (matchStr, name, field, delta, offset, fullString) => {
-                    const processedStr = matchStr.replace(/\[REL:/i, '[PROCESSED_REL:');
-                    const before = fullString.substring(0, offset);
-                    if (before.lastIndexOf('<!--') > before.lastIndexOf('-->')) return processedStr;
-                    return `<!-- ${processedStr} -->`;
-                });
-            }
-        }
-    } catch (_) {}
-
-    if (lastMsg && typeof ctx.saveChatDebounced === 'function') ctx.saveChatDebounced();
+    let anyChanged = false;
 
     for (const m of matches) {
         if (m.delta === 0) continue;
