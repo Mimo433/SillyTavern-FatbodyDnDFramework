@@ -841,6 +841,16 @@ export async function processRelationshipTags() {
 
     let anyChanged = false;
 
+    // Always strip the tags from the visible message FIRST to ensure they don't linger even if processing crashes
+    lastMsg.mes = rawText.replace(REL_RE, '').trimEnd();
+
+    try {
+        const lastMesEl = document.querySelector('#chat .mes:last-of-type .mes_text');
+        if (lastMesEl) lastMesEl.innerHTML = lastMesEl.innerHTML.replace(REL_RE, '');
+    } catch (_) {}
+
+    if (typeof ctx.saveChatDebounced === 'function') ctx.saveChatDebounced();
+
     for (const m of matches) {
         if (m.delta === 0) continue;
         const targetName = m.name.toLowerCase();
@@ -850,35 +860,38 @@ export async function processRelationshipTags() {
             e.comment.includes(targetName)
         );
 
-        if (!resolved) continue;
+        if (!resolved) {
+            // @ts-ignore
+            toastr.warning(`Could not find active NPC matching "${m.name}"`, 'RPG Tracker');
+            continue;
+        }
 
-        if (!settings.npcRelationshipValues) settings.npcRelationshipValues = {};
-        if (!settings.npcRelationshipValues[resolved.id]) settings.npcRelationshipValues[resolved.id] = { friendship: 0, affection: 0 };
-        
-        const prev = settings.npcRelationshipValues[resolved.id][m.field] ?? 0;
-        settings.npcRelationshipValues[resolved.id][m.field] = Math.max(-100, Math.min(100, prev + m.delta));
+        try {
+            if (!settings.npcRelationshipValues) settings.npcRelationshipValues = {};
+            if (!settings.npcRelationshipValues[resolved.id]) settings.npcRelationshipValues[resolved.id] = { friendship: 0, affection: 0 };
+            
+            const prev = settings.npcRelationshipValues[resolved.id][m.field] ?? 0;
+            settings.npcRelationshipValues[resolved.id][m.field] = Math.max(-100, Math.min(100, prev + m.delta));
 
-        if (!settings.npcRelationshipLog) settings.npcRelationshipLog = {};
-        if (!settings.npcRelationshipLog[resolved.id]) settings.npcRelationshipLog[resolved.id] = [];
-        settings.npcRelationshipLog[resolved.id].unshift({ timestamp: Date.now(), field: m.field, delta: m.delta, newValue: settings.npcRelationshipValues[resolved.id][m.field], source: 'ai' });
-        
-        const sign = m.delta > 0 ? '+' : '';
-        const icon = m.field === 'friendship' ? '🤝' : '💗';
-        const label = m.field === 'friendship' ? 'Friendship' : 'Affection';
-        // @ts-ignore
-        toastr.info(`${icon} ${m.name}: ${sign}${m.delta} ${label}`, 'Relationship', { timeOut: 3500, positionClass: 'toast-bottom-right' });
+            if (!settings.npcRelationshipLog) settings.npcRelationshipLog = {};
+            // Strict array check to prevent crashes from corrupted legacy data
+            if (!Array.isArray(settings.npcRelationshipLog[resolved.id])) settings.npcRelationshipLog[resolved.id] = [];
+            settings.npcRelationshipLog[resolved.id].unshift({ timestamp: Date.now(), field: m.field, delta: m.delta, newValue: settings.npcRelationshipValues[resolved.id][m.field], source: 'ai' });
+            
+            const sign = m.delta > 0 ? '+' : '';
+            const icon = m.field === 'friendship' ? '🤝' : '💗';
+            const label = m.field === 'friendship' ? 'Friendship' : 'Affection';
+            // @ts-ignore
+            toastr.info(`${icon} ${m.name}: ${sign}${m.delta} ${label}`, 'Relationship', { timeOut: 3500, positionClass: 'toast-bottom-right' });
 
-        anyChanged = true;
+            anyChanged = true;
+        } catch (e) {
+            console.error('[RPG Tracker] Error updating relationship for', m.name, e);
+            // @ts-ignore
+            toastr.error(`Error updating relationship for ${m.name}: ${e.message}`, 'RPG Tracker');
+        }
     }
 
-    lastMsg.mes = rawText.replace(REL_RE, '').trimEnd();
-
-    try {
-        const lastMesEl = document.querySelector('#chat .mes:last-of-type .mes_text');
-        if (lastMesEl) lastMesEl.innerHTML = lastMesEl.innerHTML.replace(REL_RE, '');
-    } catch (_) {}
-
-    if (typeof ctx.saveChatDebounced === 'function') ctx.saveChatDebounced();
     if (anyChanged) {
         ctx.saveSettingsDebounced?.();
         if (typeof globalThis._rpgRenderRouterUI === 'function') globalThis._rpgRenderRouterUI();
