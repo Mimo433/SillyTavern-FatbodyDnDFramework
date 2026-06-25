@@ -2,6 +2,11 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [3.16.6] - 2026-06-25
+
+### Changed
+- **Robust Text Action Parsing**: Updated the `parseTextAction` regex to tolerate markdown formatting (bold, italic, list hyphens, or headers, e.g. `**Action:**` or `### Action:`) in the model's text-mode response. This prevents unnecessary nudging retry loops and saves context/API tokens.
+
 ## [3.16.0] - 2026-06-24
 
 ### Changed

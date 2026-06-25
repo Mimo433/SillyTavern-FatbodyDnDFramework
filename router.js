@@ -58,7 +58,8 @@ function bookBelongsToPrefix(bookName, prefix) {
  */
 function parseTextAction(text) {
     // Find the last "Action:" line to be safe, then extract the balanced JSON argument.
-    const parts = ('\n' + text).split(/\nAction:\s*/i);
+    // Tolerates markdown formatting like **Action:**, *Action:*, ### Action, - Action: etc.
+    const parts = ('\n' + text).split(/\n(?:\*\*|\*|__|_|###|##|#|-|\s)*Action\b(?:\*\*|\*|__|_|:|\s)*\s*/i);
     if (parts.length < 2) return null;
     const lastPart = parts[parts.length - 1].trim();
 
