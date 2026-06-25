@@ -352,7 +352,6 @@ function buildInjectedEntryText(id, entry, settings) {
  * @returns {Promise<string>}
  */
 async function buildNpcRelationsBlock(settings) {
-    if (!settings.npcRelationshipBars) return '';
     const relVals = settings.npcRelationshipValues || {};
     const activeKeys = settings.activeRouterKeys || [];
     if (!activeKeys.length) return '';
@@ -372,16 +371,17 @@ async function buildNpcRelationsBlock(settings) {
         const entry = bookCache[bookName]?.entries?.[uid];
         if (!entry) continue;
 
-        // NPC entries are identified by a [Major] or [Minor] tier prefix in their comment.
-        // This is framework-universal — works regardless of which lorebook the NPC lives in.
+        // Strip any leading [Tag] prefix to get the display name.
+        // We don't filter by prefix — any active entry that produces a displayName is included.
         const rawComment = entry.comment || '';
-        if (!/^\[(Major|Minor)\]/i.test(rawComment)) continue;
-
-        // Strip the tier prefix to get the display name
         const displayName = rawComment.replace(/^\[.*?\]\s*/i, '').trim();
         if (!displayName) continue;
 
-        const rel = relVals[id] || { friendship: 0, affection: 0 };
+        // Only include entries that already have relationship values tracked
+        // (avoids flooding the block with every single lorebook entry).
+        if (!relVals[id]) continue;
+
+        const rel = relVals[id];
         const f = rel.friendship ?? 0;
         const a = rel.affection ?? 0;
         const fStr = `Friendship ${f >= 0 ? '+' : ''}${f}`;
@@ -497,12 +497,9 @@ export function installInterceptor() {
         // In Path 1 (addPromptManagerInterceptor), these are built and injected by that interceptor
         // into a dedicated system message at the configured depth, protecting the prefix cache.
         if (!skipInjection) {
-        // [NPC_RELATIONS] — injected first, before RNG queue, same mechanism.
-            // Shows the narrator current relationship standings for all active NPCs.
-            if (settings.npcRelationshipBars) {
-                const relBlock = await buildNpcRelationsBlock(settings);
-                if (relBlock) injections += relBlock;
-            }
+        // [NPC_RELATIONS] — injected first, before RNG queue, same mechanism as RNG.
+            const relBlock = await buildNpcRelationsBlock(settings);
+            if (relBlock) injections += relBlock;
 
             if (settings.rngEnabled && !content.includes("[RNG_QUEUE v6.0_PROPER]")) {
                 const queue = makeRngQueue(RNG_QUEUE_LEN);
@@ -859,10 +856,11 @@ export async function processRelationshipTags() {
         const entry = bookCache[bookName]?.entries?.[uid];
         if (!entry) continue;
 
-        // NPC entries identified by [Major]/[Minor] tier prefix in comment
         const rawComment = entry.comment || '';
-        if (!/^\[(Major|Minor)\]/i.test(rawComment)) continue;
+        if (!rawComment) continue;
 
+        // Strip any leading [Tag] prefix (e.g. [Major], [Minor]) to get the display name.
+        // We do NOT filter by prefix — any active entry is a candidate.
         const displayName = rawComment.replace(/^\[.*?\]\s*/i, '').trim();
         if (!displayName) continue;
 
@@ -1098,18 +1096,6 @@ export async function onGenerationEnded() {
     // on every single generation regardless of any other system state.
     if (settings.enabled && !settings.paused) {
         await processRelationshipTags();
-
-        // Inject [NPC_RELATIONS] as a system ephemeral prompt so it reaches the narrator
-        // regardless of whether Path 1 or Path 2 context injection is active.
-        if (settings.npcRelationshipBars) {
-            const ctx = SillyTavern.getContext();
-            if (typeof ctx.setExtensionPrompt === 'function') {
-                const relBlock = await buildNpcRelationsBlock(settings);
-                // Position 1 = before main prompt, depth 0 = top of context.
-                // Empty string clears the slot when there are no active NPCs.
-                ctx.setExtensionPrompt('rpg_tracker_npc_relations', relBlock, 1, 0);
-            }
-        }
     }
 
     const isStateRunning = typeof globalThis._rpgStateModelRunning === 'function' && globalThis._rpgStateModelRunning();
