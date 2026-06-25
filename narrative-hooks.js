@@ -497,6 +497,13 @@ export function installInterceptor() {
         // In Path 1 (addPromptManagerInterceptor), these are built and injected by that interceptor
         // into a dedicated system message at the configured depth, protecting the prefix cache.
         if (!skipInjection) {
+        // [NPC_RELATIONS] — injected first, before RNG queue, same mechanism.
+            // Shows the narrator current relationship standings for all active NPCs.
+            if (settings.npcRelationshipBars) {
+                const relBlock = await buildNpcRelationsBlock(settings);
+                if (relBlock) injections += relBlock;
+            }
+
             if (settings.rngEnabled && !content.includes("[RNG_QUEUE v6.0_PROPER]")) {
                 const queue = makeRngQueue(RNG_QUEUE_LEN);
                 injections += buildRngBlock(queue);
@@ -801,7 +808,7 @@ export function installInterceptor() {
  */
 export async function processRelationshipTags() {
     const settings = getSettings();
-    if (!settings.npcRelationshipBars || !settings.enabled) return;
+    if (!settings.enabled) return;
 
     const ctx = SillyTavern.getContext();
     const chat = ctx.chat || [];
