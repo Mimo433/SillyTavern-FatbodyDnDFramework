@@ -2,6 +2,11 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [3.16.8] - 2026-06-25
+
+### Removed
+- **NPC Relationship Bars and Editor**: Removed all relationship tracking infrastructure (UI bars, popup sliders, history log, prompts, schemas, tag parsers, and settings variables) to prevent dating-sim elements from interfering with campaign mechanics.
+
 ## [3.16.7] - 2026-06-25
 
 ### Changed
