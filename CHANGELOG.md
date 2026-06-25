@@ -2,7 +2,7 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
-## [3.16.15] - 2026-06-25
+## [3.8.0] - 2026-06-25
 
 ### Fixed
 - **NPC Card Cancel Button Edit Reset**: Fixed a bug where clicking Cancel on the inline NPC card editor didn't reset the internal view mode, causing it to reopen directly in Edit Mode instead of Read Mode on subsequent card clicks.
