@@ -39,40 +39,7 @@ After the [/CORE] block, append timestamped narrative updates as usual ([Day X, 
 ## APPEARANCE UPDATES
 If the NPC's physical appearance changes significantly (major injury, permanent outfit change, etc.), output:
   [[UPDATE_APPEARANCE: Book::UID | New appearance text]]
-This surgically replaces only the Appearance field inside [CORE]. Do NOT write appearance changes as event/update entries.
-
-## RELATIONSHIP DELTAS
-If the NPC's relationship with the player meaningfully changes based on what happened, output:
-  [[REL: Book::UID | Friendship | +N]] or [[REL: Book::UID | Friendship | -N]]
-  [[REL: Book::UID | Affection | +N]] or [[REL: Book::UID | Affection | -N]]
-Output only the delta — do NOT write or track the relationship total. The current total is intentionally hidden from you so your judgment stays anchored to the quality of the interaction, not the existing pool.
-
-<REL_JUDGMENT>
-Base your judgment on the NPC's personality from their [CORE] block. What they would realistically appreciate, tolerate, or resent depends on their temperament, values, culture, and personal history.
-
-SITUATIONS THAT WARRANT ALLOCATION (non-exhaustive — adapt to ALL contexts):
-• Direct social acts: compliments, insults, gifts, threats, apologies (+/-1 to 5)
-• Bonding moments: sharing a meal, campfire talks, traveling together, discussing shared interests (+1 to 4 friendship)
-• Shared adversity: surviving combat together, escaping danger, enduring hardship side by side (+3 to 8 friendship)
-• Quest completion: finishing a task that matters to the NPC, fulfilling a promise (+3 to 10 friendship)
-• Betrayal or broken trust: lying, breaking a promise, abandoning them in danger (-5 to -15 friendship)
-• Acts of sacrifice: risking your life for them, giving up something valuable for their sake (+8 to 15 friendship or affection depending on context)
-• Romantic gestures: flirtation, a meaningful gift, a protective act, physical intimacy (+1 to 8 affection)
-• Rejection or disrespect of their values/culture/loved ones (-3 to -10 friendship, sometimes also affection)
-• Being ignored, forgotten, or treated as unimportant (-1 to -4 friendship)
-• Prolonged positive interaction over an extended scene (+2 to 4 of either or both)
-
-MAGNITUDE GUIDELINES:
-• A stoic warrior might shift +1 where a warm innkeeper shifts +3 for the same compliment
-• Personality matters more than the act itself — gauge against WHO the NPC is
-• Typical range: 1-5 for minor moments, 5-15 for major events, 15+ only for life-altering moments
-• A constraint warning will appear if a value hits its hard limit (100 or -100); do not award further in the capped direction
-
-DO NOT ALLOCATE when:
-• The interaction is purely transactional with no emotional weight (buying supplies, asking for directions)
-• The NPC is not present in the scene
-• Nothing meaningful happened between the protagonist and the specific NPC
-</REL_JUDGMENT>`;
+This surgically replaces only the Appearance field inside [CORE]. Do NOT write appearance changes as event/update entries.`;
 
     instruction += `\n\nBe concise and functional — every word should serve gameplay or characterization. Avoid adjective dumps and purple prose.
 
