@@ -45,7 +45,34 @@ This surgically replaces only the Appearance field inside [CORE]. Do NOT write a
 If the NPC's relationship with the player meaningfully changes based on what happened, output:
   [[REL: Book::UID | Friendship | +N]] or [[REL: Book::UID | Friendship | -N]]
   [[REL: Book::UID | Affection | +N]] or [[REL: Book::UID | Affection | -N]]
-Output only the delta — do NOT write or track the relationship total. The current total is intentionally hidden from you so your judgment stays anchored to the quality of the interaction, not the existing pool. Base your judgment on the personality of the NPC in question (e.g., from their [CORE] block), inferring what they would realistically appreciate, tolerate, or resent given their temperament, values, and traits. A constraint warning will appear in the entry only if a value has reached its hard limit (100 or -100); in that case, do not award further increments in the capped direction. Use your judgment on magnitude (typical range: ±5 to ±25 per turn).`;
+Output only the delta — do NOT write or track the relationship total. The current total is intentionally hidden from you so your judgment stays anchored to the quality of the interaction, not the existing pool.
+
+<REL_JUDGMENT>
+Base your judgment on the NPC's personality from their [CORE] block. What they would realistically appreciate, tolerate, or resent depends on their temperament, values, culture, and personal history.
+
+SITUATIONS THAT WARRANT ALLOCATION (non-exhaustive — adapt to ALL contexts):
+• Direct social acts: compliments, insults, gifts, threats, apologies (+/-1 to 5)
+• Bonding moments: sharing a meal, campfire talks, traveling together, discussing shared interests (+1 to 4 friendship)
+• Shared adversity: surviving combat together, escaping danger, enduring hardship side by side (+3 to 8 friendship)
+• Quest completion: finishing a task that matters to the NPC, fulfilling a promise (+3 to 10 friendship)
+• Betrayal or broken trust: lying, breaking a promise, abandoning them in danger (-5 to -15 friendship)
+• Acts of sacrifice: risking your life for them, giving up something valuable for their sake (+8 to 15 friendship or affection depending on context)
+• Romantic gestures: flirtation, a meaningful gift, a protective act, physical intimacy (+1 to 8 affection)
+• Rejection or disrespect of their values/culture/loved ones (-3 to -10 friendship, sometimes also affection)
+• Being ignored, forgotten, or treated as unimportant (-1 to -4 friendship)
+• Prolonged positive interaction over an extended scene (+2 to 4 of either or both)
+
+MAGNITUDE GUIDELINES:
+• A stoic warrior might shift +1 where a warm innkeeper shifts +3 for the same compliment
+• Personality matters more than the act itself — gauge against WHO the NPC is
+• Typical range: 1-5 for minor moments, 5-15 for major events, 15+ only for life-altering moments
+• A constraint warning will appear if a value hits its hard limit (100 or -100); do not award further in the capped direction
+
+DO NOT ALLOCATE when:
+• The interaction is purely transactional with no emotional weight (buying supplies, asking for directions)
+• The NPC is not present in the scene
+• Nothing meaningful happened between the protagonist and the specific NPC
+</REL_JUDGMENT>`;
 
     instruction += `\n\nBe concise and functional — every word should serve gameplay or characterization. Avoid adjective dumps and purple prose.
 
@@ -682,6 +709,13 @@ Example: [[FAC: Iron Syndicate | ...]]  NOT  [[FAC: Khelt :: Iron Syndicate | ..
         s.settingsVersion = '3.16.13';
     }
 
+    // Expand NPC relationship delta guidance with situational examples (v3.16.14)
+    if (!s.settingsVersion || s.settingsVersion < '3.16.14') {
+        if (s.routerModules?.npc) {
+            s.routerModules.npc.instruction = buildNpcInstruction(s.npcMajorWords, s.npcMinorWords);
+        }
+        s.settingsVersion = '3.16.14';
+    }
 
     // ── MIGRATION: Update system prompts with keywords instructions (v3.2.3+) ──────
     if (s.routerSystemPromptTemplate && !s.routerSystemPromptTemplate.includes('IMPORTANT FOR KEYWORDS')) {
