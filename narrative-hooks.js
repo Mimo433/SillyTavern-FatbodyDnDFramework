@@ -963,7 +963,7 @@ export async function processRelationshipTags(msgIndex) {
         activeEntries.push({ id, displayName, keywords, comment: (entry.comment || '').toLowerCase() });
     }
 
-    let anyChanged = false;
+
 
     for (const m of matches) {
         if (m.delta === 0) continue;
