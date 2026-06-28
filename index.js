@@ -4895,16 +4895,6 @@ function createPanel() {
                                     </div>
 
                                     <div style="margin-bottom:6px;display:flex;align-items:center;gap:10px;">
-                                        <label style="font-size:12px;color:rgba(255,255,255,0.7);flex:1;">Character Card Converter</label>
-                                        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-                                            <input type="checkbox" id="rt-npc-card-import" ${curS.experimentalNpcImport ? 'checked' : ''}
-                                                style="width:16px;height:16px;accent-color:#d4a940;cursor:pointer;">
-                                            <span style="font-size:11px;color:rgba(255,255,255,0.5);">${curS.experimentalNpcImport ? 'Enabled' : 'Disabled'}</span>
-                                        </label>
-                                    </div>
-                                    <div style="font-size:10px;color:rgba(255,255,255,0.35);margin-bottom:12px;">Shows the "Add NPC from Character Card" button. This allows importing character cards into campaigns with AI review to fit them into the story. However, organic NPC creation is recommended.</div>
-
-                                    <div style="margin-bottom:6px;display:flex;align-items:center;gap:10px;">
                                         <label style="font-size:12px;color:rgba(255,255,255,0.7);flex:1;">Ignore Character Limits When Importing Character Cards</label>
                                         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
                                             <input type="checkbox" id="rt-ignore-npc-limits" ${curS.ignoreNpcImportLimits ? 'checked' : ''}
@@ -4917,23 +4907,15 @@ function createPanel() {
 
                                 let newMajor = curS.npcMajorWords ?? 25;
                                 let newMinor = curS.npcMinorWords ?? 15;
-                                let newImport = curS.experimentalNpcImport ?? false;
                                 let newIgnoreLimits = curS.ignoreNpcImportLimits ?? false;
 
                                 setTimeout(() => {
                                     const majorEl = document.getElementById('rt-npc-major-words');
                                     const minorEl = document.getElementById('rt-npc-minor-words');
-                                    const importEl = document.getElementById('rt-npc-card-import');
                                     const ignoreEl = document.getElementById('rt-ignore-npc-limits');
 
                                     if (majorEl) majorEl.addEventListener('input', () => newMajor = parseInt(majorEl.value, 10) || 25);
                                     if (minorEl) minorEl.addEventListener('input', () => newMinor = parseInt(minorEl.value, 10) || 15);
-                                    if (importEl) {
-                                        importEl.addEventListener('change', () => {
-                                            newImport = importEl.checked;
-                                            if (importEl.nextElementSibling) importEl.nextElementSibling.textContent = newImport ? 'Enabled' : 'Disabled';
-                                        });
-                                    }
                                     if (ignoreEl) {
                                         ignoreEl.addEventListener('change', () => {
                                             newIgnoreLimits = ignoreEl.checked;
@@ -4951,7 +4933,6 @@ function createPanel() {
                                     newMinor = Math.max(5, Math.min(100, newMinor));
 
                                     const updS = getSettings();
-                                    updS.experimentalNpcImport = newImport;
                                     updS.ignoreNpcImportLimits = newIgnoreLimits;
                                     updS.npcMajorWords = newMajor;
                                     updS.npcMinorWords = newMinor;
@@ -4959,7 +4940,6 @@ function createPanel() {
                                     // Update the main settings panel inputs if present
                                     $('#rpg_tracker_npc_major_words').val(newMajor);
                                     $('#rpg_tracker_npc_minor_words').val(newMinor);
-                                    $('#rpg_tracker_npc_card_import').prop('checked', newImport);
                                     $('#rpg_tracker_ignore_npc_limits').prop('checked', newIgnoreLimits);
 
                                     // Rebuild the NPC instruction from settings
@@ -5404,14 +5384,14 @@ await refreshManifest();
 
                         folderBody.appendChild(npcGrid);
 
-                        // ── "Add NPC" button ──
-                        if (s.experimentalNpcImport) {
+                        // ── "Add NPC to Story" button (always visible) ──
+                        {
                             const addNpcBtn = document.createElement('div');
                             addNpcBtn.className = 'rt-npc-add-btn';
-                            addNpcBtn.innerHTML = '<i class="fa-solid fa-user-plus"></i> Add NPC from Character Card';
+                            addNpcBtn.innerHTML = '<i class="fa-solid fa-user-plus"></i> Add NPC to Story';
                             addNpcBtn.addEventListener('click', (e) => {
                                 e.stopPropagation();
-                                openNpcCharacterPicker(bookName, prefix);
+                                openNpcCreatorDialog(bookName, prefix);
                             });
                             folderBody.appendChild(addNpcBtn);
                         }
@@ -5698,7 +5678,7 @@ await refreshManifest();
         refreshNpcManifest = refreshManifest;
 
         // ════════════════════════════════════════════════════════════════════
-        //  NPC Character Card Picker + AI Adaptation
+        //  NPC Creator Dialog — Card Import, Freeform, Archetype Generator
         // ════════════════════════════════════════════════════════════════════
 
         /**
@@ -5963,11 +5943,166 @@ Rules:
         };
 
         /**
-         * Opens the character card picker popup for adding NPCs.
+         * Gathers campaign context parts for NPC generation prompts.
+         * @returns {string[]}
+         */
+        const gatherNpcCampaignContext = async () => {
+            const s = getSettings();
+            const ctx = SillyTavern.getContext();
+            const parts = [];
+            if (s.currentMemo) {
+                parts.push(`CURRENT GAME STATE:\n${s.currentMemo.substring(0, 2000)}`);
+            }
+            if (ctx.chat && Array.isArray(ctx.chat)) {
+                const msgs = ctx.chat.filter(m => !m.is_system && m.mes?.trim()).slice(-8);
+                if (msgs.length > 0) {
+                    const msgText = msgs.map(m => `${m.name || (m.is_user ? 'User' : 'Character')}: ${m.mes}`).join('\n\n');
+                    parts.push(`RECENT CHAT (for setting/tone context):\n${msgText.substring(0, 4000)}`);
+                }
+            }
+            try {
+                const charData = ctx.characters?.[ctx.characterId];
+                if (charData?.description) {
+                    parts.push(`NARRATOR/WORLD CARD:\n${charData.description.substring(0, 1500)}`);
+                }
+            } catch (_) {}
+            try {
+                if (s.activeRouterKeys?.length > 0) {
+                    const summaries = [];
+                    const loaded = {};
+                    for (const k of s.activeRouterKeys.slice(0, 12)) {
+                        const [bk, uid] = k.split('::');
+                        if (!loaded[bk]) loaded[bk] = await ctx.loadWorldInfo(bk);
+                        const entry = loaded[bk]?.entries?.[uid];
+                        if (entry) summaries.push(`[${entry.comment || 'Entry'}]: ${(entry.content || '').substring(0, 180)}`);
+                    }
+                    if (summaries.length > 0) {
+                        parts.push(`ACTIVE LOREBOOK ENTRIES (world context):\n${summaries.join('\n')}`);
+                    }
+                }
+            } catch (_) {}
+            return parts;
+        };
+
+        /**
+         * Generates NPC from a freeform name + description using AI.
+         * @param {string} name - NPC name (may be empty)
+         * @param {string} rawDesc - User's free-text description
+         * @returns {Promise<string|null>} Lorebook [[NPC: ...]] tag string
+         */
+        const generateNpcFromFreeform = async (name, rawDesc) => {
+            const s = getSettings();
+            const contextParts = await gatherNpcCampaignContext();
+            const label = name ? `Name: ${name}\n` : '';
+            contextParts.unshift(`USER'S NPC CONCEPT:\n${label}Description: ${rawDesc}`);
+
+            const systemPrompt = `${s.routerSystemPromptTemplate || ''}
+
+---
+
+You are an NPC Creation Agent. The user has provided a brief concept or description for a new NPC they want to add to the current ongoing campaign.
+
+<npc_instructions>
+${s.routerModules?.npc?.instruction || ''}
+</npc_instructions>
+
+Rules:
+- Use the USER'S NPC CONCEPT as your primary source. Expand it into a full, vivid character.
+- If no name is provided, create a fitting one for the world setting.
+- Adapt appearance, background and habits to fit naturally into the current campaign setting/tone inferred from context.
+- Your output MUST be strictly formatted as a lorebook entry tag:
+  [[NPC: Name | Description | keywords]]
+- Replace "Name" with the character's name.
+- Replace "Description" with the full formatted entry. Wrap all immutable identity sections (Appearance/Species, Personality, Brief Background, Habits/Behaviors) inside a single [CORE] and [/CORE] block. DO NOT use "|" inside Description. Use newlines.
+- Replace "keywords" with a comma-separated list including their name.
+- Output ONLY this single [[NPC: ...]] tag. No preamble, no explanation.`;
+
+            const aiSettings = {
+                connectionSource: s.routerConnectionSource ?? 'default',
+                connectionProfileId: s.routerConnectionProfileId || '',
+                completionPresetId: s.routerCompletionPresetId || '',
+                ollamaUrl: s.routerOllamaUrl || 'http://localhost:11434',
+                ollamaModel: s.routerOllamaModel || '',
+                openaiUrl: s.routerOpenaiUrl || '',
+                openaiKey: s.routerOpenaiKey || '',
+                openaiModel: s.routerOpenaiModel || '',
+                maxTokens: s.routerMaxTokens || 0,
+                debugMode: s.debugMode,
+            };
+            try {
+                const result = await sendStateRequest(aiSettings, systemPrompt, contextParts.join('\n\n---\n\n'));
+                return (result || '').trim() || null;
+            } catch (err) {
+                toastr['error'](`NPC generation failed: ${String(err.message || err).substring(0, 120)}`, 'NPC Creator');
+                return null;
+            }
+        };
+
+        /**
+         * Generates NPC from a chosen archetype + optional concept using AI.
+         * @param {string} archetype - e.g. "Arch Nemesis"
+         * @param {string} name - optional name hint
+         * @param {string} concept - optional extra descriptive prompt
+         * @returns {Promise<string|null>} Lorebook [[NPC: ...]] tag string
+         */
+        const generateNpcFromArchetype = async (archetype, name, concept) => {
+            const s = getSettings();
+            const contextParts = await gatherNpcCampaignContext();
+            const nameLine = name ? `Desired Name: ${name}\n` : '';
+            const conceptLine = concept ? `Additional concept: ${concept}\n` : '';
+            contextParts.unshift(`ARCHETYPE REQUEST:\nArchetype: ${archetype}\n${nameLine}${conceptLine}`);
+
+            const systemPrompt = `${s.routerSystemPromptTemplate || ''}
+
+---
+
+You are an NPC Creation Agent. Create a new NPC for the current ongoing campaign fitting the requested archetype.
+
+<npc_instructions>
+${s.routerModules?.npc?.instruction || ''}
+</npc_instructions>
+
+Rules:
+- The NPC MUST embody the requested archetype (e.g. a "Lover" should have romantic motivation toward the player; an "Arch Nemesis" should be a credible threat with personal stakes).
+- Invent a name suitable for the world if not provided.
+- Ground the NPC's appearance, backstory, and habits in the current campaign setting inferred from context.
+- Your output MUST be strictly formatted as a lorebook entry tag:
+  [[NPC: Name | Description | keywords]]
+- Replace "Name" with the character's name.
+- Replace "Description" with the full formatted entry. Wrap all immutable identity sections (Appearance/Species, Personality, Brief Background, Habits/Behaviors) inside a single [CORE] and [/CORE] block. DO NOT use "|" inside Description. Use newlines.
+- Replace "keywords" with a comma-separated list including their name.
+- Output ONLY this single [[NPC: ...]] tag. No preamble, no explanation.`;
+
+            const aiSettings = {
+                connectionSource: s.routerConnectionSource ?? 'default',
+                connectionProfileId: s.routerConnectionProfileId || '',
+                completionPresetId: s.routerCompletionPresetId || '',
+                ollamaUrl: s.routerOllamaUrl || 'http://localhost:11434',
+                ollamaModel: s.routerOllamaModel || '',
+                openaiUrl: s.routerOpenaiUrl || '',
+                openaiKey: s.routerOpenaiKey || '',
+                openaiModel: s.routerOpenaiModel || '',
+                maxTokens: s.routerMaxTokens || 0,
+                debugMode: s.debugMode,
+            };
+            try {
+                const result = await sendStateRequest(aiSettings, systemPrompt, contextParts.join('\n\n---\n\n'));
+                return (result || '').trim() || null;
+            } catch (err) {
+                toastr['error'](`NPC generation failed: ${String(err.message || err).substring(0, 120)}`, 'NPC Creator');
+                return null;
+            }
+        };
+
+        /**
+         * Shows the NPC Creator popup with three tabs:
+         *   1. Import from Character Card
+         *   2. Freeform Description
+         *   3. Archetype Generator
          * @param {string} bookName - Target lorebook name
          * @param {string} prefix - Campaign prefix
          */
-        const openNpcCharacterPicker = async (bookName, prefix) => {
+        const openNpcCreatorDialog = async (bookName, prefix) => {
             const ctx = SillyTavern.getContext();
 
             // Fetch character list with timeout to prevent UI hang
@@ -6004,213 +6139,357 @@ Rules:
                 return;
             }
 
-
-            if (allChars.length === 0) {
-                toastr['info']('No character cards found.', 'NPC Import');
-                return;
-            }
-
-            // Build popup
+            // ── Build dialog shell ──────────────────────────────────────────
             const overlay = document.createElement('div');
             overlay.className = 'rt-charpicker-overlay';
 
             const popup = document.createElement('div');
             popup.className = 'rt-charpicker-popup';
+            popup.style.width = '490px';
 
             // Header
             const header = document.createElement('div');
             header.className = 'rt-charpicker-header';
-            header.innerHTML = `<h3>👤 Add NPC from Character Card</h3>`;
+            header.innerHTML = `<h3>✨ Add NPC to Story</h3>`;
             const closeBtn = document.createElement('button');
             closeBtn.className = 'rt-charpicker-close';
             closeBtn.textContent = '✕';
             closeBtn.addEventListener('click', () => overlay.remove());
             header.appendChild(closeBtn);
 
-            // Search
-            const searchInput = document.createElement('input');
-            searchInput.className = 'rt-charpicker-search';
-            searchInput.type = 'text';
-            searchInput.placeholder = '🔍 Search characters by name...';
-
-            // List container
-            const listContainer = document.createElement('div');
-            listContainer.className = 'rt-charpicker-list';
-
-            popup.appendChild(header);
-            popup.appendChild(searchInput);
-            popup.appendChild(listContainer);
-            overlay.appendChild(popup);
-
-            // Close on backdrop click
-            overlay.addEventListener('click', (e) => {
-                if (e.target === overlay) overlay.remove();
+            // Tab bar
+            const tabBar = document.createElement('div');
+            tabBar.className = 'rt-npc-creator-tabs';
+            const tabDefs = [
+                { id: 'card',      label: '🗂️ From Card' },
+                { id: 'freeform', label: '✍️ Freeform' },
+                { id: 'archetype', label: '🎭 Archetype' },
+            ];
+            const tabBtns = {};
+            const tabPanels = {};
+            for (const { id, label } of tabDefs) {
+                const btn = document.createElement('div');
+                btn.className = 'rt-npc-creator-tab' + (id === 'card' ? ' active' : '');
+                btn.textContent = label;
+                btn.dataset.tab = id;
+                tabBar.appendChild(btn);
+                tabBtns[id] = btn;
+                const panel = document.createElement('div');
+                panel.className = 'rt-npc-creator-panel' + (id === 'card' ? '' : ' hidden');
+                panel.dataset.panel = id;
+                tabPanels[id] = panel;
+            }
+            const switchTab = (id) => {
+                for (const [tid, btn] of Object.entries(tabBtns)) {
+                    btn.classList.toggle('active', tid === id);
+                    tabPanels[tid].classList.toggle('hidden', tid !== id);
+                }
+            };
+            tabBar.addEventListener('click', (e) => {
+                const tgt = /** @type {HTMLElement} */ (e.target).closest('[data-tab]');
+                if (tgt) switchTab(tgt.dataset.tab);
             });
 
-            // State
-            let currentFilter = '';
-            let displayCount = 10;
+            popup.appendChild(header);
+            popup.appendChild(tabBar);
+            for (const { id } of tabDefs) popup.appendChild(tabPanels[id]);
+            overlay.appendChild(popup);
+            overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
 
-            const renderList = () => {
-                listContainer.innerHTML = '';
-                const filtered = currentFilter
-                    ? allChars.filter(c => (c.name || '').toLowerCase().includes(currentFilter.toLowerCase()))
-                    : allChars;
-
-                if (filtered.length === 0) {
-                    listContainer.innerHTML = '<div class="rt-charpicker-empty">No characters match your search.</div>';
-                    return;
-                }
-
-                const visible = filtered.slice(0, displayCount);
-
-                for (const char of visible) {
-                    const item = document.createElement('div');
-                    item.className = 'rt-charpicker-item';
-
-                    // Avatar
-                    const avatarDiv = document.createElement('div');
-                    avatarDiv.className = 'rt-charpicker-avatar';
-                    if (char.avatar && char.avatar !== 'none') {
-                        const img = document.createElement('img');
-                        img.src = `/characters/${encodeURIComponent(char.avatar)}`;
-                        img.loading = 'lazy';
-                        img.alt = char.name;
-                        img.onerror = () => { img.replaceWith(Object.assign(document.createElement('div'), { className: 'rt-charpicker-avatar-placeholder', textContent: '👤' })); };
-                        avatarDiv.appendChild(img);
-                    } else {
-                        avatarDiv.innerHTML = '<div class="rt-charpicker-avatar-placeholder">👤</div>';
+            // ── Helper: AI preview + add flow ──────────────────────────────
+            const showNpcPreviewAndAdd = async (generatedTag, defaultName, toastLabel) => {
+                if (!ctx.callGenericPopup) return;
+                const taId = `rt-npc-gen-preview-${Date.now()}`;
+                const previewHtml = `<div style="padding:10px;min-width:320px;max-width:520px;">
+                    <b style="display:block;margin-bottom:8px;">✨ Generated NPC — ${escapeHtml(defaultName)}</b>
+                    <div style="font-size:0.8em;opacity:0.6;margin-bottom:8px;">Review the AI-generated entry. Edit if needed, then confirm.</div>
+                    <textarea id="${taId}" style="width:100%;min-height:160px;resize:vertical;font-size:0.9em;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.2);background:rgba(0,0,0,0.3);color:inherit;box-sizing:border-box;">${escapeHtml(generatedTag)}</textarea>
+                </div>`;
+                let finalContent = generatedTag;
+                setTimeout(() => {
+                    const ta = document.getElementById(taId);
+                    if (ta) { ta.addEventListener('input', () => { finalContent = ta.value; }); ta.focus(); }
+                }, 0);
+                const result = await ctx.callGenericPopup(previewHtml, ctx.POPUP_TYPE?.CONFIRM ?? 1, '', {
+                    okButton: '✅ Add NPC', cancelButton: 'Cancel', wide: false,
+                });
+                if (result) {
+                    const fakeCard = { name: defaultName, avatar: null };
+                    const ok = await createNpcFromCharCard(fakeCard, bookName, finalContent);
+                    if (ok) {
+                        toastr['success'](`Added "${defaultName}" as NPC.`, toastLabel);
+                        overlay.remove();
+                        await refreshManifest();
                     }
-
-                    // Info
-                    const infoDiv = document.createElement('div');
-                    infoDiv.className = 'rt-charpicker-info';
-                    const nameEl = document.createElement('div');
-                    nameEl.className = 'rt-charpicker-name';
-                    nameEl.textContent = char.name || 'Unnamed';
-                    const descEl = document.createElement('div');
-                    descEl.className = 'rt-charpicker-desc';
-                    descEl.textContent = (char.description || char.personality || 'No description').substring(0, 120);
-                    infoDiv.appendChild(nameEl);
-                    infoDiv.appendChild(descEl);
-
-                    // Buttons
-                    const btnsDiv = document.createElement('div');
-                    btnsDiv.className = 'rt-charpicker-btns';
-
-                    const directBtn = document.createElement('button');
-                    directBtn.className = 'rt-charpicker-add-btn direct';
-                    directBtn.textContent = '+ Add as is (not recommended)';
-                    directBtn.addEventListener('click', async () => {
-                        directBtn.disabled = true;
-                        directBtn.textContent = '⏳ Adding...';
-                        try {
-                            const ok = await createNpcFromCharCard(char, bookName);
-                            if (ok) {
-                                toastr['success'](`Added "${char.name}" as NPC.`, 'NPC Import');
-                                overlay.remove();
-                                await refreshManifest();
-                            }
-                        } catch (err) {
-                            toastr['error'](`Failed: ${String(err.message || err).substring(0, 100)}`, 'NPC Import');
-                        } finally {
-                            directBtn.disabled = false;
-                            directBtn.textContent = '+ Add as is (not recommended)';
-                        }
-                    });
-
-                    const aiBtn = document.createElement('button');
-                    aiBtn.className = 'rt-charpicker-add-btn ai-adapt';
-                    aiBtn.textContent = '🤖 Fit into Story';
-                    aiBtn.addEventListener('click', async () => {
-                        aiBtn.disabled = true;
-                        aiBtn.textContent = '⏳ Adapting...';
-                        try {
-                            const adapted = await adaptNpcWithAI(char);
-                            if (!adapted) {
-                                aiBtn.disabled = false;
-                                aiBtn.textContent = '🤖 Fit into Story';
-                                return;
-                            }
-
-                            // Show preview popup
-                            if (ctx.callGenericPopup) {
-                                const taId = `rt-npc-adapt-preview-${Date.now()}`;
-                                const previewHtml = `<div style="padding:10px;min-width:320px;max-width:500px;">
-                                    <b style="display:block;margin-bottom:8px;">🤖 Adapted NPC — ${escapeHtml(char.name)}</b>
-                                    <div style="font-size:0.8em;opacity:0.6;margin-bottom:8px;">Review the AI-adapted entry below. Edit if needed, then confirm.</div>
-                                    <textarea id="${taId}" style="width:100%;min-height:140px;resize:vertical;font-size:0.9em;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.2);background:rgba(0,0,0,0.3);color:inherit;box-sizing:border-box;">${escapeHtml(adapted)}</textarea>
-                                </div>`;
-
-                                let finalContent = adapted;
-                                setTimeout(() => {
-                                    const ta = document.getElementById(taId);
-                                    if (ta) {
-                                        ta.addEventListener('input', () => { finalContent = ta.value; });
-                                        ta.focus();
-                                    }
-                                }, 0);
-
-                                const result = await ctx.callGenericPopup(previewHtml, ctx.POPUP_TYPE?.CONFIRM ?? 1, '', {
-                                    okButton: '✅ Add NPC', cancelButton: 'Cancel', wide: false,
-                                });
-
-                                if (result) {
-                                    const ok = await createNpcFromCharCard(char, bookName, finalContent);
-                                    if (ok) {
-                                        toastr['success'](`Added adapted "${char.name}" as NPC.`, 'NPC Import');
-                                        overlay.remove();
-                                        await refreshManifest();
-                                    }
-                                }
-                            }
-                        } catch (err) {
-                            toastr['error'](`Adaptation failed: ${String(err.message || err).substring(0, 100)}`, 'NPC Import');
-                        } finally {
-                            aiBtn.disabled = false;
-                            aiBtn.textContent = '🤖 Fit into Story';
-                        }
-                    });
-
-                    btnsDiv.appendChild(aiBtn);
-                    btnsDiv.appendChild(directBtn);
-
-                    item.appendChild(avatarDiv);
-                    item.appendChild(infoDiv);
-                    item.appendChild(btnsDiv);
-                    listContainer.appendChild(item);
-                }
-
-                // Load more button
-                if (visible.length < filtered.length) {
-                    const loadMore = document.createElement('div');
-                    loadMore.className = 'rt-charpicker-load-more';
-                    loadMore.textContent = `Show more (${visible.length} of ${filtered.length})`;
-                    loadMore.addEventListener('click', () => {
-                        displayCount += 10;
-                        renderList();
-                    });
-                    listContainer.appendChild(loadMore);
                 }
             };
 
-            // Search handler with debounce
-            let searchTimeout = null;
-            searchInput.addEventListener('input', () => {
-                clearTimeout(searchTimeout);
-                searchTimeout = setTimeout(() => {
-                    currentFilter = searchInput.value.trim();
-                    displayCount = 10;
-                    renderList();
-                }, 200);
-            });
+            // ── Tab 1: Import from Character Card ──────────────────────────
+            {
+                const cardPanel = tabPanels['card'];
 
-            // Initial render
-            renderList();
+                const searchInput = document.createElement('input');
+                searchInput.className = 'rt-charpicker-search';
+                searchInput.type = 'text';
+                searchInput.placeholder = '🔍 Search characters by name...';
+                searchInput.style.margin = '0 0 8px 0';
+                searchInput.style.width = '100%';
+                searchInput.style.boxSizing = 'border-box';
+
+                const listContainer = document.createElement('div');
+                listContainer.className = 'rt-charpicker-list';
+                listContainer.style.padding = '0';
+
+                cardPanel.appendChild(searchInput);
+                cardPanel.appendChild(listContainer);
+
+                let currentFilter = '';
+                let displayCount = 10;
+
+                const renderList = () => {
+                    listContainer.innerHTML = '';
+                    const filtered = currentFilter
+                        ? allChars.filter(c => (c.name || '').toLowerCase().includes(currentFilter.toLowerCase()))
+                        : allChars;
+
+                    if (filtered.length === 0) {
+                        listContainer.innerHTML = '<div class="rt-charpicker-empty">No characters match your search.</div>';
+                        return;
+                    }
+                    const visible = filtered.slice(0, displayCount);
+                    for (const char of visible) {
+                        const item = document.createElement('div');
+                        item.className = 'rt-charpicker-item';
+
+                        const avatarDiv = document.createElement('div');
+                        avatarDiv.className = 'rt-charpicker-avatar';
+                        if (char.avatar && char.avatar !== 'none') {
+                            const img = document.createElement('img');
+                            img.src = `/characters/${encodeURIComponent(char.avatar)}`;
+                            img.loading = 'lazy';
+                            img.alt = char.name;
+                            img.onerror = () => { img.replaceWith(Object.assign(document.createElement('div'), { className: 'rt-charpicker-avatar-placeholder', textContent: '👤' })); };
+                            avatarDiv.appendChild(img);
+                        } else {
+                            avatarDiv.innerHTML = '<div class="rt-charpicker-avatar-placeholder">👤</div>';
+                        }
+
+                        const infoDiv = document.createElement('div');
+                        infoDiv.className = 'rt-charpicker-info';
+                        const nameEl = document.createElement('div');
+                        nameEl.className = 'rt-charpicker-name';
+                        nameEl.textContent = char.name || 'Unnamed';
+                        const descEl = document.createElement('div');
+                        descEl.className = 'rt-charpicker-desc';
+                        descEl.textContent = (char.description || char.personality || 'No description').substring(0, 120);
+                        infoDiv.appendChild(nameEl);
+                        infoDiv.appendChild(descEl);
+
+                        const btnsDiv = document.createElement('div');
+                        btnsDiv.className = 'rt-charpicker-btns';
+
+                        const directBtn = document.createElement('button');
+                        directBtn.className = 'rt-charpicker-add-btn direct';
+                        directBtn.textContent = '+ Add as is';
+                        directBtn.addEventListener('click', async () => {
+                            directBtn.disabled = true;
+                            directBtn.textContent = '⏳ Adding...';
+                            try {
+                                const ok = await createNpcFromCharCard(char, bookName);
+                                if (ok) {
+                                    toastr['success'](`Added "${char.name}" as NPC.`, 'NPC Creator');
+                                    overlay.remove();
+                                    await refreshManifest();
+                                }
+                            } catch (err) {
+                                toastr['error'](`Failed: ${String(err.message || err).substring(0, 100)}`, 'NPC Creator');
+                            } finally {
+                                directBtn.disabled = false;
+                                directBtn.textContent = '+ Add as is';
+                            }
+                        });
+
+                        const aiBtn = document.createElement('button');
+                        aiBtn.className = 'rt-charpicker-add-btn ai-adapt';
+                        aiBtn.textContent = '🤖 Fit into Story';
+                        aiBtn.addEventListener('click', async () => {
+                            aiBtn.disabled = true;
+                            aiBtn.textContent = '⏳ Adapting...';
+                            try {
+                                const adapted = await adaptNpcWithAI(char);
+                                if (!adapted) { aiBtn.disabled = false; aiBtn.textContent = '🤖 Fit into Story'; return; }
+                                await showNpcPreviewAndAdd(adapted, char.name, 'NPC Creator');
+                            } catch (err) {
+                                toastr['error'](`Adaptation failed: ${String(err.message || err).substring(0, 100)}`, 'NPC Creator');
+                            } finally {
+                                aiBtn.disabled = false;
+                                aiBtn.textContent = '🤖 Fit into Story';
+                            }
+                        });
+
+                        btnsDiv.appendChild(aiBtn);
+                        btnsDiv.appendChild(directBtn);
+                        item.appendChild(avatarDiv);
+                        item.appendChild(infoDiv);
+                        item.appendChild(btnsDiv);
+                        listContainer.appendChild(item);
+                    }
+                    if (visible.length < filtered.length) {
+                        const loadMore = document.createElement('div');
+                        loadMore.className = 'rt-charpicker-load-more';
+                        loadMore.textContent = `Show more (${visible.length} of ${filtered.length})`;
+                        loadMore.addEventListener('click', () => { displayCount += 10; renderList(); });
+                        listContainer.appendChild(loadMore);
+                    }
+                };
+                let searchTimeout = null;
+                searchInput.addEventListener('input', () => {
+                    clearTimeout(searchTimeout);
+                    searchTimeout = setTimeout(() => { currentFilter = searchInput.value.trim(); displayCount = 10; renderList(); }, 200);
+                });
+                renderList();
+            }
+
+            // ── Tab 2: Freeform Description ────────────────────────────────
+            {
+                const freeformPanel = tabPanels['freeform'];
+
+                const hintEl = document.createElement('div');
+                hintEl.style.cssText = 'font-size:10px;color:rgba(255,255,255,0.4);margin-bottom:8px;line-height:1.5;';
+                hintEl.textContent = 'Describe the NPC in your own words. The AI will expand it into a full lorebook entry fitting the current campaign.';
+                freeformPanel.appendChild(hintEl);
+
+                const nameLabel = document.createElement('label');
+                nameLabel.className = 'rt-npc-form-label';
+                nameLabel.textContent = 'Name (optional)';
+                const nameInput = document.createElement('input');
+                nameInput.className = 'rt-npc-form-input';
+                nameInput.type = 'text';
+                nameInput.placeholder = 'e.g. Igor, Mira Voss, …';
+                nameInput.style.marginBottom = '8px';
+
+                const descLabel = document.createElement('label');
+                descLabel.className = 'rt-npc-form-label';
+                descLabel.textContent = 'Description / Concept *';
+                const descInput = document.createElement('textarea');
+                descInput.className = 'rt-npc-form-input';
+                descInput.rows = 5;
+                descInput.placeholder = 'e.g. A massive bovine warrior, stoic and dry-witted, survivor of the Tether-Break…';
+                descInput.style.marginBottom = '4px';
+
+                const genBtn = document.createElement('button');
+                genBtn.className = 'rt-npc-generate-btn';
+                genBtn.textContent = '🤖 Generate NPC';
+                genBtn.addEventListener('click', async () => {
+                    const rawDesc = descInput.value.trim();
+                    if (!rawDesc) { toastr['warning']('Please enter a description.', 'NPC Creator'); return; }
+                    genBtn.disabled = true;
+                    genBtn.textContent = '⏳ Generating...';
+                    try {
+                        const generated = await generateNpcFromFreeform(nameInput.value.trim(), rawDesc);
+                        if (!generated) return;
+                        const nameFallback = nameInput.value.trim() || 'New NPC';
+                        await showNpcPreviewAndAdd(generated, nameFallback, 'NPC Creator');
+                    } finally {
+                        genBtn.disabled = false;
+                        genBtn.textContent = '🤖 Generate NPC';
+                    }
+                });
+
+                freeformPanel.appendChild(nameLabel);
+                freeformPanel.appendChild(nameInput);
+                freeformPanel.appendChild(descLabel);
+                freeformPanel.appendChild(descInput);
+                freeformPanel.appendChild(genBtn);
+            }
+
+            // ── Tab 3: Archetype Generator ─────────────────────────────────
+            {
+                const archetypePanel = tabPanels['archetype'];
+
+                const hintEl = document.createElement('div');
+                hintEl.style.cssText = 'font-size:10px;color:rgba(255,255,255,0.4);margin-bottom:10px;line-height:1.5;';
+                hintEl.textContent = 'Pick a story role. The AI will generate a fitting NPC grounded in the current campaign context.';
+                archetypePanel.appendChild(hintEl);
+
+                const archetypes = [
+                    { id: 'Enemy',              icon: '⚔️' },
+                    { id: 'Arch Nemesis',        icon: '💀' },
+                    { id: 'Lover',               icon: '❤️' },
+                    { id: 'Family Relative',     icon: '👨‍👩‍👧' },
+                    { id: 'Companion / Ally',    icon: '🛡️' },
+                    { id: 'Merchant',            icon: '🪙' },
+                    { id: 'Mysterious Stranger', icon: '🎭' },
+                    { id: 'Rival',               icon: '🧙' },
+                ];
+
+                let selectedArchetype = '';
+                const grid = document.createElement('div');
+                grid.className = 'rt-archetype-grid';
+                grid.style.marginBottom = '10px';
+                const chipMap = {};
+                for (const { id, icon } of archetypes) {
+                    const chip = document.createElement('div');
+                    chip.className = 'rt-archetype-chip';
+                    chip.innerHTML = `<span class="rt-archetype-chip-icon">${icon}</span> ${id}`;
+                    chip.addEventListener('click', () => {
+                        selectedArchetype = (selectedArchetype === id) ? '' : id;
+                        for (const [cid, cel] of Object.entries(chipMap)) {
+                            cel.classList.toggle('selected', cid === selectedArchetype);
+                        }
+                    });
+                    grid.appendChild(chip);
+                    chipMap[id] = chip;
+                }
+                archetypePanel.appendChild(grid);
+
+                const nameLabel = document.createElement('label');
+                nameLabel.className = 'rt-npc-form-label';
+                nameLabel.textContent = 'Name (optional)';
+                const nameInput = document.createElement('input');
+                nameInput.className = 'rt-npc-form-input';
+                nameInput.type = 'text';
+                nameInput.placeholder = 'Leave blank to let the AI choose';
+                nameInput.style.marginBottom = '8px';
+
+                const conceptLabel = document.createElement('label');
+                conceptLabel.className = 'rt-npc-form-label';
+                conceptLabel.textContent = 'Extra concept / prompt (optional)';
+                const conceptInput = document.createElement('textarea');
+                conceptInput.className = 'rt-npc-form-input';
+                conceptInput.rows = 2;
+                conceptInput.placeholder = 'e.g. ex-soldier, uses poison daggers, secretly a doppelganger…';
+                conceptInput.style.marginBottom = '4px';
+
+                const genBtn = document.createElement('button');
+                genBtn.className = 'rt-npc-generate-btn';
+                genBtn.textContent = '🤖 Generate NPC';
+                genBtn.addEventListener('click', async () => {
+                    if (!selectedArchetype) { toastr['warning']('Please select an archetype first.', 'NPC Creator'); return; }
+                    genBtn.disabled = true;
+                    genBtn.textContent = '⏳ Generating...';
+                    try {
+                        const generated = await generateNpcFromArchetype(
+                            selectedArchetype, nameInput.value.trim(), conceptInput.value.trim()
+                        );
+                        if (!generated) return;
+                        const nameFallback = nameInput.value.trim() || selectedArchetype;
+                        await showNpcPreviewAndAdd(generated, nameFallback, 'NPC Creator');
+                    } finally {
+                        genBtn.disabled = false;
+                        genBtn.textContent = '🤖 Generate NPC';
+                    }
+                });
+
+                archetypePanel.appendChild(nameLabel);
+                archetypePanel.appendChild(nameInput);
+                archetypePanel.appendChild(conceptLabel);
+                archetypePanel.appendChild(conceptInput);
+                archetypePanel.appendChild(genBtn);
+            }
 
             // Add to DOM
             document.body.appendChild(overlay);
-            searchInput.focus();
         };
 
         const refreshBtn = agentPanel.querySelector('#rt-agent-manifest-refresh');
@@ -11659,13 +11938,7 @@ RULES:
                 globalThis._rpgRenderAgentModules();
             }
         });
-        $('#rpg_tracker_npc_card_import').prop('checked', !!settings.experimentalNpcImport).on('change', function () {
-            settings.experimentalNpcImport = $(this).prop('checked');
-            saveSettings();
-            if (typeof refreshNpcManifest === 'function') {
-                refreshNpcManifest();
-            }
-        });
+        // Note: experimentalNpcImport removed — NPC Creator button is always visible.
         $('#rpg_tracker_ignore_npc_limits').prop('checked', !!settings.ignoreNpcImportLimits).on('change', function () {
             settings.ignoreNpcImportLimits = $(this).prop('checked');
             if (settings.routerModules?.npc) {
