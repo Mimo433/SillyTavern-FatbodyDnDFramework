@@ -127,14 +127,6 @@ Current Time: HH:MM AM/PM, Day N
   xp: "Character Level and Experience Points (XP). Format as `Level: X | XP: current/max`. You MUST output this field whenever the narrative mentions gaining experience or leveling up.",
   quests: `Quest status updates ONLY. When a quest objective is completed, a quest concludes, or a new objective is added, emit a [QUESTS] block containing ONLY a JSON object with an "updates" array. Each entry must have the quest "id" and only the fields that changed or are new: "status" (active/completed/failed), "difficulty", and/or "objectives" (array). For updating an existing objective: include {"id", "status", "progress"}. For quantity-based objectives (e.g. "collect 6 mushrooms"), include "progress" as the current count (e.g. 4) even if the objective is not yet completed. To add a new objective: omit the "id" field and provide {"text", "required" (boolean), "status" (optional, defaults to "active"), "total" (optional), "progress" (optional)}. NOTE: Do NOT fail quests for time-out/deadline reasons (the system handles those automatically), but YOU MUST mark a quest as "failed" if it becomes narratively impossible (e.g. a protection target dies). Do NOT re-emit the full quest schema. If no quest changed, omit this block entirely.`,
   quests_legacy: `Track quests using the [QUESTS] block. Maintain the COMPLETE list of all quests at all times — active, completed, and failed. Only add a quest if [QUEST ACCEPTED] is outputted in the narrative. NEVER ADD A QUEST UNLESS YOU SEE [QUEST ACCEPTED]. A quest simply being listed does not mean it is accepted.
-  time_24h: `Current time and day grabbed from the status footer. Also track time of the last rest (only on Long Rest, e.g. 'Last Rest: 22:00, Day 0'). Use this to track out-of-combat buff durations by comparing to the PRIOR MEMO's time.
-
-Format (24-hour clock, NO AM/PM):
-Last Rest: HH:MM, Day N
-Current Time: HH:MM, Day N
-
-'Last Rest' is ONLY triggered on Long Rest, NOT Short Rest (when Hit Dice, etc, are spent.) If the [TIME] delta between PREVIOUS STATE MEMO and your current update is only an hour, it is a Short Rest.`,
-
 
 Format each quest exactly as shown:
 
@@ -154,7 +146,7 @@ QUEST: The Missing Sheep
   OBJ_TOTAL: 6
   OBJ_COMPLETED: Ask about the wolf
   OBJ_FAILED: Save the lamb
-- Use OBJ_ACTIVE / OBJ_COMPLETED / OBJ_FAILED markers. 
+- Use OBJ_ACTIVE / OBJ_COMPLETED / OBJ_FAILED markers.
 - Append ' (optional)' only if the task is not required.
 - For collection/count objectives, append [current/total] after the text (e.g. [4/6]) and add an OBJ_TOTAL line with the total. Update the count each turn as progress is made.
 - For rewards, use the REWARD marker (e.g. REWARD: 50 Gold). List multiple rewards on separate lines.
@@ -162,7 +154,15 @@ QUEST: The Missing Sheep
 - The MOOD field is calculated by the engine based on time pressure and the frustration coefficient. Use this to guide how the NPC speaks and acts.
 - Never delete old quests. Keep completed/failed ones with updated STATUS.
 - If no quests exist yet, emit [QUESTS][/QUESTS] (empty).`,
+  time_24h: `Current time and day grabbed from the status footer. Also track time of the last rest (only on Long Rest, e.g. 'Last Rest: 22:00, Day 0'). Use this to track out-of-combat buff durations by comparing to the PRIOR MEMO's time.
+
+Format (24-hour clock, NO AM/PM):
+Last Rest: HH:MM, Day N
+Current Time: HH:MM, Day N
+
+'Last Rest' is ONLY triggered on Long Rest, NOT Short Rest (when Hit Dice, etc, are spent.) If the [TIME] delta between PREVIOUS STATE MEMO and your current update is only an hour, it is a Short Rest.`,
 };
+
 
 export const QUESTS_NARRATOR_MODERN = `When the player formally accepts a quest from an NPC, you MUST call the LogQuest tool. Assign an appropriate difficulty (Very Easy to Very Hard) based on the narrative stakes. State how many objectives there are (there should always be multiple — they should be obtainable immediate objectives and not long term goals). If a duration is given (e.g., 'four days'), you MUST calculate the specific "Day N" timestamp based on the current in-world time. After LogQuest finishes, output *[QUEST ACCEPTED]*. Do NOT do this for rumors, casual mentions, or tasks the player has not yet agreed to. Use the MOOD field in the [QUESTS] block to guide how NPCs react to the player's progress or lack thereof.
 

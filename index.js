@@ -5229,7 +5229,7 @@ function createPanel() {
                                         </div>
                                     </div>
                                 </div>
-                            }
+                            `;
 
                             // Wire up in-popup edit/save/cancel
                             const viewPane = popupDom.querySelector('.rt-npc-popup-view');
@@ -5284,9 +5284,9 @@ function createPanel() {
                                 saveBtn.disabled = false;
                                 saveBtn.textContent = '💾 Save';
                             });
-                            }
 
                             // Show popup with DOM element (upstream approach)
+
                             const popupOpts = { okButton: 'Close', cancelButton: false, wide: true, large: true };
                             await ctx.callGenericPopup(popupDom, ctx.POPUP_TYPE?.TEXT ?? 1, '', popupOpts);
                         };
