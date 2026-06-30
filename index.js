@@ -5954,17 +5954,13 @@ function createPanel() {
             if (charCard.avatar) {
                 try {
                     const avatarUrl = `/characters/${encodeURIComponent(charCard.avatar)}`;
-                    const resp = await fetch(avatarUrl);
+                    const resp = await fetch(avatarUrl, { headers: getRequestHeaders() });
                     if (resp.ok) {
                         const blob = await resp.blob();
                         if (blob.size > 0) {
-                            const dataUrl = await new Promise((resolve, reject) => {
-                                const reader = new FileReader();
-                                reader.onloadend = () => resolve(reader.result);
-                                reader.onerror = reject;
-                                reader.readAsDataURL(blob);
-                            });
-                            const scaled = await scaleImageTo512Square(dataUrl);
+                            const blobUrl = URL.createObjectURL(blob);
+                            const scaled = await scaleImageTo512Square(blobUrl);
+                            URL.revokeObjectURL(blobUrl);
                             applyPortraitData(name, scaled);
                         }
                     }
@@ -6348,7 +6344,7 @@ Rules:
             overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
 
             // ── Helper: AI preview + add flow ──────────────────────────────
-            const showNpcPreviewAndAdd = async (generatedTag, defaultName, toastLabel) => {
+            const showNpcPreviewAndAdd = async (generatedTag, defaultName, toastLabel, originalAvatar = null) => {
                 if (!ctx.callGenericPopup) return;
                 const parsed = parseNpcTag(generatedTag);
                 const nameToAdd = parsed ? parsed.name : defaultName;
@@ -6405,7 +6401,7 @@ Rules:
                         }
                     }
 
-                    const fakeCard = { name: finalName, avatar: null };
+                    const fakeCard = { name: finalName, avatar: originalAvatar };
                     const ok = await createNpcFromCharCard(fakeCard, bookName, finalContent);
                     if (ok) {
                         toastr['success'](`Added "${finalName}" as NPC.`, toastLabel);
@@ -6509,7 +6505,7 @@ Rules:
                             try {
                                 const adapted = await adaptNpcWithAI(char);
                                 if (!adapted) { aiBtn.disabled = false; aiBtn.textContent = '🤖 Fit into Story'; return; }
-                                await showNpcPreviewAndAdd(adapted, char.name, 'NPC Creator');
+                                await showNpcPreviewAndAdd(adapted, char.name, 'NPC Creator', char.avatar);
                             } catch (err) {
                                 toastr['error'](`Adaptation failed: ${String(err.message || err).substring(0, 100)}`, 'NPC Creator');
                             } finally {
