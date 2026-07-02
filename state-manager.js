@@ -49,14 +49,14 @@ This surgically replaces only the Appearance/Species field inside [CORE]. Do NOT
 
     if (enableRelBars) {
         instruction += `\n\n## NPC RELATIONSHIPS
-Scan the recent narrative chat history for visible inline annotations of the form \`*(Friendship: NPCName +X — reason)*\` or \`*(Affection: NPCName -Y — reason)*\` emitted by the GM/Narrator. When you see these, parse them and emit a relationship delta update using the \`[[REL:\` command (or \`rel\` parameter in commit). Do NOT include the current total — output only the signed integer delta (e.g., +2 or -15).
-When a new NPC is registered, you MUST infer an appropriate starting relationship delta from the narrative context in the same pass. For example:
+When recording a NEW NPC, set their starting relationship values using the \`rel\` parameter in your commit call. Infer appropriate starting deltas from the narrative context:
 - Long-time friends, regular companions, mentors, or close partners: set a strong starting friendship (e.g., +30 to +60).
 - Casual friends, helpful acquaintances, or positive encounters: set a minor starting friendship (e.g., +10 to +25).
 - Romantically interested or close loved ones: set starting affection and/or friendship (e.g., +20 to +50).
 - Minor foes, hostile rivals, or unfriendly targets: set a minor negative starting friendship (e.g., -5 to -15).
 - Direct enemies, antagonist figures, or deadly threats: set a strong negative starting friendship (e.g., -20 to -60).
-- Unknown/neutral: default to 0 (no delta).`;
+- Unknown/neutral: default to 0 (no delta).
+Ongoing relationship changes are tracked automatically by the system from the narrative output. Do NOT emit relationship deltas for existing NPCs.`;
     }
 
     instruction += `\n\nBe concise and functional — every word should serve gameplay or characterization. Avoid adjective dumps and purple prose.`;
@@ -718,6 +718,14 @@ Example: [[FAC: Iron Syndicate | ...]]  NOT  [[FAC: Khelt :: Iron Syndicate | ..
             s.routerModules.npc.instruction = buildNpcInstruction(s.npcMajorWords, s.npcMinorWords, s.ignoreNpcImportLimits);
         }
         s.settingsVersion = '3.16.16';
+    }
+
+    // Move ongoing relationship tracking from lorebook agent to narrative AI direct parsing (v3.16.17)
+    if (!s.settingsVersion || s.settingsVersion < '3.16.17') {
+        if (s.routerModules?.npc) {
+            s.routerModules.npc.instruction = buildNpcInstruction(s.npcMajorWords, s.npcMinorWords, s.ignoreNpcImportLimits);
+        }
+        s.settingsVersion = '3.16.17';
     }
 
 

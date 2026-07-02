@@ -14,7 +14,7 @@
 
 import { getSettings } from './state-manager.js';
 import { parseQuestsFromMemo, extractCurrentTimeStr, cleanMessageContent } from './memo-processor.js';
-import { runRouterPass, saveSceneToLorebook, scanAssistantOutputForKeywords, parseInWorldMinutes, runWorldProgressionPass, updateLorebookEntry } from './router.js';
+import { runRouterPass, saveSceneToLorebook, scanAssistantOutputForKeywords, parseInWorldMinutes, runWorldProgressionPass, updateLorebookEntry, getLorebookManifest } from './router.js';
 import { logTransaction } from './debug-viewer.js';
 
 // ── Dice naming helpers ────────────────────────────────────────────────────────
@@ -827,8 +827,268 @@ export function installInterceptor() {
 }
 
 /**
- * Processes [REL: Name | field | delta] tags emitted by the narrator AI.
+ * Fuzzy-resolves an NPC name from narrative text to a Book::UID.
+ * Handles partial matches (e.g. "Holdyn" matches "Ser Holdyn"),
+ * bracket-prefix stripping (e.g. "[Active] Elena" → "Elena"),
+ * and picks the shortest label that contains the query for precision.
+ * @param {string} name - The NPC name from the narrative annotation.
+ * @returns {Promise<string|null>} The resolved Book::UID or null.
  */
+async function fuzzyResolveNpcName(name) {
+    const query = name.toLowerCase().trim();
+    if (!query) return null;
+
+    const settings = getSettings();
+    const manifest = await getLorebookManifest(true); // skipUpdate=true to prevent massive hard drive scan
+    if (!manifest || !manifest.length) return null;
+
+    // Only consider NPC entries (books ending in _npcs or _npc)
+    const npcEntries = manifest.filter(e => {
+        const bookName = (e.id || '').split('::')[0] || '';
+        return /_npcs?$/i.test(bookName);
+    });
+
+    let bestMatch = null;
+    let bestDiff = Infinity;
+
+    for (const entry of npcEntries) {
+        // Strip bracketed prefixes like [Active], [NPC], etc.
+        const rawLabel = (entry.comment || entry.label || '').replace(/^\[.*?\]\s*/i, '').trim();
+        const labelLower = rawLabel.toLowerCase();
+
+        if (!labelLower) continue;
+
+        // Exact match — return immediately
+        if (labelLower === query) return entry.id;
+
+        // Fuzzy: check if query is a substring of the label or vice-versa
+        // e.g. "Holdyn" matches "Ser Holdyn", "Elena" matches "Elena Brightforge"
+        // Must be at least 3 characters to prevent single-letter or empty strings matching everything
+        if (labelLower.length >= 3 && (labelLower.includes(query) || query.includes(labelLower))) {
+            // Prefer the match with the smallest length difference to the query
+            const diff = Math.abs(labelLower.length - query.length);
+            if (diff < bestDiff) {
+                bestDiff = diff;
+                bestMatch = entry.id;
+            }
+        }
+
+        // Also check keywords for fuzzy match
+        const keys = entry.keys || entry.key || [];
+        for (const k of (Array.isArray(keys) ? keys : [keys])) {
+            const kLower = String(k).toLowerCase().trim();
+            if (!kLower) continue;
+            
+            if (kLower === query) {
+                bestMatch = entry.id;
+                break;
+            }
+            if (kLower.length >= 3 && (kLower.includes(query) || query.includes(kLower))) {
+                const diff = Math.abs(kLower.length - query.length);
+                if (diff < bestDiff) {
+                    bestDiff = diff;
+                    bestMatch = entry.id;
+                }
+                break;
+            }
+        }
+    }
+
+    return bestMatch;
+}
+
+/**
+ * Scans the most recent AI message for inline relationship annotations:
+ *   (Friendship: Name +X ...) or (Affection: Name -X ...)
+ * Parses field, NPC name, and delta, then applies them directly to
+ * relationship values in settings. The "reason" portion after the delta is ignored.
+ * This replaces the old lorebook-agent-as-middleman approach.
+ */
+export async function parseAndApplyNarrativeRelTags() {
+    if (_rpgIsGenerating) return; // Prevent scanning ghost text or early partial text during stream
+    
+    const settings = getSettings();
+    console.log('[RPG Tracker] parseAndApplyNarrativeRelTags: STARTING. Bars enabled:', !!settings.npcRelationshipBars);
+    if (!settings.npcRelationshipBars) return;
+
+    const ctx = SillyTavern.getContext();
+    const chat = ctx.chat;
+    if (!chat || !chat.length) {
+        console.log('[RPG Tracker] parseAndApplyNarrativeRelTags: ABORT - No chat found.');
+        return;
+    }
+
+    // Find the last AI message
+    let lastAiMsg = null;
+    for (let i = chat.length - 1; i >= 0; i--) {
+        if (!chat[i].is_user && !chat[i].is_system) {
+            lastAiMsg = chat[i];
+            break;
+        }
+    }
+    if (!lastAiMsg) {
+        console.log('[RPG Tracker] parseAndApplyNarrativeRelTags: ABORT - No last AI message found.');
+        return;
+    }
+    
+    console.log('[RPG Tracker] parseAndApplyNarrativeRelTags: Found AI message (index ' + chat.indexOf(lastAiMsg) + ') with text length:', lastAiMsg.mes?.length);
+
+    let anyChanged = false;
+    const triggerUIUpdate = () => {
+        if (typeof ctx.saveChatDebounced === 'function') ctx.saveChatDebounced();
+        ctx.saveSettingsDebounced?.();
+        // Skip dispatching 'rt_lore_agent_updated' to avoid full lorebook hard-drive scans.
+        // The DOM is refreshed manually via refreshRelationshipBarsDOM below.
+        refreshRelationshipBarsDOM(settings);
+    };
+
+    // --- 1. SWIPE ROLLBACK & INITIALIZATION ---
+    lastAiMsg.extra = lastAiMsg.extra || {};
+    const swipeId = lastAiMsg.swipe_id ?? 0;
+
+    // Convert old array format to object-keyed-by-swipe format if needed
+    if (Array.isArray(lastAiMsg.extra.rpgProcessedTags)) {
+        lastAiMsg.extra.rpgProcessedTags = { [swipeId]: lastAiMsg.extra.rpgProcessedTags };
+    } else if (!lastAiMsg.extra.rpgProcessedTags) {
+        lastAiMsg.extra.rpgProcessedTags = {};
+    }
+    lastAiMsg.extra.rpgRollbackData = lastAiMsg.extra.rpgRollbackData || {};
+
+    // Detect swipe change and perform rollback
+    if (lastAiMsg.extra.rpgActiveSwipe !== undefined && lastAiMsg.extra.rpgActiveSwipe !== swipeId) {
+        const prevSwipeId = lastAiMsg.extra.rpgActiveSwipe;
+        console.log(`[RPG Tracker] Swipe changed from ${prevSwipeId} to ${swipeId}. Rolling back previous allocations.`);
+        
+        if (lastAiMsg.extra.rpgRollbackData[prevSwipeId]) {
+            for (const rb of lastAiMsg.extra.rpgRollbackData[prevSwipeId]) {
+                // Reverse the exact delta that was successfully applied
+                if (settings.npcRelationshipValues && settings.npcRelationshipValues[rb.npcId]) {
+                    const current = settings.npcRelationshipValues[rb.npcId][rb.field] ?? 0;
+                    
+                    // State Integrity Check: If the user manually edited the UI slider,
+                    // the current value won't match our expected value. If so, abort the rollback
+                    // so we don't penalize them or undo their manual reset!
+                    if (rb.expectedValue !== undefined && current !== rb.expectedValue) {
+                        console.log(`[RPG Tracker] Aborting rollback for ${rb.npcId}: User manually edited slider from ${rb.expectedValue} to ${current}.`);
+                        continue;
+                    }
+
+                    settings.npcRelationshipValues[rb.npcId][rb.field] = Math.max(-100, Math.min(100, current - rb.actualAppliedDelta));
+                }
+                
+                // Remove the exact log entry
+                if (settings.npcRelationshipLog && Array.isArray(settings.npcRelationshipLog[rb.npcId])) {
+                    settings.npcRelationshipLog[rb.npcId] = settings.npcRelationshipLog[rb.npcId].filter(l => l.timestamp !== rb.logTimestamp);
+                }
+                console.log(`[RPG Tracker] Rolled back ${rb.field} delta (${rb.actualAppliedDelta}) for ${rb.npcId}`);
+            }
+            anyChanged = true;
+        }
+
+        // We are entering a new swipe. Clear its tracking data so it gets evaluated fresh.
+        lastAiMsg.extra.rpgProcessedTags[swipeId] = [];
+        lastAiMsg.extra.rpgRollbackData[swipeId] = [];
+    }
+
+    lastAiMsg.extra.rpgActiveSwipe = swipeId;
+    lastAiMsg.extra.rpgProcessedTags[swipeId] = lastAiMsg.extra.rpgProcessedTags[swipeId] || [];
+    lastAiMsg.extra.rpgRollbackData[swipeId] = lastAiMsg.extra.rpgRollbackData[swipeId] || [];
+
+    const text = cleanMessageContent(lastAiMsg);
+    console.log('[RPG Tracker] parseAndApplyNarrativeRelTags: Cleaned text length:', text?.length);
+    if (!text) {
+        if (anyChanged) triggerUIUpdate();
+        return;
+    }
+
+    // --- 2. EARLY RETURNS (After Rollback) ---
+    // Match: (Friendship: Name +X ...) or (Affection: Name -X ...)
+    // Also handles the asterisk-wrapped variant: *(Friendship: Name +X ...)*
+    // Removed \b because depending on formatting/characters it can fail
+    const relRegex = /\*?\(\s*(friendship|affection)\s*:\s*(.+?)\s+([+-]?\d+)[^)]*\)\*?/gi;
+    let match;
+    const matches = [];
+
+    while ((match = relRegex.exec(text)) !== null) {
+        const rawStr = match[0];
+        const field = match[1].toLowerCase();
+        const name = match[2].trim();
+        const delta = parseInt(match[3], 10);
+        console.log(`[RPG Tracker] parseAndApplyNarrativeRelTags: regex matched raw: "${rawStr}" -> field:${field}, name:"${name}", delta:${delta}`);
+        if (name && !isNaN(delta) && delta !== 0) {
+            matches.push({ rawStr, field, name, delta });
+        }
+    }
+
+    if (!matches.length) {
+        console.log('[RPG Tracker] parseAndApplyNarrativeRelTags: No valid relationship tags found in text.');
+        if (anyChanged) triggerUIUpdate();
+        return;
+    }
+
+    console.log(`[RPG Tracker] Scanning text for relationships... Found ${matches.length} valid matches in swipe ${swipeId}.`);
+
+    // --- 3. DEDUPLICATION AND APPLICATION ---
+    for (const m of matches) {
+        if (lastAiMsg.extra.rpgProcessedTags[swipeId].includes(m.rawStr)) {
+            console.log(`[RPG Tracker] Skipping already processed tag in this swipe: ${m.rawStr}`);
+            continue;
+        }
+
+        const resolvedId = await fuzzyResolveNpcName(m.name);
+        if (!resolvedId) {
+            console.warn(`[RPG Tracker] Narrative rel: could not resolve NPC name "${m.name}"`);
+            continue;
+        }
+
+        if (!settings.npcRelationshipValues) settings.npcRelationshipValues = {};
+        if (!settings.npcRelationshipValues[resolvedId]) {
+            settings.npcRelationshipValues[resolvedId] = { friendship: 0, affection: 0 };
+        }
+
+        const prev = settings.npcRelationshipValues[resolvedId][m.field] ?? 0;
+        const newVal = Math.max(-100, Math.min(100, prev + m.delta));
+        const actualAppliedDelta = newVal - prev;
+        settings.npcRelationshipValues[resolvedId][m.field] = newVal;
+
+        if (!settings.npcRelationshipLog) settings.npcRelationshipLog = {};
+        if (!Array.isArray(settings.npcRelationshipLog[resolvedId])) settings.npcRelationshipLog[resolvedId] = [];
+        
+        const logTimestamp = Date.now();
+        settings.npcRelationshipLog[resolvedId].unshift({ 
+            timestamp: logTimestamp, field: m.field, delta: m.delta, newValue: newVal, source: 'narrative' 
+        });
+        
+        if (settings.npcRelationshipLog[resolvedId].length > 50) {
+            settings.npcRelationshipLog[resolvedId].length = 50;
+        }
+
+        const sign = m.delta > 0 ? '+' : '';
+        const icon = m.field === 'friendship' ? '🤝' : '💗';
+        const label = m.field === 'friendship' ? 'Friendship' : 'Affection';
+        // @ts-ignore
+        if (typeof toastr !== 'undefined') toastr.info(`${icon} ${m.name}: ${sign}${m.delta} ${label}`, 'Relationship', { timeOut: 3500, positionClass: 'toast-bottom-right' });
+        
+        console.log(`[RPG Tracker] Narrative rel applied: ${m.name} → ${resolvedId} | ${m.field} ${sign}${m.delta} → ${newVal} (Actual applied: ${actualAppliedDelta})`);
+
+        // Save rollback data for future swipes
+        lastAiMsg.extra.rpgRollbackData[swipeId].push({
+            npcId: resolvedId,
+            field: m.field,
+            actualAppliedDelta: actualAppliedDelta,
+            expectedValue: newVal,
+            logTimestamp: logTimestamp
+        });
+
+        // Mark this specific tag string as processed in the message metadata for THIS swipe
+        lastAiMsg.extra.rpgProcessedTags[swipeId].push(m.rawStr);
+        anyChanged = true;
+    }
+
+    if (anyChanged) {
+        triggerUIUpdate();
+    }
+}
 
 
 /**
@@ -867,10 +1127,17 @@ function refreshRelationshipBarsDOM(settings) {
             const pct = Math.abs(value) / 2;
             const isPositive = value >= 0;
 
-            // Update fill bar width + classes
+            // Update fill bar width + classes + inline style overrides
             const fill = barRows[i].querySelector('.rt-npc-bar-fill');
             if (fill) {
+                const bgBarColor = isPositive 
+                    ? (type === 'friendship' ? '#4ade80' : '#f472b6')
+                    : (type === 'friendship' ? '#ef4444' : '#a855f7');
+
                 fill.style.width = `${pct}%`;
+                fill.style.left = isPositive ? '50%' : 'auto';
+                fill.style.right = isPositive ? 'auto' : '50%';
+                fill.style.background = bgBarColor;
                 fill.className = `rt-npc-bar-fill ${type}-${isPositive ? 'pos' : 'neg'} ${isPositive ? 'positive' : 'negative'}`;
             }
 
@@ -916,30 +1183,29 @@ export function ensureRelTagRegex() {
         if (!extSettings.regex) extSettings.regex = [];
         const scripts = extSettings.regex;
 
+        // Legacy [REL:] tag hider (for old messages that may still contain them)
         const SCRIPT_NAME = 'Hide REL Tags [RPG Tracker]';
-
-        // Don't duplicate if already registered
-        if (scripts.some(s => s.scriptName === SCRIPT_NAME)) return;
-
-        scripts.push({
-            scriptName: SCRIPT_NAME,
-            findRegex: '/\\[REL:\\s*[^\\]]+\\]/g',
-            replaceString: '',
-            trimStrings: [],
-            placement: [
-                1, // AI_OUTPUT
-            ],
-            disabled: false,
-            markdownOnly: false,
-            promptOnly: false,
-            runOnEdit: true,
-            substituteRegex: false,
-            minDepth: null,
-            maxDepth: null,
-        });
+        if (!scripts.some(s => s.scriptName === SCRIPT_NAME)) {
+            scripts.push({
+                scriptName: SCRIPT_NAME,
+                findRegex: '/\\[REL:\\s*[^\\]]+\\]/g',
+                replaceString: '',
+                trimStrings: [],
+                placement: [
+                    1, // AI_OUTPUT
+                ],
+                disabled: false,
+                markdownOnly: false,
+                promptOnly: false,
+                runOnEdit: true,
+                substituteRegex: false,
+                minDepth: null,
+                maxDepth: null,
+            });
+            console.log('[RPG Tracker] Registered REL tag hiding regex script.');
+        }
 
         ctx.saveSettingsDebounced?.();
-        console.log('[RPG Tracker] Registered REL tag hiding regex script.');
     } catch (e) {
         console.warn('[RPG Tracker] Could not register REL tag regex:', e);
     }
@@ -981,12 +1247,15 @@ export function getNarrativeBlocks(chat, limit = -1, includeHidden = false) {
 /** Tracks the type of the last started generation. */
 let _lastGenerationType = null;
 
+export let _rpgIsGenerating = false;
+
 /**
  * Fires on GENERATION_STARTED. Stores the type of generation.
  * @param {string} type
  */
 export function onGenerationStarted(type) {
     _lastGenerationType = type;
+    _rpgIsGenerating = true;
 }
 
 /** In-memory counter: how many generations have fired since the agent last ran. Resets on chat change. */
@@ -1028,6 +1297,7 @@ export function resetRouterTick(clearKeywordPool = false) {
  * a hard circular dep — it will be a direct import once memo-processor.js exists.
  */
 export async function onGenerationEnded() {
+    _rpgIsGenerating = false;
     const settings = getSettings();
 
     const isStateRunning = typeof globalThis._rpgStateModelRunning === 'function' && globalThis._rpgStateModelRunning();
@@ -1072,6 +1342,17 @@ export async function onGenerationEnded() {
             if (typeof globalThis._rpgRenderRouterUI === 'function') {
                 globalThis._rpgRenderRouterUI();
             }
+        }
+    }
+
+    // Step 1b: Parse (Friendship/Affection: Name ±X) tags from the narrative AI's output
+    // and apply relationship deltas directly — no lorebook agent middleman.
+    // Fired in the background without awaiting so the UI "Send" button reappears instantly.
+    if (settings.npcRelationshipBars) {
+        try {
+            parseAndApplyNarrativeRelTags(); // Removed await for speed
+        } catch (e) {
+            console.warn('[RPG Tracker] Narrative relationship tag parsing failed:', e);
         }
     }
 

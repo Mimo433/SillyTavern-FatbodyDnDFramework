@@ -804,11 +804,11 @@ Action: commit({"rewrite": [{"id": "Eldoria_Events::3", "content": "Compressed v
             modularPrompt = modularPrompt.replace(/\{\{#if_world\}\}|\{\{\/if_world\}\}|\{\{dayStr\}\}|\{\{prevDay\}\}/g, '');
 
             const relSection = settings.npcRelationshipBars ? `
-## NPC RELATIONSHIP DELTAS
-Scan the recent narrative chat history for visible inline annotations of the form \`*(Friendship: NPCName +X — reason)*\` or \`*(Affection: NPCName -Y — reason)*\` emitted by the GM/Narrator. When you see these, parse them and emit a relationship delta update using the following tag format (you can use either the NPC's name or their Book::UID):
-  [[REL: NameOrUID | friendship | +10]]
+## NPC INITIAL RELATIONSHIP VALUES
+When you record a NEW NPC, you MUST set their starting relationship values using [[REL:]] tags based on narrative context. This is ONLY for initial values when first recording an NPC — ongoing relationship changes are tracked automatically by the system. Examples:
+  [[REL: NameOrUID | friendship | +30]]
   [[REL: NameOrUID | affection | -5]]
-When a new NPC is registered, you MUST infer an appropriate starting relationship delta from the narrative context in the same pass. For example:
+Starting value guidelines:
 - Long-time friends, regular companions, mentors, or close partners: set a strong starting friendship (e.g., +30 to +60).
 - Casual friends, helpful acquaintances, or positive encounters: set a minor starting friendship (e.g., +10 to +25).
 - Romantically interested or close loved ones: set starting affection and/or friendship (e.g., +20 to +50).
@@ -965,7 +965,7 @@ Habits/Behaviors: Wipes his brow with a greasy rag.
             if (settings.npcRelationshipBars) {
                 commitProperties.rel = {
                     type: 'array',
-                    description: 'Apply relationship delta(s) to NPC(s). Base relationship changes on the NPC\'s personality, values, and temperament as described in their entry, or parse them from visible inline relationship annotations in the chat log. When a new NPC is recorded, you MUST infer an appropriate starting relationship delta (e.g. +30 to +60 for close long-time friends/companions/mentors, +10 to +25 for casual friends/acquaintances, -20 to -60 for direct enemies, 0 for neutral) and emit it in the same pass. Output only the delta, not the total.',
+                    description: 'Set INITIAL/STARTING relationship values for NEWLY RECORDED NPCs only. When you record a new NPC, infer an appropriate starting delta from narrative context (e.g. +30 to +60 for close friends/companions, +10 to +25 for acquaintances, -20 to -60 for enemies, 0 for neutral). Do NOT use this for ongoing relationship changes — those are tracked automatically by the system from the narrative output. Output only the delta, not the total.',
                     items: {
                         type: 'object',
                         properties: {
@@ -1077,7 +1077,7 @@ ${Object.values(settings.routerModules || {}).filter(m => m.enabled).map(m => `-
                 : `commit({"record": [...], "update": [...], "rename": [...], "activate": [...], "deactivate": [...], "delete_ids": [...], "appearance": [...]}) ? write all changes and finish`;
 
             const commitRelDescription = settings.npcRelationshipBars
-                ? `\ncommit rel items: {"id": "Book::UID or NPC Name", "field": "friendship"|"affection", "delta": ±N} — updates relationships based on narrative/inline annotations (signed integer delta)`
+                ? `\ncommit rel items: {"id": "Book::UID or NPC Name", "field": "friendship"|"affection", "delta": ±N} — set INITIAL relationship values for newly recorded NPCs only (signed integer delta)`
                 : ``;
 
             const agentSystemPrompt = usesNativeTools
@@ -2262,13 +2262,14 @@ Output a JSON object:
 /**
  * Fetches a manifest of all campaign-scoped lorebook entries for the UI.
  */
-export async function getLorebookManifest() {
+export async function getLorebookManifest(skipUpdate = false) {
     const settings = getSettings();
     const ctx = SillyTavern.getContext();
     const prefix = getLivePrefix();
     
-    // Always flush ST's registry from disk first so books written via HTTP API are visible
-    if (typeof ctx.updateWorldInfoList === 'function') {
+    // Always flush ST's registry from disk first so books written via HTTP API are visible,
+    // unless skipUpdate is explicitly requested for speed.
+    if (!skipUpdate && typeof ctx.updateWorldInfoList === 'function') {
         try { await ctx.updateWorldInfoList(); } catch (_) {}
     }
 
