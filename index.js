@@ -1175,6 +1175,10 @@ function onChatChanged(newChatId) {
     // Auto-activate and prefix logic run regardless of chatLinkEnabled.
     // Always re-derive the prefix from the chat ID so stale saved data never
     // causes the wrong session's lorebooks to activate.
+    const prefix = getEffectiveRouterCampaignPrefix(newChatId);
+    s.routerCampaignPrefix = prefix || '';
+    syncRouterPrefixDisplays(prefix || '');
+
     const chatBooks = s.chatStates?.[newChatId]?.campaignBooks;
 
     if (chatBooks?.length) {
@@ -1193,12 +1197,7 @@ function onChatChanged(newChatId) {
                 const oldWorldBookName = oldPrefix ? `${oldPrefix}_World` : 'World';
                 await ctx.executeSlashCommandsWithOptions(`/world state=off silent=true "${oldWorldBookName}"`).catch(() => { });
 
-                // 2. Restore prefix and turn ON arriving chat's books
-                const prefix = getEffectiveRouterCampaignPrefix(newChatId);
-                if (prefix) {
-                    s.routerCampaignPrefix = prefix;
-                    syncRouterPrefixDisplays(prefix);
-                }
+                // 2. Turn ON arriving chat's books
                 for (const name of chatBooks) {
                     await ctx.executeSlashCommandsWithOptions(`/world state=on silent=true "${name}"`).catch(() => { });
                 }
@@ -1209,6 +1208,8 @@ function onChatChanged(newChatId) {
                 } else {
                     await ctx.executeSlashCommandsWithOptions(`/world state=off silent=true "${newWorldBookName}"`).catch(() => { });
                 }
+                // Re-render folder counts and active dots once the /world transitions complete
+                void refreshAgentManifest().catch(() => { });
             })();
         }
     } else if (s.routerEnabled && newChatId) {
