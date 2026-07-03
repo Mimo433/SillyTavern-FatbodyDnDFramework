@@ -2967,6 +2967,10 @@ Saves: Fort +X | Ref +X | Will +X`;
         if (customSyspromptEl) customSyspromptEl.checked = !!fresh.customSysprompt;
         const timeDdMmyyCb = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_time_ddmmyy_toggle'));
         if (timeDdMmyyCb) timeDdMmyyCb.checked = !!fresh.useDdMmYyFormat;
+        const syspromptTimeDdMmyyCb = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_sysprompt_mod_time_ddmmyy'));
+        if (syspromptTimeDdMmyyCb) syspromptTimeDdMmyyCb.checked = !!fresh.useDdMmYyFormat;
+        const onboardingTimeDdMmyyCb = /** @type {HTMLInputElement|null} */ (document.getElementById('rt_onboarding_time_ddmmyy'));
+        if (onboardingTimeDdMmyyCb) onboardingTimeDdMmyyCb.checked = !!fresh.useDdMmYyFormat;
         const narratorBlockEl = document.getElementById('rpg_narrator_config_block');
         if (narratorBlockEl) narratorBlockEl.style.display = !!fresh.customSysprompt ? 'none' : '';
 
@@ -9554,17 +9558,17 @@ function refreshOrderList() {
             cbDate.checked = !!s.useDdMmYyFormat;
             cbDate.style.cssText = 'margin:0; cursor:pointer;';
             cbDate.onchange = () => {
-                const fresh = getSettings();
-                fresh.useDdMmYyFormat = cbDate.checked;
-                if (cbDate.checked && fresh.initialDate === "Day 1") {
-                    fresh.initialDate = "01/01/26";
-                } else if (!cbDate.checked && fresh.initialDate === "01/01/26") {
-                    fresh.initialDate = "Day 1";
-                }
-                if (fresh.routerModules?.npc) {
-                    fresh.routerModules.npc.instruction = buildNpcInstruction(fresh.npcMajorWords, fresh.npcMinorWords, false);
-                }
-                saveSettings();
+                syncSettingsAndUI(fresh => {
+                    fresh.useDdMmYyFormat = cbDate.checked;
+                    if (cbDate.checked && fresh.initialDate === "Day 1") {
+                        fresh.initialDate = "01/01/26";
+                    } else if (!cbDate.checked && fresh.initialDate === "01/01/26") {
+                        fresh.initialDate = "Day 1";
+                    }
+                    if (fresh.routerModules?.npc) {
+                        fresh.routerModules.npc.instruction = buildNpcInstruction(fresh.npcMajorWords, fresh.npcMinorWords, false);
+                    }
+                });
                 if (typeof updateWorldProgressionLastFiredDisplayRef === 'function') {
                     updateWorldProgressionLastFiredDisplayRef();
                 }
@@ -9811,6 +9815,7 @@ function buildSysprompt(rawText) {
                         $('#rpg_tracker_npc_minor_words').val(sTempTracker.npcMinorWords ?? 15);
                         $('#rpg_tracker_npc_rel_bars').prop('checked', !!sTempTracker.npcRelationshipBars);
                         $('#rpg_sysprompt_mod_npc_rel_bars').prop('checked', !!sTempTracker.npcRelationshipBars);
+                        $('#rpg_sysprompt_mod_time_ddmmyy').prop('checked', !!sTempTracker.useDdMmYyFormat);
                         $('#rpg_tracker_npc_card_import').prop('checked', !!sTempTracker.experimentalNpcImport);
                         $('#rpg_tracker_ignore_npc_limits').prop('checked', !!sTempTracker.ignoreNpcImportLimits);
                         if (typeof refreshOrderList === 'function') refreshOrderList();
@@ -10003,6 +10008,7 @@ function buildSysprompt(rawText) {
                                     $('#rpg_tracker_npc_minor_words').val(sTempTracker.npcMinorWords ?? 15);
                                     $('#rpg_tracker_npc_rel_bars').prop('checked', !!sTempTracker.npcRelationshipBars);
                                     $('#rpg_sysprompt_mod_npc_rel_bars').prop('checked', !!sTempTracker.npcRelationshipBars);
+                                    $('#rpg_sysprompt_mod_time_ddmmyy').prop('checked', !!sTempTracker.useDdMmYyFormat);
                                     $('#rpg_tracker_npc_card_import').prop('checked', !!sTempTracker.experimentalNpcImport);
                                     $('#rpg_tracker_ignore_npc_limits').prop('checked', !!sTempTracker.ignoreNpcImportLimits);
                                     if (typeof refreshOrderList === 'function') refreshOrderList();
@@ -12670,6 +12676,25 @@ RULES:
 
         $('#rpg_sysprompt_mod_npc_rel_bars').prop('checked', !!settings.npcRelationshipBars).on('change', function () {
             handleRelBarsChange($(this).prop('checked'));
+        });
+        $('#rpg_sysprompt_mod_time_ddmmyy').prop('checked', !!settings.useDdMmYyFormat).on('change', function () {
+            const isChecked = !!$(this).prop('checked');
+            syncSettingsAndUI(s => {
+                s.useDdMmYyFormat = isChecked;
+                if (isChecked && s.initialDate === "Day 1") {
+                    s.initialDate = "01/01/26";
+                } else if (!isChecked && s.initialDate === "01/01/26") {
+                    s.initialDate = "Day 1";
+                }
+                if (s.routerModules?.npc) {
+                    s.routerModules.npc.instruction = buildNpcInstruction(s.npcMajorWords, s.npcMinorWords, false);
+                }
+            });
+            if (typeof updateWorldProgressionLastFiredDisplayRef === 'function') {
+                updateWorldProgressionLastFiredDisplayRef();
+            }
+            syncOnboardingUI();
+            scheduleAutoApply();
         });
         $('#rpg_tracker_npc_rel_toast').prop('checked', settings.npcRelationshipToast !== false).on('change', function () {
             settings.npcRelationshipToast = $(this).prop('checked');
