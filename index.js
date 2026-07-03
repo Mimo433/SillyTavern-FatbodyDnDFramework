@@ -3774,7 +3774,7 @@ function createPanel() {
                     </div>
                 </div>
                 <div class="rpg-tracker-footer" id="rt-agent-footer">
-                    <div id="rt-agent-last-run" style="text-align: center; font-size: 0.692em; opacity: 0.45; color: var(--rt-text-muted); padding: 2px 0 4px; line-height: 1.3; flex-shrink: 0;"></div>
+                    <div id="rt-agent-last-run" style="text-align: center; font-size: 0.8em; opacity: 0.65; color: var(--rt-text-muted); padding: 2px 0 4px; line-height: 1.3; flex-shrink: 0;"></div>
                     <div class="rpg-tracker-nav">
                         <button class="rpg-tracker-nav-btn" id="rt-agent-nav-back" title="Undo last lorebook pass">←</button>
                         <span class="rpg-tracker-nav-label" id="rt-agent-nav-label">[ LIVE ]</span>
