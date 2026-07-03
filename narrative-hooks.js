@@ -444,6 +444,41 @@ export function installInterceptor() {
         // Path 1 fires after this interceptor in the ST pipeline, so a scan here = same-turn lore.
         const skipInjection = !!globalThis._rpgPromptManagerInterceptorActive;
 
+        // ── Swipe rollback: restore memo BEFORE injection ─────────────────────────────
+        // Fires synchronously here so the restored memo is used when building the prompt
+        // (line ~550), replicating the game state from before the swiped-away generation.
+        if (getSettings().stateTrackerSwipeRollback !== false) {
+            const _stCtx = SillyTavern.getContext();
+            const _stChat = _stCtx?.chat;
+            const _stLastAi = _stChat ? [..._stChat].reverse().find(m => !m.is_user) : null;
+            if (_stLastAi && _stLastAi.extra) {
+                const _curSwipe = _stLastAi.swipe_id ?? 0;
+                const _prevSwipe = _stLastAi.extra.rpgActiveSwipe;
+                if (_prevSwipe !== undefined && _prevSwipe !== _curSwipe) {
+                    const _snap = _stLastAi.extra.rpgMemoRollback?.[_prevSwipe];
+                    if (typeof _snap === 'string') {
+                        const _s = getSettings();
+                        console.log(`[RPG Tracker] Swipe detected (${_prevSwipe}→${_curSwipe}): restoring memo snapshot before injection.`);
+                        _s.currentMemo = _snap;
+                        // Keep memoHistory consistent: drop the entry written for the old swipe
+                        if (Array.isArray(_s.memoHistory) && _s.memoHistory[0] !== _snap) {
+                            _s.memoHistory.shift();
+                            if (_s.historyIndex !== undefined && _s.historyIndex > 0) _s.historyIndex--;
+                        }
+                        // Clear the stale snapshot so the new generation can stamp a fresh one
+                        if (_stLastAi.extra.rpgMemoRollback) delete _stLastAi.extra.rpgMemoRollback[_curSwipe];
+                        // Advance the active swipe marker so this doesn't re-trigger next turn
+                        _stLastAi.extra.rpgActiveSwipe = _curSwipe;
+                        // Also reset processed-tags for the new swipe (relationship system)
+                        if (_stLastAi.extra.rpgProcessedTags) _stLastAi.extra.rpgProcessedTags[_curSwipe] = [];
+                        if (_stLastAi.extra.rpgRollbackData) _stLastAi.extra.rpgRollbackData[_curSwipe] = [];
+                        // Update memo pane immediately
+                        if (typeof globalThis._rpgUpdateUIMemo === 'function') globalThis._rpgUpdateUIMemo(_snap);
+                    }
+                }
+            }
+        }
+
         if (settings.debugMode) {
             console.group("[RPG Tracker] Interceptor Triggered");
             console.log("Settings Enabled:", settings.enabled);
@@ -983,25 +1018,6 @@ export async function parseAndApplyNarrativeRelTags() {
                 console.log(`[RPG Tracker] Rolled back ${rb.field} delta (${rb.actualAppliedDelta}) for ${rb.npcId}`);
             }
             anyChanged = true;
-        }
-
-        // State Tracker memo rollback on swipe
-        if (settings.stateTrackerSwipeRollback !== false && lastAiMsg.extra.rpgMemoRollback) {
-            const prevMemoSnapshot = lastAiMsg.extra.rpgMemoRollback[prevSwipeId];
-            if (typeof prevMemoSnapshot === 'string') {
-                console.log('[RPG Tracker] Swipe rollback: restoring memo snapshot from swipe', prevSwipeId);
-                settings.currentMemo = prevMemoSnapshot;
-                // Sync memo history: remove the entry that was pushed for the old swipe
-                if (Array.isArray(settings.memoHistory) && settings.memoHistory[0] !== prevMemoSnapshot) {
-                    settings.memoHistory.shift();
-                    if (settings.historyIndex !== undefined && settings.historyIndex > 0) settings.historyIndex--;
-                }
-                // Clear the stale rollback snapshot for this new swipe (will be re-stamped when ST runs)
-                delete lastAiMsg.extra.rpgMemoRollback[swipeId];
-                anyChanged = true;
-                // Notify UI to re-render the memo pane
-                if (typeof globalThis._rpgUpdateUIMemo === 'function') globalThis._rpgUpdateUIMemo(prevMemoSnapshot);
-            }
         }
 
         // We are entering a new swipe. Clear its tracking data so it gets evaluated fresh.
