@@ -1150,13 +1150,14 @@ function refreshRelationshipBarsDOM(settings) {
                 
                 // Rebuild badge from log
                 const log = (logData[entryId] || []).find(e => e.field === type);
-                let badgeHtml = '';
+                // (User requested hiding the visual badge, so we comment this out while keeping log logic intact)
+                let badgeHtml = ''; /*
                 if (log) {
                     const badgeColor = log.source === 'manual' ? 'rgba(180,180,180,0.7)' : (log.delta > 0 ? '#4ade80' : '#ef4444');
                     const sign = log.delta > 0 ? '+' : '';
                     const label = log.source === 'manual' ? '✋' : '🤖';
                     badgeHtml = `<span style="font-size:9px;font-weight:bold;color:${badgeColor};margin-left:4px;opacity:0.85;" title="${label} last change: ${sign}${log.delta}">${sign}${log.delta}</span>`;
-                }
+                } */
 
                 valSpan.className = `rt-npc-bar-value ${valClass}`;
                 valSpan.innerHTML = `${value > 0 ? '+' : ''}${value}${badgeHtml}`;

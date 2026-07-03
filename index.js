@@ -5094,14 +5094,16 @@ function createPanel() {
                             // Last-delta badge from log
                             const curS = getSettings();
                             const log = (curS.npcRelationshipLog?.[entryId] || []).find(e => e.field === type);
-                            const badgeHtml = log
+                            // (User requested hiding the visual badge, so we keep this blank)
+                            const badgeHtml = ''; 
+                            /* log
                                 ? (() => {
                                     const badgeColor = log.source === 'manual' ? 'rgba(180,180,180,0.7)' : (log.delta > 0 ? '#4ade80' : '#ef4444');
                                     const sign = log.delta > 0 ? '+' : '';
                                     const label = log.source === 'manual' ? '✋' : '🤖';
                                     return `<span style="font-size:9px;font-weight:bold;color:${badgeColor};margin-left:4px;opacity:0.85;" title="${label} last change: ${sign}${log.delta}">${sign}${log.delta}</span>`;
                                   })()
-                                : '';
+                                : ''; */
                             return `<div class="rt-npc-bar-row">
                                 <span class="rt-npc-bar-icon">${icon}</span>
                                 <div class="rt-npc-bar-track">
