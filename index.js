@@ -9826,10 +9826,14 @@ function buildSysprompt(rawText) {
                 return `<quests>\n${instruction.trim()}\n</quests>`;
             }
             if (tag === 'end_of_output_footer') {
+                let footerContent = match;
                 if (s.use24hTime) {
-                    return match.replace(/\[HH:MM AM\/PM\]/g, '[HH:MM] (24-hour clock, NO AM/PM)');
+                    footerContent = footerContent.replace(/\[HH:MM AM\/PM\]/g, '[HH:MM] (24-hour clock, NO AM/PM)');
                 }
-                return match;
+                if (s.useDdMmYyFormat) {
+                    footerContent = footerContent.replace(/Day\s+\[X\]/g, '[DD/MM/YYYY]');
+                }
+                return footerContent;
             }
             return match;
         });
