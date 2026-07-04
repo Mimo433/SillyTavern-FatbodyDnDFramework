@@ -1,7 +1,7 @@
 import { getSettings, getEffectiveRouterCampaignPrefix } from './state-manager.js';
 import { sendStateRequest, sendAgentTurn } from './llm-client.js';
 import { getRequestHeaders } from '../../../../script.js';
-import { extractCurrentTimeStr, cleanMessageContent } from './memo-processor.js';
+import { extractCurrentTimeStr, cleanMessageContent, parseInWorldTime, formatInWorldTime } from './memo-processor.js';
 
 let _routerRunning = false;
 let _routerNormalRunCount = 0; // tracks completed normal (non-cleanup) passes for auto-cleanup interval
@@ -2757,44 +2757,15 @@ function countRedundantPairs(content, threshold = 0.6) {
  */
 export function parseInWorldMinutes(timeStr) {
     if (!timeStr) return -1;
-    const m = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?,\s*Day\s*(\d+)/i);
-    if (!m) return -1;
-    let hours = parseInt(m[1], 10);
-    const minutes = parseInt(m[2], 10);
-    const ampm = m[3] ? m[3].toUpperCase() : null;
-    const day = parseInt(m[4], 10);
-    if (ampm) {
-        if (ampm === 'PM' && hours !== 12) hours += 12;
-        if (ampm === 'AM' && hours === 12) hours = 0;
-    }
-    return (day - 1) * 24 * 60 + hours * 60 + minutes;
+    const ddmmyyMatch = timeStr.match(/\b(\d{1,2})\/(\d{1,2})\/(\d+)\b/);
+    const dayMatch = timeStr.match(/(?:Day|D)\s*(\d+)/i);
+    const timeMatch = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+    if (!ddmmyyMatch && !dayMatch && !timeMatch) return -1;
+    return parseInWorldTime(timeStr);
 }
 
-/**
- * Computes the label for a World Progression period given start/end in total-minutes.
- * Daily or longer intervals: "Day N". Sub-daily: "Day N, HH:MM-HH:MM".
- * @param {number} startMinutes
- * @param {number} endMinutes
- * @param {number} intervalHours
- * @returns {string}
- */
 function computePeriodLabel(startMinutes, endMinutes, intervalHours) {
-    const day = Math.floor(endMinutes / (24 * 60)) + 1;
-    const minutesOfToday = endMinutes % (24 * 60);
-    let hours = Math.floor(minutesOfToday / 60);
-    const mins = minutesOfToday % 60;
-    const displayMins = String(mins).padStart(2, '0');
-    const s = getSettings();
-    if (s.use24hTime) {
-        const displayHoursStr = String(hours).padStart(2, '0');
-        return `Day ${day}, ${displayHoursStr}:${displayMins}`;
-    } else {
-        const ampm = hours >= 12 ? 'PM' : 'AM';
-        let displayHours = hours % 12;
-        if (displayHours === 0) displayHours = 12;
-        const displayHoursStr = String(displayHours).padStart(2, '0');
-        return `Day ${day}, ${displayHoursStr}:${displayMins} ${ampm}`;
-    }
+    return formatInWorldTime(endMinutes);
 }
 
 /**
