@@ -9436,8 +9436,9 @@ export function syncSettingsAndUI(updateFn) {
     }
     refreshOrderList();
     saveSettings();
-    scheduleAutoApply();
-    refreshRenderedView();
+    if (!document.querySelector('.rt-empty')) {
+        refreshRenderedView();
+    }
 }
 
 // ───────────────────────────────────────────────────────────────────────────
