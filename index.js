@@ -2955,15 +2955,29 @@ function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRefresh =
                 custom: '⚙️ Customizing...'
             };
 
-            const CHARACTER_FORMAT_HINT = `\n\nUse this exact format for the [CHARACTER] block:
-Combat: BAB: +X | Ranged: +X | Melee: +X
-Gear: Weapon (stats), AC: Z (Armor Name)
-Attr: STR X (mod), DEX X (mod), CON X (mod), INT X (mod), WIS X (mod), CHA X (mod)
-Saves: Fort +X | Ref +X | Will +X`;
+            const CHARACTER_FORMAT_HINT = `\n\nCRITICAL TAG WRAPPING RULE: Every block you output MUST be enclosed in matching opening and closing tags. You must output the closing tag for every block (e.g. [/CHARACTER], [/INVENTORY], [/ABILITIES], [/SPELLS], [/TIME]).
+
+Use this exact style:
+[CHARACTER]
+Barnaby "Salt-Eye" Finch (Pirate): 36/36 HP
+Combat: BAB: +4 | Ranged: +6 | Melee: +5
+Gear: Cutlass (1d6+2 Slashing) [E], AC: 14 (Leather Jerkin)
+Attr: STR 14 (+2), DEX 15 (+2), CON 14 (+2), INT 12 (+1), WIS 10 (+0), CHA 14 (+2)
+Saves: Fort +6 | Ref +6 | Will +1
+[/CHARACTER]
+
+[INVENTORY]
+Gear:
+- 🗡️ [Common] [E] Cutlass (1d6+2 Slashing)
+[/INVENTORY]
+
+[ABILITIES]
+- Dirty Fighting
+[/ABILITIES]`;
 
             const initDateVal = startDateVal;
             const initRestVal = isCalendar ? startDateVal : 'Day 0';
-            const TIME_FORMAT_HINT = ` Also output a [TIME] block initialized with Current Time at "08:00 AM, ${initDateVal}" and Last Rest at "12:00 AM, ${initRestVal}".`;
+            const TIME_FORMAT_HINT = `\n\n[TIME]\nLast Rest: 12:00 AM, ${initRestVal}\nCurrent Time: 08:00 AM, ${initDateVal}\n[/TIME]`;
 
             const REALISTIC_HINT = `\n\nCRITICAL REALISM RULE: This is a realistic/non-fantasy setting.
 - Do NOT output a [SPELLS] block under any circumstances. Avoid all magic, spells, or magical powers.
