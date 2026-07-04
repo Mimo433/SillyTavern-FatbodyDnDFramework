@@ -1,16 +1,21 @@
 /**
  * quests.js — Multihog D&D Framework
- * Quest management, deadline tracking, and tool registration.
+ * Quest management and deadline tracking.
  */
 
 import { getSettings } from './state-manager.js';
-import { parseQuestsFromMemo, writeQuestsToMemo, parseInWorldTime, extractCurrentTimeStr } from './memo-processor.js';
+import { parseQuestsFromMemo, writeQuestsToMemo, parseInWorldTime } from './memo-processor.js';
 
-export function getQuestToolName() {
-    return 'LogQuest';
+/**
+ * Unregisters the deprecated LogQuest tool if it was left registered from a prior version.
+ */
+export function unregisterLogQuestTool() {
+    try {
+        SillyTavern.getContext().unregisterFunctionTool?.('LogQuest');
+    } catch (error) {
+        console.warn('[RPG Tracker] Failed to unregister LogQuest tool', error);
+    }
 }
-
-// ── Time & Math ──────────────────────────────────────────────────────────────
 
 // ── Time & Math ──────────────────────────────────────────────────────────────
 
@@ -157,225 +162,6 @@ export function renderQuestsAsPlainText(quests, currentTime) {
     return text + "\n";
 }
 
-// ── Lorebook Injection ───────────────────────────────────────────────────────
-
-/**
- * Writes a canonical lorebook entry anchoring the quest location.
- */
-export async function buildQuestLorebookEntry(quest) {
-    const stCtx = SillyTavern.getContext();
-    if (!stCtx.createWorldInfoEntry) return; // Fallback if API missing
-
-    const entryContent = `Quest Origin — ${quest.title}\nThe quest "${quest.title}" was given by ${quest.giver_name} at ${quest.giver_location}. This location is canonical and must not change.`;
-    
-    const titleWords = quest.title.split(/\s+/).slice(0, 3).join(' ');
-    const keys = [quest.id, quest.giver_name, titleWords].filter(Boolean);
-
-    try {
-        // Attempt to create a new entry in a dedicated "RPG Tracker Quests" book, or the default.
-        // The specific API call depends on SillyTavern's world info manager structure.
-        // Often it's passed as an object to a world info creation function.
-        // Assuming createWorldInfoEntry(bookName, entryData) or similar exists, or we write to a default.
-        // We will just do a standard toast/log for now as the exact WI API needs verifying,
-        // but this is the hook point.
-        console.log(`[RPG Tracker] Quest Lorebook Entry generated:\nKeys: ${keys.join(',')}\n${entryContent}`);
-        // If there's a specific ST API to push WI entries programmatically:
-        // stCtx.createWorldInfoEntry({ keys, content: entryContent, name: `Quest: ${quest.title}` });
-    } catch (e) {
-        console.error('[RPG Tracker] Failed to write lorebook entry:', e);
-    }
-}
-
-// ── Tool Registration ────────────────────────────────────────────────────────
-
-export function registerLogQuestTool() {
-    try {
-        const s = getSettings();
-        const { registerFunctionTool, unregisterFunctionTool } = SillyTavern.getContext();
-        
-        // Unregister first (idempotent)
-        unregisterFunctionTool('LogQuest');
-
-        // In legacy mode or if quests are disabled in Narrator Config, no tool needed
-        if (s.questLegacyMode || s.syspromptModules?.quests === false) return;
-
-        const isDeadlines = !!s.syspromptModules?.questsDeadlines;
-        const isFrustration = !!s.syspromptModules?.questsFrustration;
-        const isDifficulty = !!s.syspromptModules?.questsDifficulty;
-
-
-        // ── Build a dynamic tool description based on enabled features ──────────
-        let toolDescription =
-            'Log a new quest when the player formally accepts it from an NPC. ' +
-            'Call this ONCE per accepted quest. Do NOT call it for rumors, casual mentions, or unaccepted tasks. ' +
-            'Populate all fields from what was already established in the narrative.';
-
-        if (isDeadlines) {
-            toolDescription +=
-                ' If the quest is time-sensitive, you MUST calculate and supply deadline_time in the format ' +
-                (s.useDdMmYyFormat ?
-                    (s.use24hTime ? '"HH:MM, DD/MM/YYYY"' : '"HH:MM AM/PM, DD/MM/YYYY"') :
-                    (s.use24hTime ? '"HH:MM, Day N"' : '"HH:MM AM/PM, Day N"')
-                ) + '. ' +
-                (isFrustration
-                    ? 'The NPC Mood evolves continuously based on frustration_coefficient. ' +
-                      'Reserve status "failed" ONLY for quests that are logically impossible to complete or explicitly called off by the NPC.'
-                    : 'The quest will automatically fail if the current time passes the deadline. ' +
-                      'However, YOU MUST still mark the status as "failed" if the quest becomes narratively impossible (e.g. a target dies).');
-        }
-
-        if (isFrustration) {
-            toolDescription +=
-                ' The NPC Mood evolves continuously based on frustration_coefficient. ' +
-                'Let this affect how the NPC speaks and acts whenever the player encounters them throughout the campaign.';
-        }
-
-        if (isDifficulty) {
-            toolDescription +=
-                ' Assign a difficulty (Very Easy, Easy, Medium, Hard, Very Hard) to the quest based on your assessment of the danger and complexity involved.';
-        }
-
-        // ── Build per-parameter descriptions ─────────────────────────────────
-        const properties = {
-            title: {
-                type: 'string',
-                description: 'Clear, thematic name of the quest as established in the narrative.'
-            },
-            giver_name: {
-                type: 'string',
-                description: 'Full name of the NPC who issued the quest.'
-            },
-            giver_location: {
-                type: 'string',
-                description: 'Where this NPC can be found (e.g. "Crestwood Mill", "The Rusty Flagon Inn").'
-            },
-            objectives: {
-                type: 'array',
-                description: 'Break the task into specific, concrete objectives. Include all sub-tasks mentioned by the NPC.',
-                items: {
-                    type: 'object',
-                    properties: {
-                        text: {
-                            type: 'string',
-                            description: 'A single, specific goal (e.g. "Kill the wolves in the eastern forest").'
-                        },
-                        required: {
-                            type: 'boolean',
-                            description: 'True if this objective is required for quest completion; false if it is optional.'
-                        },
-                        total: {
-                            type: 'number',
-                            description: 'For collection/count objectives, the total amount required (e.g. 6 for "collect 6 mushrooms"). Omit if not a quantity objective.'
-                        },
-                    },
-                    required: ['text', 'required'],
-                },
-            },
-            rewards: {
-                type: 'array',
-                description: 'All rewards promised by the NPC. One entry per reward (e.g. "100 GP", "Elara\'s family heirloom").',
-                items: { type: 'string' },
-            },
-        };
-
-        const required = ['title', 'giver_name', 'giver_location', 'objectives'];
-
-        if (isDifficulty) {
-            properties.difficulty = {
-                type: 'string',
-                description: 'The estimated difficulty of the quest (e.g. "Very Easy", "Easy", "Medium", "Hard", "Very Hard", or a custom rating).'
-            };
-            required.push('difficulty');
-        }
-
-        if (isDeadlines) {
-            properties.deadline_time = {
-                type: 'string',
-                description:
-                    'The exact in-world timestamp when the quest must be completed (e.g. ' +
-                    (s.useDdMmYyFormat ?
-                        (s.use24hTime ? '"18:00, 04/01/2026"' : '"06:00 PM, 04/01/2026"') :
-                        (s.use24hTime ? '"18:00, Day 4"' : '"06:00 PM, Day 4"')
-                    ) + '). ' +
-                    'If the narrative specifies a duration (e.g., "four days"), you MUST calculate the absolute ' +
-                    (s.useDdMmYyFormat ? 'DD/MM/YYYY' : 'Day N') +
-                    ' timestamp based on the current time. ' +
-                    'Omit only if the quest has no time pressure whatsoever.'
-            };
-            // Removed auto_fail property - now deterministic based on isFrustration toggle
-        }
-
-        if (isFrustration) {
-            properties.frustration_coefficient = {
-                type: 'number',
-                description:
-                    'How quickly this NPC\'s mood deteriorates as time passes. Scale: 0.4–3.0.\n' +
-                    '· 0.4 = Very patient. NPC stays pleased longer, and gets mad slowly if you miss the deadline.\n' +
-                    '· 1.0 = Normal. NPC is neutral exactly at the deadline, and frustrated if you miss it.\n' +
-                    '· 3.0 = Volatile. NPC becomes neutral quickly, and gets mad rapidly if you miss the deadline.\n' +
-                    'Assign based on the NPC\'s established personality in the narrative. Default: 1.0.'
-            };
-        }
-
-        unregisterFunctionTool('LogQuest');
-        registerFunctionTool({
-            name: 'LogQuest',
-            displayName: 'LogQuest',
-            description: toolDescription,
-            parameters: {
-                type: 'object',
-                properties: properties,
-                required: required,
-            },
-            action: async (args) => {
-                const s = getSettings();
-
-                // Extract T-1 time from the memo
-                const tMatch = s.currentMemo?.match(/\[TIME\]([\s\S]*?)\[\/TIME\]/i);
-                let acceptedTime = "08:00 AM, Day 1"; // Fallback
-                if (tMatch) {
-                    const timeStr = extractCurrentTimeStr(tMatch[1]);
-                    if (timeStr) {
-                        acceptedTime = timeStr;
-                    }
-                }
-
-                const newQuest = {
-                    id: `quest_${Date.now()}`,
-                    title: args.title || 'Unknown Quest',
-                    giver_name: args.giver_name || 'Unknown',
-                    giver_location: args.giver_location || 'Unknown Location',
-                    objectives: (args.objectives || []).map((o, idx) => ({
-                        id: `obj_${idx}`,
-                        text: o.text || '',
-                        required: o.required !== false,
-                        status: 'active'
-                    })),
-                    rewards: args.rewards || [],
-                    difficulty: isDifficulty ? (args.difficulty || 'Medium') : undefined,
-                    deadline_time: isDeadlines ? (args.deadline_time || null) : undefined,
-                    frustration_coefficient: isFrustration ? (args.frustration_coefficient || 1.0) : undefined,
-                    auto_fail: (isDeadlines && !isFrustration),
-                    accepted_time: acceptedTime,
-                    status: 'active'
-                };
-
-                // Stage the quest — do NOT write to currentMemo yet.
-                // The state model pass will flush pending quests into the merged
-                // output AFTER snapshotting, so rollback remains clean.
-                if (!globalThis._rpgPendingQuests) globalThis._rpgPendingQuests = [];
-                globalThis._rpgPendingQuests.push(newQuest);
-
-                await buildQuestLorebookEntry(newQuest);
-
-                return `Quest "${newQuest.title}" successfully logged.`;
-            },
-            formatMessage: () => '',
-        });
-    } catch (error) {
-        console.error('[RPG Tracker] Error registering LogQuest function tool', error);
-    }
-}
 
 // ── Debug / Test Tool ────────────────────────────────────────────────────────
 

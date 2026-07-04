@@ -1,10 +1,10 @@
-import { EXAMPLES, COLOR_EXAMPLES, DEFAULT_STOCK_PROMPTS, RT_PROMPTS, BLOCK_ICONS, BLOCK_ORDER, PAGE_SIZE, NO_PAGINATE, QUESTS_NARRATOR_MODERN, QUESTS_NARRATOR_LEGACY } from './constants.js';
+import { EXAMPLES, COLOR_EXAMPLES, DEFAULT_STOCK_PROMPTS, RT_PROMPTS, BLOCK_ICONS, BLOCK_ORDER, PAGE_SIZE, NO_PAGINATE, QUESTS_NARRATOR } from './constants.js';
 import { MODULE_NAME, DEFAULT_MODULES, getSettings, getBarBackground, migrateCustomFields, saveChatState, saveProfile, deleteProfile, getEffectiveRouterCampaignPrefix, sanitizeCampaignPrefixString, buildNpcInstruction } from './state-manager.js';
 import { sendStateRequest, fetchOllamaModels, fetchOpenAIModels, testOpenAIConnection, getConnectionProfiles, getCurrentCompletionPreset, setCompletionPreset } from './llm-client.js';
 import { getDiceToolName, getDiceCommandName, getDiceCommandAliases, doDiceRoll, registerDiceFunctionTool, registerDiceSlashCommand, installInterceptor, getNarrativeBlocks, onGenerationStarted, onGenerationEnded, ensureRelTagRegex, resetRouterTick, getRouterTick, makeRngQueue, buildRngBlock, RNG_QUEUE_LEN, parseAndApplyNarrativeRelTags } from './narrative-hooks.js';
 import { deduplicateMemo, mergeMemo, computeDelta, escapeHtml, escapeRegex, highlightParens, cleanToolCallMessage, cleanMessageContent, getLastUserAction, buildLorebookContext, buildModulesInstructionText, buildModuleFormatInstruction, parseQuestsFromMemo, syncQuestsFromMemo, syncQuestsToMemo, writeQuestsToMemo, getQuestMood, extractCurrentTimeStr, stripCompletedQuestsFromMemo, parseInWorldTime, formatInWorldTime } from './memo-processor.js';
 import { renderSubFieldByRule, tryRenderMarker, renderCustomBlockLine, stripMemoHtml, escapeHtmlWithColor, parseMemoBlocks, getPageSize, loadCollapsed, saveCollapsed, loadDetached, saveDetached, blockToItems, renderMemoAsCards, renderQuestLog, renderLorebookTerminal } from './renderer.js';
-import { registerLogQuestTool, checkQuestDeadlines, renderQuestsAsPlainText } from './quests.js';
+import { unregisterLogQuestTool, checkQuestDeadlines, renderQuestsAsPlainText } from './quests.js';
 import { initializeDebugViewer, toggleDebugViewer } from './debug-viewer.js';
 import { runRouterPass, rollbackRouterPass, reapplyRouterPass, getLorebookManifest, deleteLorebookEntry, updateLorebookEntry, disableManagedEntries, isRouterRunning, stopRouterPass } from './router.js';
 import { getRequestHeaders } from '../../../../script.js';
@@ -444,13 +444,6 @@ function syncOnboardingUI() {
     const difficulty = /** @type {HTMLInputElement|null} */ (onboarding.querySelector('#rt_onboarding_quests_difficulty'));
     if (difficulty) difficulty.checked = !!s.syspromptModules?.questsDifficulty;
 
-    // Quest Processing Mode Sync
-    const qmStandard = /** @type {HTMLInputElement|null} */ (onboarding.querySelector('#rt_onboarding_quest_standard'));
-    const qmLegacy = /** @type {HTMLInputElement|null} */ (onboarding.querySelector('#rt_onboarding_quest_legacy'));
-    if (qmStandard && qmLegacy) {
-        qmStandard.checked = !s.questLegacyMode;
-        qmLegacy.checked = !!s.questLegacyMode;
-    }
 
     // Optional Components Sync
     const mods = { 'loot': '#rt_onboarding_mod_loot', 'random_events': '#rt_onboarding_mod_random_events', 'resting': '#rt_onboarding_mod_resting' };
@@ -781,8 +774,8 @@ async function cloneCampaignStack() {
 
 // ── Chat-Linked State (deferred from state-manager.js — touches DOM + _historyViewIndex) ──
 
-function refreshQuestLegacyPrompt(s) {
-    let prompt = DEFAULT_STOCK_PROMPTS.quests_legacy;
+function refreshQuestPrompt(s) {
+    let prompt = DEFAULT_STOCK_PROMPTS.quests;
     if (!s.syspromptModules?.questsDeadlines && !s.syspromptModules?.questsFrustration) {
         prompt = prompt.replace(/  DEADLINE:.*\n/g, '');
         prompt = prompt.replace(/  FRUSTRATION_COEFF:.*\n/g, '');
@@ -807,9 +800,7 @@ function refreshQuestLegacyPrompt(s) {
         prompt = prompt.replace(/- For difficulty, use the DIFFICULTY marker.*\n/g, '');
     }
     if (!s.stockPrompts) s.stockPrompts = {};
-    // Write ONLY to the legacy slot — the runtime swap in buildModulesInstructionText
-    // will read from here when questLegacyMode is active. Never touch stockPrompts.quests.
-    s.stockPrompts.quests_legacy = prompt;
+    s.stockPrompts.quests = prompt;
 }
 
 /**
@@ -1281,6 +1272,8 @@ function onChatChanged(newChatId) {
         if (isActualChange) {
             s.worldProgressionLastFiredAtMinutes = -1;
             s.worldProgressionLastFiredPeriodLabel = '';
+            s.quests = [];
+            refreshRenderedView();
         }
         updateChatLinkUI();
         return;
@@ -1293,6 +1286,7 @@ function onChatChanged(newChatId) {
         s.currentMemo = '';
         s.memoHistory = [];
         s.lastDelta = '';
+        s.quests = [];
         s.activeRouterKeys = [];
         s.activeWorldKeys = [];
         s.routerLog = [];
@@ -2127,16 +2121,6 @@ async function runStateModelPass(narrativeOutput, isFullContext = false, overrid
         // Treats each chunk result as a full "turn": commits to settings, archives history,
         // updates UI, and saves — so the next chunk sees the committed state.
         function commitChunkResult(merged, previousMemoSnapshot) {
-            // Flush any quests staged by LogQuest during this generation
-            if (globalThis._rpgPendingQuests && globalThis._rpgPendingQuests.length) {
-                const existingQuests = parseQuestsFromMemo(merged);
-                existingQuests.push(...globalThis._rpgPendingQuests);
-                merged = writeQuestsToMemo(existingQuests, merged);
-                const count = globalThis._rpgPendingQuests.length;
-                globalThis._rpgPendingQuests = [];
-                if (settings.debugMode) console.log(`[RPG Tracker] Flushed ${count} pending quest(s) into merged memo.`);
-            }
-
             const delta = computeDelta(previousMemoSnapshot, merged);
 
             // Linear Stone History Logic
@@ -3172,17 +3156,6 @@ Gear:
         });
     }
 
-    // Quest Mode Sync
-    const onboardingQuestModeInputs = el.querySelectorAll('input[name="rt_onboarding_quest_mode"]');
-    onboardingQuestModeInputs.forEach(input => {
-        const isLegacy = s.questLegacyMode;
-        input.checked = (input.value === (isLegacy ? 'legacy' : 'standard'));
-        input.addEventListener('change', () => {
-            syncSettingsAndUI(settings => {
-                settings.questLegacyMode = (input.value === 'legacy');
-            });
-        });
-    });
 
     // Optional Components Sync
     const syncOptionalMod = (onboardingId, settingKey) => {
@@ -3448,6 +3421,28 @@ Gear:
     });
 }
 
+/**
+ * Quests for UI display: memo is authoritative for any quest it lists; settings.quests
+ * only supplies completed/failed entries stripped from the memo for AI context.
+ * @param {string} memoText
+ * @returns {any[]}
+ */
+function getDisplayQuests(memoText) {
+    const s = getSettings();
+    const memoQuests = parseQuestsFromMemo(memoText);
+    if (memoQuests.length > 0 || /\[QUESTS\]/i.test(memoText || '')) {
+        const memoIds = new Set(memoQuests.map(q => q.id));
+        const strippedCompleted = (s.quests || []).filter(q =>
+            (q.status === 'completed' || q.status === 'failed') && !memoIds.has(q.id)
+        );
+        return [...memoQuests, ...strippedCompleted];
+    }
+    if (_historyViewIndex === -1 && s.quests && s.quests.length > 0) {
+        return s.quests;
+    }
+    return memoQuests;
+}
+
 function refreshRenderedView() {
     if (!_renderedViewActive) return;
     const s = getSettings();
@@ -3468,10 +3463,7 @@ function refreshRenderedView() {
 
         // Append quest log section if module is enabled and we are not on the onboarding screen
         if (s.syspromptModules?.quests !== false && memo && memo.trim()) {
-            const snapshotQuests = (_historyViewIndex === -1 && s.quests && s.quests.length > 0)
-                ? s.quests
-                : parseQuestsFromMemo(memo);
-            html += renderQuestLog(snapshotQuests, currentTime, collapsed, detached);
+            html += renderQuestLog(getDisplayQuests(memo), currentTime, collapsed, detached);
         }
 
         el.innerHTML = html;
@@ -3508,10 +3500,7 @@ function refreshRenderedView() {
             const body = panel.querySelector('.rpg-tracker-detached-body');
             if (body) {
                 if (tag === 'QUESTS') {
-                    const snapshotQuests = (_historyViewIndex === -1 && s.quests && s.quests.length > 0)
-                        ? s.quests
-                        : parseQuestsFromMemo(memo);
-                    body.innerHTML = renderQuestLog(snapshotQuests, currentTime, collapsed, detached, 'QUESTS');
+                    body.innerHTML = renderQuestLog(getDisplayQuests(memo), currentTime, collapsed, detached, 'QUESTS');
                 } else {
                     body.innerHTML = renderMemoAsCards(memo, tag, _sectionPages);
                 }
@@ -8579,6 +8568,12 @@ function syncMemoView() {
         deltaPanel.innerHTML = deltaHtml;
     }
 
+    // Keep settings.quests aligned with the live memo (rollback/restore only updates
+    // currentMemo — without this, stale completed quests bleed into the UI).
+    if (_historyViewIndex === -1) {
+        syncQuestsFromMemo(s.currentMemo);
+    }
+
     refreshRenderedView();
 }
 
@@ -9483,8 +9478,6 @@ export function syncSettingsAndUI(updateFn) {
     const questsCb = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_sysprompt_mod_quests'));
     const deadlinesCb = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_quests_deadlines'));
     const frustrationCb = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_quests_frustration'));
-    const qmStandard = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_quest_standard'));
-    const qmLegacy = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_quest_legacy'));
 
     if (rngHybrid && rngLegacy && rngNone) {
         rngHybrid.checked = fresh.rngEnabled && !!fresh.diceFunctionTool;
@@ -9498,10 +9491,6 @@ export function syncSettingsAndUI(updateFn) {
     if (frustrationWrapEl) frustrationWrapEl.style.display = !!fresh.syspromptModules?.questsDeadlines ? '' : 'none';
     const difficultyCb = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_quests_difficulty'));
     if (difficultyCb) difficultyCb.checked = !!fresh.syspromptModules?.questsDifficulty;
-    if (qmStandard && qmLegacy) {
-        qmStandard.checked = !fresh.questLegacyMode;
-        qmLegacy.checked = !!fresh.questLegacyMode;
-    }
 
     // Optional components
     const mods = { 'loot': '#rpg_sysprompt_mod_loot', 'random_events': '#rpg_sysprompt_mod_random_events', 'resting': '#rpg_sysprompt_mod_resting' };
@@ -9537,15 +9526,7 @@ export function syncSettingsAndUI(updateFn) {
     // Save and sync the onboarding view
     saveSettings();
 
-    // Handle specific logic like tool registration
-    if (fresh.questLegacyMode) {
-        refreshQuestLegacyPrompt(fresh);
-    } else {
-        // Ensure modern prompt is in the quests slot
-        if (!fresh.stockPrompts) fresh.stockPrompts = {};
-        fresh.stockPrompts.quests = DEFAULT_STOCK_PROMPTS.quests;
-        registerLogQuestTool();
-    }
+    refreshQuestPrompt(fresh);
     refreshOrderList();
     saveSettings();
     if (!document.querySelector('.rt-empty')) {
@@ -9658,14 +9639,6 @@ function refreshOrderList() {
             if (isStock) {
                 let mod = tag.toLowerCase();
                 let displayTag = tag;
-
-                // Redirect QUESTS to quests_legacy if in legacy mode
-                if (tag === 'QUESTS' && s.questLegacyMode) {
-                    mod = 'quests_legacy';
-                    displayTag = 'QUESTS (Legacy Mode)';
-                }
-
-                // Redirect TIME to time_24h if 24h mode is active
                 if (tag === 'TIME' && s.use24hTime) {
                     mod = 'time_24h';
                     displayTag = 'TIME (24h Format)';
@@ -9698,7 +9671,6 @@ function refreshOrderList() {
             resetBtn.innerHTML = '<i class="fa-solid fa-rotate-left"></i>';
             resetBtn.onclick = () => {
                 let mod = tag.toLowerCase();
-                if (tag === 'QUESTS' && s.questLegacyMode) mod = 'quests_legacy';
                 if (tag === 'TIME' && s.use24hTime) mod = 'time_24h';
 
                 if (confirm(`Reset [${tag}] prompt to default? This will lose any custom changes.`)) {
@@ -9887,7 +9859,7 @@ function buildSysprompt(rawText) {
             }
             // Inject correct instructions for quests based on legacy mode
             if (tag === 'quests') {
-                let instruction = s.questLegacyMode ? QUESTS_NARRATOR_LEGACY : QUESTS_NARRATOR_MODERN;
+                let instruction = QUESTS_NARRATOR;
                 // Strip Mood guidance if Frustration is off
                 if (!mods.questsFrustration) {
                     instruction = instruction.replace(/Use the MOOD field.*?\./g, '');
@@ -10321,61 +10293,39 @@ function buildSysprompt(rawText) {
         {
             let changed = false;
 
-            // Modern Quests: update if it has the old format (missing "progress" field)
-            if (settings.stockPrompts.quests &&
-                settings.stockPrompts.quests.includes('"id", "status"') &&
-                !settings.stockPrompts.quests.includes('"progress"')) {
-                settings.stockPrompts.quests = DEFAULT_STOCK_PROMPTS.quests;
-                console.log('[RPG Tracker] Synchronized modern quest prompt (added progress tracking).');
+            // Migrate from deprecated JSON/LogQuest quest mode to plain-text format
+            const hasModernPrompt = settings.stockPrompts.quests?.includes('"updates"');
+            const hasLegacyPrompt = settings.stockPrompts.quests?.includes('OBJ_ACTIVE')
+                || settings.stockPrompts.quests_legacy?.includes('OBJ_ACTIVE');
+            if (hasModernPrompt || !hasLegacyPrompt) {
+                const migratedPrompt = (settings.stockPrompts.quests_legacy?.includes('OBJ_ACTIVE'))
+                    ? settings.stockPrompts.quests_legacy
+                    : DEFAULT_STOCK_PROMPTS.quests;
+                settings.stockPrompts.quests = migratedPrompt;
+                changed = true;
+            }
+            if (settings.stockPrompts.quests_legacy) {
+                delete settings.stockPrompts.quests_legacy;
+                changed = true;
+            }
+            if (settings.questLegacyMode !== undefined) {
+                delete settings.questLegacyMode;
                 changed = true;
             }
 
             // Legacy Quests: update if it's missing OBJ_TOTAL
-            if (settings.stockPrompts.quests_legacy &&
-                settings.stockPrompts.quests_legacy.includes('OBJ_ACTIVE') &&
-                !settings.stockPrompts.quests_legacy.includes('OBJ_TOTAL')) {
-                settings.stockPrompts.quests_legacy = DEFAULT_STOCK_PROMPTS.quests_legacy;
-                console.log('[RPG Tracker] Synchronized legacy quest prompt (added progress tracking).');
+            if (settings.stockPrompts.quests &&
+                settings.stockPrompts.quests.includes('OBJ_ACTIVE') &&
+                !settings.stockPrompts.quests.includes('OBJ_TOTAL')) {
+                settings.stockPrompts.quests = DEFAULT_STOCK_PROMPTS.quests;
                 changed = true;
-            }
-
-            // Ensure quests_legacy slot always exists as a reference
-            if (!settings.stockPrompts.quests_legacy) {
-                settings.stockPrompts.quests_legacy = DEFAULT_STOCK_PROMPTS.quests_legacy;
-                changed = true;
-            }
-
-            // ── Definitive quest prompt selection at init ────────────────────
-            // Write the correct prompt into stockPrompts.quests based on questLegacyMode.
-            // This is the authoritative source — the runtime swap in buildModulesInstructionText
-            // is a belt-and-suspenders backup, but this guarantees correctness at startup.
-            if (settings.questLegacyMode) {
-                const isDeadlines = !!settings.syspromptModules?.questsDeadlines;
-                const isFrustration = !!settings.syspromptModules?.questsFrustration;
-                let legacyPrompt = settings.stockPrompts.quests_legacy || DEFAULT_STOCK_PROMPTS.quests_legacy;
-                if (!isDeadlines) legacyPrompt = legacyPrompt.replace(/\n\s*DEADLINE:.*?\n/g, '\n');
-                if (!isFrustration) legacyPrompt = legacyPrompt.replace(/\n\s*FRUSTRATION_COEFF:.*?\n/g, '\n');
-                if (!settings.stockPrompts.quests || !settings.stockPrompts.quests.includes('OBJ_ACTIVE')) {
-                    settings.stockPrompts.quests = legacyPrompt;
-                    console.log('[RPG Tracker] Init: wrote LEGACY prompt into quests slot (questLegacyMode=true).');
-                    changed = true;
-                }
-            } else {
-                // Ensure modern/JSON prompt is in the quests slot
-                if (!settings.stockPrompts.quests || (settings.stockPrompts.quests.includes('OBJ_ACTIVE') &&
-                    !settings.stockPrompts.quests.includes('updates'))) {
-                    settings.stockPrompts.quests = DEFAULT_STOCK_PROMPTS.quests;
-                    console.log('[RPG Tracker] Init: wrote MODERN prompt into quests slot (questLegacyMode=false).');
-                    changed = true;
-                }
             }
 
             if (changed) {
                 saveSettings();
             }
 
-            // Diagnostic: confirm the final quest mode state at init
-            console.log(`[RPG Tracker] Quest mode at init: questLegacyMode=${settings.questLegacyMode}, quests slot=${settings.stockPrompts.quests?.includes?.('updates') ? 'MODERN/JSON' : settings.stockPrompts.quests?.includes?.('OBJ_ACTIVE') ? 'LEGACY' : 'UNKNOWN'}`);
+            unregisterLogQuestTool();
 
             // Retroactive Log Cleanup: replace generic messages with more descriptive ones
             if (settings.routerLog && settings.routerLog.length > 0) {
@@ -10567,8 +10517,8 @@ function buildSysprompt(rawText) {
         registerDiceSlashCommand();
 
         // ─── Quest System ───
-        import('./quests.js').then(({ registerLogQuestTool, installQuestDebugTools, computeFrustration }) => {
-            registerLogQuestTool();
+        import('./quests.js').then(({ unregisterLogQuestTool, installQuestDebugTools, computeFrustration }) => {
+            unregisterLogQuestTool();
             installQuestDebugTools();
             // Expose for renderQuestLog (renderer can't import dynamically)
             // getQuestMood is from memo-processor.js (no circular dep)
@@ -12311,7 +12261,6 @@ RULES:
 
                 if (key === 'quests') {
                     $('#rpg_quests_options').toggle(!!$(this).prop('checked'));
-                    registerLogQuestTool();
                     refreshOrderList();
                 }
 
@@ -12345,12 +12294,8 @@ RULES:
                     if (fCb) fCb.checked = false;
                 }
                 syncFrustrationVisibility();
-                if (fresh.questLegacyMode) {
-                    refreshQuestLegacyPrompt(fresh);
-                    refreshOrderList();
-                } else {
-                    registerLogQuestTool();
-                }
+                refreshQuestPrompt(fresh);
+                refreshOrderList();
                 saveSettings();
                 scheduleAutoApply();
                 refreshRenderedView();
@@ -12365,12 +12310,8 @@ RULES:
                 const fresh = getSettings();
                 if (!fresh.syspromptModules) fresh.syspromptModules = {};
                 fresh.syspromptModules.questsFrustration = !!this.checked;
-                if (fresh.questLegacyMode) {
-                    refreshQuestLegacyPrompt(fresh);
-                    refreshOrderList();
-                } else {
-                    registerLogQuestTool();
-                }
+                refreshQuestPrompt(fresh);
+                refreshOrderList();
                 saveSettings();
                 scheduleAutoApply();
                 refreshRenderedView();
@@ -12385,12 +12326,8 @@ RULES:
                 const fresh = getSettings();
                 if (!fresh.syspromptModules) fresh.syspromptModules = {};
                 fresh.syspromptModules.questsDifficulty = !!this.checked;
-                if (fresh.questLegacyMode) {
-                    refreshQuestLegacyPrompt(fresh);
-                    refreshOrderList();
-                } else {
-                    registerLogQuestTool();
-                }
+                refreshQuestPrompt(fresh);
+                refreshOrderList();
                 saveSettings();
                 scheduleAutoApply();
                 refreshRenderedView();
@@ -12411,33 +12348,7 @@ RULES:
 
 
 
-        // Quest Mode (Standard vs Legacy)
-        const questModeRadios = document.querySelectorAll('input[name="rpg_sysprompt_quest_mode"]');
-        if (questModeRadios.length) {
-            const s = getSettings();
-            const currentQuestMode = s.questLegacyMode ? 'legacy' : 'standard';
-            $(`input[name="rpg_sysprompt_quest_mode"][value="${currentQuestMode}"]`).prop('checked', true);
-
-            $('input[name="rpg_sysprompt_quest_mode"]').on('change', function () {
-                const fresh = getSettings();
-                fresh.questLegacyMode = ($(this).val() === 'legacy');
-
-                if (fresh.questLegacyMode) {
-                    if (!fresh.stockPrompts) fresh.stockPrompts = {};
-                    // Legacy prompt is applied at runtime by buildModulesInstructionText
-                } else {
-                    // Always restore from canonical default — never trust a stale backup
-                    fresh.stockPrompts.quests = DEFAULT_STOCK_PROMPTS.quests;
-                    delete fresh._questToolPromptBackup;
-                }
-                refreshOrderList();
-                registerLogQuestTool();
-                saveSettings();
-                scheduleAutoApply();
-            });
-        }
-
-        // RNG Mode (Hybrid vs Legacy vs None)
+        // Quests Help Trigger
         const rngModeRadios = document.querySelectorAll('input[name="rpg_sysprompt_rng_mode"]');
         if (rngModeRadios.length) {
             const s = getSettings();

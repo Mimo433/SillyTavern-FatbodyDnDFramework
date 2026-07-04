@@ -249,7 +249,6 @@ You may be asked to use Markers: ((PLS)), ((B)), ((XB)), ((BDG)), ((HGT)). These
         chatLinkEnabled: true,
         chatStates: {},
         quests: [],
-        questLegacyMode: false,
         syspromptModules: {
             loot: true,
             random_events: true,

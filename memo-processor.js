@@ -294,21 +294,6 @@ export function mergeMemo(currentMemo, aiOutput) {
         const tag = match[1].trim();
         const newContent = match[2].trim();
 
-        // [QUESTS] block — route to appropriate handler based on mode
-        if (tag.toUpperCase() === 'QUESTS') {
-            const s = getSettings();
-            if (s.questLegacyMode) {
-                // Legacy: state model wrote the full text block.
-                // Let the standard replacement logic below integrate it into the memo string.
-                // The memo text is the single source of truth — no separate settings.quests needed.
-            } else {
-                // Tool mode: state model emits a diff JSON.
-                // Apply the diff to our local 'memo' string being built
-                memo = mergeQuestUpdates(newContent, memo);
-                continue;
-            }
-        }
-
         const isRemoval = /^(?:REMOVED|EXPIRED|CLEARED|NONE|END_COMBAT)$/i.test(newContent);
 
         const escapedTag = escapeRegex(tag);
@@ -342,190 +327,6 @@ export function mergeMemo(currentMemo, aiOutput) {
 }
 
 /**
- * Applies a constrained {"updates":[...]} diff from the state model.
- * Parses quests from memoText, applies mutations, and returns the updated string.
- * @param {string} jsonText
- * @param {string} [memoText]
- * @returns {string}
- */
-export function mergeQuestUpdates(jsonText, memoText = null) {
-    const settings = getSettings();
-    const target = (memoText !== null) ? memoText : settings.currentMemo;
-    // Use the in-memory quest state (which includes completed quests) as the base.
-    // Fall back to parsing from memo text only if settings.quests is empty.
-    const quests = (settings.quests && settings.quests.length > 0)
-        ? settings.quests.slice()  // shallow copy so we mutate safely
-        : parseQuestsFromMemo(target);
-
-    let parsed;
-    try {
-        parsed = JSON.parse(jsonText);
-    } catch (e) {
-        console.warn('[RPG Tracker] mergeQuestUpdates: invalid JSON in [QUESTS] diff block:', jsonText);
-        return target;
-    }
-
-    const updates = Array.isArray(parsed?.updates) ? parsed.updates : [];
-    if (!updates.length) return target;
-
-    const mods = settings.syspromptModules || {};
-    const isDeadlines = !!mods.questsDeadlines;
-    const isFrustration = !!mods.questsFrustration;
-    const isDifficulty = !!mods.questsDifficulty;
-
-    const tMatch = target?.match(/\[TIME\]([\s\S]*?)\[\/TIME\]/i);
-    let acceptedTime = "08:00 AM, Day 1";
-    if (tMatch) {
-        const timeStr = extractCurrentTimeStr(tMatch[1]);
-        if (timeStr) acceptedTime = timeStr;
-    }
-
-    let changed = false;
-    for (const update of updates) {
-        let quest = quests.find(q => q.id === update.id);
-        let objectiveDirectUpdate = null;
-        if (!quest) {
-            // Check if update.id is an objective ID belonging to some quest
-            for (const q of quests) {
-                const foundObj = q.objectives?.find(o => o.id === update.id);
-                if (foundObj) {
-                    quest = q;
-                    objectiveDirectUpdate = foundObj;
-                    break;
-                }
-            }
-        }
-
-        if (quest && quest.status === 'failed') continue;
-
-        if (!quest) {
-            // No existing quest or objective matches this id — this is a brand-new quest.
-            // The extractor's diff schema only sends {id, status, difficulty, objectives},
-            // so synthesize sane defaults for the fields LogQuest would normally populate.
-            if (!update.id) continue;
-            const firstObjText = Array.isArray(update.objectives) && update.objectives[0]?.text;
-            quest = {
-                id: update.id,
-                title: update.title || firstObjText || `Quest ${update.id}`,
-                giver_name: update.giver_name || 'Unknown',
-                giver_location: update.giver_location || 'Unknown Location',
-                objectives: [],
-                rewards: update.rewards ? (Array.isArray(update.rewards) ? update.rewards : [update.rewards]) : [],
-                difficulty: isDifficulty ? (update.difficulty || 'Medium') : undefined,
-                deadline_time: isDeadlines ? (update.deadline_time || null) : undefined,
-                frustration_coefficient: isFrustration ? (update.frustration_coefficient || 1.0) : undefined,
-                auto_fail: (isDeadlines && !isFrustration),
-                accepted_time: acceptedTime,
-                status: ['active', 'completed', 'failed', 'past deadline'].includes(update.status) ? update.status : 'active',
-            };
-            quests.push(quest);
-            changed = true;
-            if (settings.debugMode) {
-                console.log(`[RPG Tracker] mergeQuestUpdates: synthesized new quest "${quest.title}" (${quest.id}) from State Extractor diff.`);
-            }
-        }
-
-        if (objectiveDirectUpdate) {
-            if (update.status && ['active', 'completed', 'failed'].includes(update.status)) {
-                objectiveDirectUpdate.status = update.status;
-                changed = true;
-            }
-            if (typeof update.progress === 'number') {
-                objectiveDirectUpdate.progress = update.progress;
-                changed = true;
-            }
-            continue;
-        }
-
-        if (update.status && ['active', 'completed', 'past deadline', 'failed'].includes(update.status)) {
-            let resolvedStatus = update.status;
-
-            // Frustration ON: deadline expiry → 'past deadline', not 'failed' (AI may get this wrong)
-            if (isFrustration && resolvedStatus === 'failed' && quest.deadline_time && quest.status === 'active') {
-                resolvedStatus = 'past deadline';
-            }
-            // Deadlines ON, Frustration OFF: 'past deadline' is invalid → promote to 'failed'
-            if (isDeadlines && !isFrustration && resolvedStatus === 'past deadline') {
-                resolvedStatus = 'failed';
-            }
-
-            quest.status = resolvedStatus;
-            changed = true;
-        }
-
-        if (Array.isArray(update.objectives)) {
-            for (const objUpdate of update.objectives) {
-                const obj = objUpdate.id ? quest.objectives.find(o => o.id === objUpdate.id) : null;
-                if (obj) {
-                    if (objUpdate.status && ['active', 'completed', 'failed'].includes(objUpdate.status)) {
-                        obj.status = objUpdate.status;
-                        changed = true;
-                    }
-                    if (typeof objUpdate.progress === 'number') {
-                        obj.progress = objUpdate.progress;
-                        changed = true;
-                    }
-                } else if (objUpdate.text) {
-                    // Add new objective
-                    const maxIdx = quest.objectives.reduce((max, o) => {
-                        const m = o.id.match(/^obj_(\d+)$/);
-                        if (m) {
-                            const val = parseInt(m[1], 10);
-                            return val > max ? val : max;
-                        }
-                        return max;
-                    }, -1);
-                    const newId = `obj_${maxIdx + 1}`;
-                    const newObj = {
-                        id: newId,
-                        text: objUpdate.text,
-                        required: objUpdate.required !== false,
-                        status: objUpdate.status && ['active', 'completed', 'failed'].includes(objUpdate.status) ? objUpdate.status : 'active'
-                    };
-                    if (typeof objUpdate.total === 'number') {
-                        newObj.total = objUpdate.total;
-                    }
-                    if (typeof objUpdate.progress === 'number') {
-                        newObj.progress = objUpdate.progress;
-                    }
-                    quest.objectives.push(newObj);
-                    changed = true;
-                }
-            }
-        }
-    }
-
-    // Auto-complete quests if all required objectives are completed
-    for (const q of quests) {
-        if (q.status === 'active' || q.status === 'past deadline') {
-            const reqObjs = q.objectives?.filter(o => o.required !== false) || [];
-            const targetObjs = reqObjs.length > 0 ? reqObjs : (q.objectives || []);
-            if (targetObjs.length > 0 && targetObjs.every(o => o.status === 'completed')) {
-                q.status = 'completed';
-                changed = true;
-                if (settings.debugMode) {
-                    console.log(`[RPG Tracker] mergeQuestUpdates: auto-completed quest "${q.title}" since all objectives are complete.`);
-                }
-            }
-        }
-    }
-
-    if (changed) {
-        if (settings.debugMode) console.log('[RPG Tracker] mergeQuestUpdates: applied quest state changes.');
-        // Persist the full quest array (including completed) to settings so the UI
-        // can still display completed quests even after they leave the memo text.
-        settings.quests = quests;
-        const result = writeQuestsToMemo(quests, target);
-        if (memoText === null) {
-            SillyTavern.getContext().saveSettingsDebounced();
-        }
-        return /** @type {string} */ (result);
-    }
-
-    return target;
-}
-
-/**
  * Writes a quest array into a [QUESTS] block.
  * If memoText is provided, returns the updated string.
  * Otherwise, updates settings.currentMemo directly.
@@ -553,9 +354,7 @@ export function writeQuestsToMemo(quests, memoText = null) {
         return;
     }
 
-    const content = settings.questLegacyMode
-        ? serializeQuestsToText(activeQuests)
-        : JSON.stringify(activeQuests, null, 2);
+    const content = serializeQuestsToText(activeQuests);
 
     const block = `\n\n[${tag}]\n${content}\n[/${tag}]`;
 
@@ -595,8 +394,8 @@ export function stripCompletedQuestsFromMemo(memoText) {
 
     const content = match[1].trim();
 
-    // ── Legacy plain-text format ──────────────────────────────────────────────
-    // The AI writes the full [QUESTS] text block directly (questLegacyMode=true).
+    // ── Plain-text format ──────────────────────────────────────────────────────
+    // The State Tracker writes the full [QUESTS] text block directly.
     // mergeMemo pastes it into currentMemo verbatim — no filter runs at write time.
     // We split on QUEST: boundaries and drop any block with STATUS: completed.
     if (/^QUEST:/m.test(content)) {
@@ -854,7 +653,10 @@ export function syncQuestsFromMemo(memoText) {
         return;
     }
 
-    // Merge newly parsed quests (which are active) with existing completed/failed ones
+    // Merge parsed memo quests with completed/failed entries stripped from the memo
+    // (writeQuestsToMemo removes them to save AI context). Memo wins for any quest
+    // id it contains — rollback to an earlier active state must not preserve stale
+    // completed entries from settings.quests.
     const newIds = new Set(quests.map(q => q.id));
     const merged = [...quests];
     for (const eq of existingCompleted) {
@@ -1093,38 +895,29 @@ export function buildModulesInstructionText(settings) {
 
     modulesText += "### CORE MODULES\n";
     for (const [key, prompt] of Object.entries(promptsMap)) {
-        // Never emit the helper prompts as their own modules
-        if (key === 'quests_legacy') continue;
+        // Never emit helper prompts as their own modules
         if (key === 'time_24h' || key === 'time_ddmmyy' || key === 'time_ddmmyy_24h') continue;
 
         if (key === 'quests' && settings.syspromptModules?.quests === false) continue;
         if (settings.modules[key]) {
             let p = prompt;
 
-            // ── Dynamic prompt swap for Legacy Quests ──────────────────────
+            // ── Dynamic prompt customization for Quests ──────────────────────
             if (key === 'quests') {
-                const useLegacy = !!settings.questLegacyMode;
-                if (useLegacy) {
-                    const isDeadlines = !!settings.syspromptModules?.questsDeadlines;
-                    const isFrustration = !!settings.syspromptModules?.questsFrustration;
-                    const isDifficulty = !!settings.syspromptModules?.questsDifficulty;
-                    // Use the dedicated legacy format prompt
-                    p = (promptsMap['quests_legacy'] || DEFAULT_STOCK_PROMPTS.quests_legacy);
-                    if (settings.useDdMmYyFormat) {
-                        p = p
-                            .replace(/Day 1/g, '01/01/2026')
-                            .replace(/Day 4/g, '04/01/2026')
-                            .replace(/Day N/g, 'DD/MM/YYYY');
-                    }
-                    if (!isDeadlines) p = p.replace(/\n\s*DEADLINE:.*?\n/g, '\n');
-                    if (!isFrustration) p = p.replace(/\n\s*FRUSTRATION_COEFF:.*?\n/g, '\n');
-                    if (!isDifficulty) {
-                        p = p.replace(/\n\s*DIFFICULTY:.*?\n/g, '\n');
-                        p = p.replace(/\n- For difficulty, use the DIFFICULTY marker.*\n/g, '\n');
-                    }
-                    console.log('[RPG Tracker] Quest prompt: using LEGACY format (questLegacyMode=true)');
-                } else {
-                    console.log('[RPG Tracker] Quest prompt: using MODERN/JSON format (questLegacyMode=false)');
+                const isDeadlines = !!settings.syspromptModules?.questsDeadlines;
+                const isFrustration = !!settings.syspromptModules?.questsFrustration;
+                const isDifficulty = !!settings.syspromptModules?.questsDifficulty;
+                if (settings.useDdMmYyFormat) {
+                    p = p
+                        .replace(/Day 1/g, '01/01/2026')
+                        .replace(/Day 4/g, '04/01/2026')
+                        .replace(/Day N/g, 'DD/MM/YYYY');
+                }
+                if (!isDeadlines) p = p.replace(/\n\s*DEADLINE:.*?\n/g, '\n');
+                if (!isFrustration) p = p.replace(/\n\s*FRUSTRATION_COEFF:.*?\n/g, '\n');
+                if (!isDifficulty) {
+                    p = p.replace(/\n\s*DIFFICULTY:.*?\n/g, '\n');
+                    p = p.replace(/\n- For difficulty, use the DIFFICULTY marker.*\n/g, '\n');
                 }
             }
 

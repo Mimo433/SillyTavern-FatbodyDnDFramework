@@ -1333,19 +1333,6 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                                 <input type="checkbox" id="rt_onboarding_quests_difficulty" />
                                 <span>Difficulty</span>
                             </label>
-                            <div style="margin-top: 4px; display: flex; flex-direction: column; gap: 4px;">
-                                <div style="font-size: 0.75em; opacity: 0.6; text-transform: uppercase; font-weight: bold;">
-                                    Processing Mode <i class="fa-solid fa-circle-question interactable" style="font-size: 0.9em; opacity: 0.7; margin-left: 4px;" title="Standard: AI manages quests via Tool Calls. Legacy: AI uses formatted text blocks."></i>
-                                </div>
-                                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                    <input type="radio" name="rt_onboarding_quest_mode" value="standard" id="rt_onboarding_quest_standard" />
-                                    <span>Standard (Tool Calls)</span>
-                                </label>
-                                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                    <input type="radio" name="rt_onboarding_quest_mode" value="legacy" id="rt_onboarding_quest_legacy" />
-                                    <span>Legacy (Without Tool Calls)</span>
-                                </label>
-                            </div>
                         </div>
                     </div>
 
