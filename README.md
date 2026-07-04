@@ -2,9 +2,9 @@
 
 *A D&D-based RPG platform/simulation engine for SillyTavern.*
 
-What this framework does is essentially turn SillyTavern into something like AI Dungeon, but with actual mechanics/consequences. Losing or dying is actually a thing. In Big Rigs, you're always WINNER. Not in Multihog D&D! That being said, **the system works just as well for casual "slice of life" type scenarios or modern settings, so no need to worry that you're limited to wizards and goblins.**
+This framework essentially turns SillyTavern into something like AI Dungeon, but with actual mechanics/consequences! This is a mechanical-integrity-first philosophy where your choices matter. I wasn't satisfied with any of the commercial offerings available (AI Realm, AI Dungeon, Friends & Fables, etc.), so I made my own D&D platform inside SillyTavern.
 
-I wasn't satisfied with any of the commercial offerings available (AI Realm, AI Dungeon, Friends & Fables, etc.), so I made my own D&D platform inside SillyTavern. 
+In addition to fantasy, the system works just as well for casual "slice of life" scenarios or modern settings, so you're by no means limited to wizards and goblins. Everything is FULLY customizable and homebrew-friendly.
 
 **Crucially, the system is input-output, not just some glorified stats collector. Everything in the State Tracker is fed back to the AI. What you see is what the AI also sees.**
 
