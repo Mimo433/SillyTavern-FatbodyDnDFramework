@@ -292,7 +292,8 @@ You may be asked to use Markers: ((PLS)), ((B)), ((XB)), ((BDG)), ((HGT)). These
         routerIncludeHidden: false,
         routerLookbackSinceLastRun: true,   // default: capture all messages since the last agent run
         routerLookbackSinceLastUser: false,  // alternative: capture since last user message
-        routerLastRunChatLength: 0,          // watermark: chat.length when the agent last ran
+        routerLastRunChatLength: 0,          // watermark: chat.length when the agent last ran (indexing only, not shown to user)
+        routerLastRunAt: 0,                   // epoch ms: when the agent last completed a pass (for display)
         routerWatermarkBaselinePending: false, // one-shot: baseline watermark after lookback fix upgrade
         routerUndockHintShown: false,
         routerPromptForPrefix: false,
@@ -1032,6 +1033,18 @@ export function persistRouterLastRunWatermark(length) {
     }
 }
 
+/** Persist the Lorebook Agent "last ran at" timestamp (display only — separate from the indexing watermark). */
+export function persistRouterLastRunTimestamp(epochMs = Date.now()) {
+    const s = getSettings();
+    s.routerLastRunAt = epochMs;
+    const chatId = getActiveChatId();
+    if (s.chatLinkEnabled && chatId) {
+        saveChatState(chatId);
+    } else {
+        SillyTavern.getContext().saveSettingsDebounced();
+    }
+}
+
 /**
  * Snapshots the current live settings into chatStates[chatId].
  * Pure write — no shared mutable state, no DOM.
@@ -1061,6 +1074,7 @@ export function saveChatState(chatId) {
         routerCampaignPrefix: s.routerCampaignPrefix || '',
         routerLookback: s.routerLookback || 4,
         routerLastRunChatLength: s.routerLastRunChatLength ?? 0,
+        routerLastRunAt: s.routerLastRunAt ?? 0,
         routerDirectPrompt: s.routerDirectPrompt || '',
         routerDirectLookback: s.routerDirectLookback || 10,
         routerDefaultPosition: s.routerDefaultPosition ?? 4,
@@ -1155,6 +1169,7 @@ export function saveProfile(name) {
         routerCampaignPrefix: s.routerCampaignPrefix || '',
         routerLookback: s.routerLookback || 4,
         routerLastRunChatLength: s.routerLastRunChatLength ?? 0,
+        routerLastRunAt: s.routerLastRunAt ?? 0,
         routerDirectPrompt: s.routerDirectPrompt || '',
         routerDefaultPosition: s.routerDefaultPosition ?? 4,
         routerDefaultDepth: s.routerDefaultDepth ?? 4,

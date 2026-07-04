@@ -1,4 +1,4 @@
-import { getSettings, getEffectiveRouterCampaignPrefix, persistWorldProgressionTimer, persistRouterLastRunWatermark } from './state-manager.js';
+import { getSettings, getEffectiveRouterCampaignPrefix, persistWorldProgressionTimer, persistRouterLastRunWatermark, persistRouterLastRunTimestamp } from './state-manager.js';
 import { sendStateRequest, sendAgentTurn } from './llm-client.js';
 import { getRequestHeaders } from '../../../../script.js';
 import { extractCurrentTimeStr, cleanMessageContent, parseInWorldTime, formatInWorldTime, findNthUserMessageStartIdx, formatAgentChatLogFromIndex } from './memo-processor.js';
@@ -1323,6 +1323,10 @@ ${sharedContext}`;
         if (!isManual && manualPrompt !== '__CLEANUP__' && usedSinceLastRun) {
             persistRouterLastRunWatermark(ctx.chat.length);
         }
+
+        // "Last ran at" display timestamp — updates for any completed pass (manual or auto).
+        // Cleanup passes never reach this line (they return earlier), so no extra guard is needed.
+        persistRouterLastRunTimestamp();
 
         // Non-blocking bloat hint and auto-cleanup check
         {
