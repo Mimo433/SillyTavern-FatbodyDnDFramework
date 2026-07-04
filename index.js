@@ -7923,6 +7923,7 @@ Rules:
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             activeRouterKeys: JSON.parse(JSON.stringify(s.activeRouterKeys || [])),
             activeWorldKeys: JSON.parse(JSON.stringify(s.activeWorldKeys || [])),
+            routerLastRunChatLength: s.routerLastRunChatLength ?? 0,
             bookSnapshots,
         };
     };
@@ -8010,15 +8011,18 @@ Rules:
         const { chat } = SillyTavern.getContext();
         const runEvery = s.routerRunEvery || 3;
         const tick = getRouterTick();          // msgs since last auto-run (in-memory)
-        const lastRunLength = s.routerLastRunChatLength || 0;
         const currentLength = chat?.length ?? 0;
+        let lastRunLength = s.routerLastRunChatLength || 0;
+        if (lastRunLength > currentLength) lastRunLength = 0;
         const msgsSinceRun = Math.max(0, currentLength - lastRunLength);
 
         let parts = [];
-        if (lastRunLength === 0 && msgsSinceRun === 0) {
+        if (lastRunLength === 0) {
             parts.push('Not run yet');
+        } else if (msgsSinceRun === 0) {
+            parts.push('Last Run: just now');
         } else {
-            parts.push(msgsSinceRun === 0 ? 'Last Run: just now' : `Last Run: ${msgsSinceRun} msg${msgsSinceRun !== 1 ? 's' : ''} ago`);
+            parts.push(`${msgsSinceRun} msg${msgsSinceRun !== 1 ? 's' : ''} unprocessed`);
         }
 
         if (runEvery > 1) {

@@ -1,4 +1,4 @@
-import { getSettings, getEffectiveRouterCampaignPrefix, persistWorldProgressionTimer } from './state-manager.js';
+import { getSettings, getEffectiveRouterCampaignPrefix, persistWorldProgressionTimer, persistRouterLastRunWatermark } from './state-manager.js';
 import { sendStateRequest, sendAgentTurn } from './llm-client.js';
 import { getRequestHeaders } from '../../../../script.js';
 import { extractCurrentTimeStr, cleanMessageContent, parseInWorldTime, formatInWorldTime } from './memo-processor.js';
@@ -290,6 +290,7 @@ export async function runRouterPass(narrativeOutput, manualPrompt = null, custom
                 timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                 activeRouterKeys: JSON.parse(JSON.stringify(settings.activeRouterKeys || [])),
                 activeWorldKeys: JSON.parse(JSON.stringify(settings.activeWorldKeys || [])),
+                routerLastRunChatLength: settings.routerLastRunChatLength ?? 0,
                 bookSnapshots: {}
             };
             for (const [name, book] of Object.entries(archiveBooks)) {
@@ -358,19 +359,18 @@ export async function runRouterPass(narrativeOutput, manualPrompt = null, custom
             const sinceLastUser = customLookback === null && !sinceLastRun && settings.routerLookbackSinceLastUser === true;
             let startIdx;
             if (sinceLastRun) {
-                const lastLen = settings.routerLastRunChatLength || 0;
+                let lastLen = settings.routerLastRunChatLength || 0;
+                if (lastLen > chat.length) {
+                    // Chat shortened (swipe/delete) — stale watermark; re-sync from the start
+                    lastLen = 0;
+                    persistRouterLastRunWatermark(0);
+                }
                 if (lastLen > 0 && lastLen < chat.length) {
-                    // Slice from where we left off — the agent sees exactly the messages it hasn't processed yet
                     startIdx = lastLen;
+                } else if (lastLen === 0) {
+                    startIdx = 0;
                 } else {
-                    // First run ever (or watermark invalid) — fall back to last user message
-                    startIdx = chat.length - 1;
-                    while (startIdx > 0 && !(/** @type {any} */ (chat[startIdx])).is_user) {
-                        startIdx--;
-                    }
-                    if (startIdx === 0 && !(/** @type {any} */ (chat[0]))?.is_user) {
-                        startIdx = Math.max(0, chat.length - 4);
-                    }
+                    startIdx = chat.length;
                 }
             } else if (sinceLastUser) {
                 // Walk backward to find the most recent user message, then include it
@@ -1323,12 +1323,11 @@ ${sharedContext}`;
         const finishMsg = basicSummaryText ? `Finished in ${totalTime}s -- ${basicSummaryText}` : `Finished in ${totalTime}s`;
         broadcastStep('finish', finishMsg, { time: totalTime, turns });
 
-        // Update the "since last run" watermark — only for auto (non-manual, non-cleanup) passes.
+        // Advance the "since last run" watermark only when this pass actually used that lookback mode.
         // Aborted/errored passes never reach here (they go to catch), so the watermark is safe.
-        if (!isManual && manualPrompt !== '__CLEANUP__') {
-            settings.routerLastRunChatLength = ctx.chat.length;
-            const { saveSettingsDebounced } = SillyTavern.getContext();
-            if (saveSettingsDebounced) saveSettingsDebounced();
+        const usedSinceLastRun = !overrideChatLog && customLookback === null && settings.routerLookbackSinceLastRun !== false;
+        if (!isManual && manualPrompt !== '__CLEANUP__' && usedSinceLastRun) {
+            persistRouterLastRunWatermark(ctx.chat.length);
         }
 
         // Non-blocking bloat hint and auto-cleanup check
@@ -2086,10 +2085,14 @@ export async function rollbackRouterPass(index = 0) {
         settings.activeRouterKeys = JSON.parse(JSON.stringify(snapshot.activeRouterKeys || []));
         settings.activeWorldKeys = JSON.parse(JSON.stringify(snapshot.activeWorldKeys || []));
 
-        // -- Step 4: Trim snapshots newer than the restored point --------------
+        // -- Step 4: Restore "since last run" watermark and trim history --------
         settings.routerHistory = history.slice(index + 1);
+        if (snapshot.routerLastRunChatLength !== undefined) {
+            persistRouterLastRunWatermark(snapshot.routerLastRunChatLength);
+        } else {
+            ctx.saveSettingsDebounced();
+        }
 
-        ctx.saveSettingsDebounced();
         document.dispatchEvent(new CustomEvent('rt_lore_agent_updated'));
         return true;
     } catch (e) {
@@ -2139,7 +2142,12 @@ export async function reapplyRouterPass(prePassSnapshot, postPassState) {
         settings.activeRouterKeys = JSON.parse(JSON.stringify(postPassState.activeRouterKeys || []));
         settings.activeWorldKeys = JSON.parse(JSON.stringify(postPassState.activeWorldKeys || []));
 
-        ctx.saveSettingsDebounced();
+        if (postPassState.routerLastRunChatLength !== undefined) {
+            persistRouterLastRunWatermark(postPassState.routerLastRunChatLength);
+        } else {
+            SillyTavern.getContext().saveSettingsDebounced();
+        }
+
         document.dispatchEvent(new CustomEvent('rt_lore_agent_updated'));
         return true;
     } catch (e) {

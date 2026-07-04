@@ -1013,6 +1013,18 @@ export function persistWorldProgressionTimer() {
     }
 }
 
+/** Persist the Lorebook Agent "since last run" chat-length watermark. */
+export function persistRouterLastRunWatermark(length) {
+    const s = getSettings();
+    s.routerLastRunChatLength = length;
+    const chatId = getActiveChatId();
+    if (s.chatLinkEnabled && chatId) {
+        saveChatState(chatId);
+    } else {
+        SillyTavern.getContext().saveSettingsDebounced();
+    }
+}
+
 /**
  * Snapshots the current live settings into chatStates[chatId].
  * Pure write — no shared mutable state, no DOM.
