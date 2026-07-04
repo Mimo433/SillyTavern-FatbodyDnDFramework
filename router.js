@@ -3145,6 +3145,10 @@ ${rawDump}`;
         .replace(/\{periodLabel\}/g, periodLabel)
         .replace(/\{wordTarget\}/g, String(wordTarget));
 
+    if (settings.useDdMmYyFormat) {
+        systemPrompt += `\n\n## DATE FORMAT RULE\n- CRITICAL: All dates generated in this report MUST use the DD/MM/YYYY calendar format (e.g. 05/01/2026 for the 5th of January, 2026). Do NOT use the American MM/DD/YYYY format.`;
+    }
+
     if (extraInstructions && extraInstructions.trim()) {
         systemPrompt += `\n\n## EXTRA INSTRUCTIONS FOR THIS RUN\n${extraInstructions.trim()}`;
     }
