@@ -1195,16 +1195,41 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                     <div style="font-size: 17px; font-weight: bold; color: var(--rt-text);">Multihog D&D Framework</div>
                 </div>
 
-                <div style="display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin: 8px 0 4px 0; flex-shrink: 0;">
-                    <span style="font-size: 12px; opacity: 0.8; font-weight: bold; font-style: italic;">Starting Level:</span>
-                    <select id="rt-starting-level" class="text_pole" style="width: auto; min-width: 60px; padding: 2px 4px; font-size: 12px; height: 24px; border-radius: 4px; background: var(--black70a);">
-                        ${[...Array(20).keys()].map(i => `<option value="${i + 1}">Level ${i + 1}</option>`).join('')}
-                    </select>
+                <!-- Configuration Grid -->
+                <div style="display: flex; flex-direction: column; gap: 6px; width: 100%; margin: 6px 0; flex-shrink: 0;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap;">
+                        <label style="display: flex; align-items: center; gap: 4px; font-size: 11px; opacity: 0.85; cursor: pointer; user-select: none;">
+                            <span style="font-weight: bold; font-style: italic;">Level:</span>
+                            <select id="rt-starting-level" class="text_pole" style="width: auto; min-width: 60px; padding: 2px 4px; font-size: 11px; height: 22px; border-radius: 4px; background: var(--black70a);">
+                                ${[...Array(20).keys()].map(i => `<option value="${i + 1}">Level ${i + 1}</option>`).join('')}
+                            </select>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 4px; font-size: 11px; opacity: 0.85; cursor: pointer; user-select: none;">
+                            <span style="font-weight: bold; font-style: italic;">Genre:</span>
+                            <select id="rt-onboarding-genre" class="text_pole" style="width: auto; min-width: 90px; padding: 2px 4px; font-size: 11px; height: 22px; border-radius: 4px; background: var(--black70a);">
+                                <option value="fantasy">⚔️ Fantasy RPG</option>
+                                <option value="realistic">🏙️ Modern / Realistic</option>
+                            </select>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 4px; font-size: 11px; opacity: 0.85; cursor: pointer; user-select: none;">
+                            <span style="font-weight: bold; font-style: italic;">Start Date:</span>
+                            <input type="text" id="rt-onboarding-start-date" class="text_pole" value="01/01/2026" placeholder="01/01/2026" style="width: 80px; text-align: center; height: 22px; font-size: 11px; border-radius: 4px; background: var(--black70a);" />
+                        </label>
+                    </div>
+                    <textarea id="rt-onboarding-custom-instructions" class="text_pole" placeholder="Custom setting/character instructions (e.g. Victorian London, space marine, gritty realism, cyberpunk decker...)" style="width: 100%; min-height: 40px; max-height: 120px; font-size: 11px; padding: 4px 6px; border-radius: 4px; background: var(--black70a); resize: vertical; margin-top: 2px;"></textarea>
                 </div>
-                <div class="rt-onboarding-buttons" style="width: 100%; justify-content: center; margin: 4px 0; flex-shrink: 0;">
+
+                <!-- Archetype Buttons -->
+                <div class="rt-onboarding-buttons rt-fantasy-buttons" style="width: 100%; display: flex; justify-content: center; gap: 4px; margin: 4px 0; flex-shrink: 0;">
                     <button class="rt-random-char-btn" data-archetype="magic">✨ Magic</button>
                     <button class="rt-random-char-btn" data-archetype="melee">⚔️ Melee</button>
                     <button class="rt-random-char-btn" data-archetype="rogue">🗡️ Rogue</button>
+                    <button class="rt-random-char-btn" data-archetype="persona">🎭 Persona</button>
+                </div>
+                <div class="rt-onboarding-buttons rt-realistic-buttons" style="width: 100%; display: none; justify-content: center; gap: 4px; margin: 4px 0; flex-shrink: 0;">
+                    <button class="rt-random-char-btn" data-archetype="professional">💼 Professional</button>
+                    <button class="rt-random-char-btn" data-archetype="survivor">🏃 Survivor</button>
+                    <button class="rt-random-char-btn" data-archetype="scholar">🧠 Scholar</button>
                     <button class="rt-random-char-btn" data-archetype="persona">🎭 Persona</button>
                 </div>
 

@@ -2838,25 +2838,65 @@ async function showPortraitSettingsMenu(entityName, onRefresh, npcContent = null
 
 function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRefresh = null) {
     const refresh = onRefresh || refreshRenderedView;
+
+    // Genre tab toggle listener
+    const genreSelect = el.querySelector('#rt-onboarding-genre');
+    const fantasyGroup = el.querySelector('.rt-fantasy-buttons');
+    const realisticGroup = el.querySelector('.rt-realistic-buttons');
+    if (genreSelect && fantasyGroup && realisticGroup) {
+        genreSelect.addEventListener('change', () => {
+            const isRealistic = genreSelect.value === 'realistic';
+            fantasyGroup.style.display = isRealistic ? 'none' : 'flex';
+            realisticGroup.style.display = isRealistic ? 'flex' : 'none';
+        });
+    }
+
     el.querySelectorAll('.rt-random-char-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
             const archetype = btn.dataset.archetype;
             const level = el.querySelector('#rt-starting-level')?.value || 1;
-            const labels = { magic: '✨ Casting...', melee: '⚔️ Training...', rogue: '🗡️ Sneaking...', persona: '🎭 Embodying...' };
+            const startDateVal = el.querySelector('#rt-onboarding-start-date')?.value.trim() || '01/01/2026';
+            const customInstructions = el.querySelector('#rt-onboarding-custom-instructions')?.value.trim() || '';
+
+            const isCalendar = /\d+\/\d+\/\d+/.test(startDateVal);
+
+            // Sync the start date and format selection back to the core settings
+            syncSettingsAndUI(s => {
+                s.useDdMmYyFormat = isCalendar;
+                s.initialDate = startDateVal;
+                if (s.routerModules?.npc) {
+                    s.routerModules.npc.instruction = buildNpcInstruction(s.npcMajorWords, s.npcMinorWords, false);
+                }
+            });
+            syncOnboardingUI();
+
+            const labels = {
+                magic: '✨ Casting...',
+                melee: '⚔️ Training...',
+                rogue: '🗡️ Sneaking...',
+                professional: '💼 Analyzing...',
+                survivor: '🏃 Surviving...',
+                scholar: '🧠 Researching...',
+                persona: '🎭 Embodying...'
+            };
+
             const CHARACTER_FORMAT_HINT = `\n\nUse this exact format for the [CHARACTER] block:
 Combat: BAB: +X | Ranged: +X | Melee: +X
 Gear: Weapon (stats), AC: Z (Armor Name)
 Attr: STR X (mod), DEX X (mod), CON X (mod), INT X (mod), WIS X (mod), CHA X (mod)
 Saves: Fort +X | Ref +X | Will +X`;
 
-            const initDateVal = getSettings().initialDate || (getSettings().useDdMmYyFormat ? '01/01/2026' : 'Day 1');
-            const initRestVal = getSettings().useDdMmYyFormat ? '01/01/2026' : 'Day 0';
+            const initDateVal = startDateVal;
+            const initRestVal = isCalendar ? startDateVal : 'Day 0';
             const TIME_FORMAT_HINT = ` Also output a [TIME] block initialized with Current Time at "08:00 AM, ${initDateVal}" and Last Rest at "12:00 AM, ${initRestVal}".`;
 
             const prompts = {
                 magic: `Generate a random Level ${level} D&D Magic User (Wizard, Sorcerer, or Warlock). Give them a random fantasy name (do NOT use {{user}}). Output [CHARACTER], [SPELLS], [INVENTORY], [ABILITIES], and [TIME] blocks. Include appropriate spells (using 'Cantrips:' for level 0 spells), items, and attributes consistent with Level ${level}.${CHARACTER_FORMAT_HINT}${TIME_FORMAT_HINT}`,
                 melee: `Generate a random Level ${level} D&D Melee Fighter (Fighter, Barbarian, or Paladin). Give them a random fantasy name (do NOT use {{user}}). Output [CHARACTER], [INVENTORY], [ABILITIES], and [TIME] blocks. Focus on high physical attributes, heavy armor, and signature weapons consistent with Level ${level}.${CHARACTER_FORMAT_HINT}${TIME_FORMAT_HINT}`,
-                rogue: `Generate a random Level ${level} D&D Rogue or Thief-style character. Give them a random fantasy name (do NOT use {{user}}). Output [CHARACTER], [INVENTORY], [ABILITIES], and [TIME] blocks. Focus on high Dexterity, stealth-related equipment (thieves' tools, daggers), and class features like Sneak Attack consistent with Level ${level}.${CHARACTER_FORMAT_HINT}${TIME_FORMAT_HINT}`
+                rogue: `Generate a random Level ${level} D&D Rogue or Thief-style character. Give them a random fantasy name (do NOT use {{user}}). Output [CHARACTER], [INVENTORY], [ABILITIES], and [TIME] blocks. Focus on high Dexterity, stealth-related equipment (thieves' tools, daggers), and class features like Sneak Attack consistent with Level ${level}.${CHARACTER_FORMAT_HINT}${TIME_FORMAT_HINT}`,
+                professional: `Generate a random Level ${level} modern professional/specialist character (e.g. detective, agent, scientist, doctor, law enforcement, or investigator). Give them a realistic name (do NOT use {{user}}). Output [CHARACTER], [INVENTORY], [ABILITIES], and [TIME] blocks. Focus on specialized professional skills, modern gear, and attributes consistent with a Level ${level} specialist.${CHARACTER_FORMAT_HINT}${TIME_FORMAT_HINT}`,
+                survivor: `Generate a random Level ${level} survivor character (e.g. survivalist, soldier, athlete, or civilian). Give them a realistic name (do NOT use {{user}}). Output [CHARACTER], [INVENTORY], [ABILITIES], and [TIME] blocks. Focus on physical resilience, survival/scavenged gear, and attributes consistent with a Level ${level} survivor.${CHARACTER_FORMAT_HINT}${TIME_FORMAT_HINT}`,
+                scholar: `Generate a random Level ${level} intellectual/scholar character (e.g. occultist, inventor, academic, hacker, or historian). Give them a realistic name (do NOT use {{user}}). Output [CHARACTER], [INVENTORY], [ABILITIES], and [TIME] blocks. Focus on intelligence, knowledge-based traits, research tools/gear, and attributes consistent with an intellectual Level ${level} scholar.${CHARACTER_FORMAT_HINT}${TIME_FORMAT_HINT}`
             };
 
             // ── Persona archetype: derive character from the active SillyTavern persona ──
@@ -2872,14 +2912,21 @@ Saves: Fort +X | Ref +X | Will +X`;
                 }
                 el.querySelectorAll('.rt-random-char-btn').forEach(b => b.disabled = true);
                 btn.textContent = labels.persona;
-                const personaPrompt = `Using the following persona description as the basis for the player character, create a Level ${level} D&D character that faithfully embodies this persona. Translate the personality, background, and traits into appropriate D&D stats, class, race, and equipment. Output [CHARACTER], [INVENTORY], [ABILITIES], and [TIME] blocks (and [SPELLS] if the class is a spellcaster, using 'Cantrips:' for level 0 spells). All attributes and gear should be consistent with Level ${level}.${CHARACTER_FORMAT_HINT}${TIME_FORMAT_HINT}\n\nPersona:\n${resolvedPersona}`;
+                let personaPrompt = `Using the following persona description as the basis for the player character, create a Level ${level} character that faithfully embodies this persona. Translate the personality, background, and traits into appropriate stats, class, race, and equipment. Output [CHARACTER], [INVENTORY], [ABILITIES], and [TIME] blocks (and [SPELLS] if the class is a spellcaster, using 'Cantrips:' for level 0 spells). All attributes and gear should be consistent with Level ${level}.${CHARACTER_FORMAT_HINT}${TIME_FORMAT_HINT}\n\nPersona:\n${resolvedPersona}`;
+                if (customInstructions) {
+                    personaPrompt += `\n\nAdditional setting/instruction constraints: ${customInstructions}. Adapt the name, attributes, description, gear, and spells (if any) to match this setting/instruction perfectly.`;
+                }
                 await sendDirectPrompt(personaPrompt);
                 return;
             }
 
             el.querySelectorAll('.rt-random-char-btn').forEach(b => b.disabled = true);
             btn.textContent = labels[archetype] || '🎲 Rolling...';
-            await sendDirectPrompt(prompts[archetype]);
+            let promptText = prompts[archetype];
+            if (customInstructions) {
+                promptText += `\n\nAdditional setting/instruction constraints: ${customInstructions}. Adapt the name, attributes, description, gear, and spells (if any) to match this setting/instruction perfectly.`;
+            }
+            await sendDirectPrompt(promptText);
         });
     });
 
