@@ -1,4 +1,4 @@
-import { getSettings, getEffectiveRouterCampaignPrefix } from './state-manager.js';
+import { getSettings, getEffectiveRouterCampaignPrefix, saveChatState } from './state-manager.js';
 import { sendStateRequest, sendAgentTurn } from './llm-client.js';
 import { getRequestHeaders } from '../../../../script.js';
 import { extractCurrentTimeStr, cleanMessageContent, parseInWorldTime, formatInWorldTime } from './memo-processor.js';
@@ -2900,9 +2900,13 @@ export async function runWorldProgressionPass(timeStr, currentMinutes, extraInst
             const existingLabel = (entry.comment || '').toLowerCase().trim();
             if (existingLabel === cleanPeriod) {
                 broadcastStep('thought', `\uD83C\uDF0D World Progression: "${periodLabel}" already exists - advancing timer.`);
-                settings.worldProgressionLastFiredAtMinutes = periodEnd;
                 settings.worldProgressionLastFiredPeriodLabel = periodLabel;
-                SillyTavern.getContext().saveSettingsDebounced();
+                const activeChatId = ctx.chatId || ctx.getCurrentChatId?.() || null;
+                if (settings.chatLinkEnabled && activeChatId) {
+                    saveChatState(activeChatId);
+                } else {
+                    ctx.saveSettingsDebounced();
+                }
                 return;
             }
         }
@@ -3392,7 +3396,12 @@ ${historicalDump}`;
 
     // 9. Advance the timer — only the period label is stored; numeric field is legacy.
     settings.worldProgressionLastFiredPeriodLabel = periodLabel;
-    SillyTavern.getContext().saveSettingsDebounced();
+    const activeChatId = ctx.chatId || ctx.getCurrentChatId?.() || null;
+    if (settings.chatLinkEnabled && activeChatId) {
+        saveChatState(activeChatId);
+    } else {
+        ctx.saveSettingsDebounced();
+    }
 
     broadcastStep('finish', `\uD83C\uDF0D World Progression: "${periodLabel}" report saved.`);
     if (typeof globalThis._rpgRenderRouterUI === 'function') {
