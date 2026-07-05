@@ -2,6 +2,39 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [4.3.4] - 2026-07-05
+
+### Performance
+- **Faster page reload (F5)**: Startup no longer blocks on full lorebook registry scans, duplicate chat-bootstrap work, or Campaign Records rendering while the Lorebook Agent panel is closed.
+- **Faster Campaign Records**: Routine manifest refreshes skip disk/registry rescans; the manual ↻ refresh button still performs a full scan to discover newly cloned or external books. Lorebooks load in parallel; NPC inline editors build lazily on first expand.
+- **`disableManagedEntries` optimized**: Uses saved campaign book lists where possible, avoids redundant API probes, loads books in parallel, and runs deferred in the background.
+
+### Added
+- **Show NPC Portraits toggle**: When disabled, NPCs use the compact list view (like Events/Locations), NPC portrait auto-generation is turned off, and **Add NPC to Story** remains available.
+- **Compact NPC list enhancements**: CORE address-card button (left of name), relationship stats (🤝/💗) when Relationship System is enabled, live rel-stat DOM updates without a full manifest reload.
+- **Last Run / Next run status**: Lorebook Agent footer shows when the agent last ran (relative time) and a countdown to the next auto-run.
+- **Reset Timeline**: New button in the Lorebook Agent panel and Extension Settings to reset World Progression timer state for the current chat.
+- **Combat auto-switch**: When `[COMBAT]` is active in the State Tracker memo, switches the main narration Connection Manager profile via `/profile` and restores the baseline when combat ends.
+- **Combat completion preset override**: Combat auto-switch can restore a separate chat completion preset alongside the connection profile.
+
+### Changed
+- **Renamed setting**: “Enable RPG Tracker” → **Enable State Tracker** in settings and tooltips.
+- **Quest system simplified**: LogQuest / tool-based quest mode removed; plain-text `[QUESTS]` blocks are now the only quest path.
+- **World Progression timer model**: Label-based timer anchor, fixed epoch handling, conditional narrative injection; “last fired” state is per-chat.
+- **[CORE] prompt tightening**: Lorebook Agent instructions now discourage plot-tied scene recaps in permanent NPC identity blocks.
+- **World Skeleton isolation**: Skeleton books excluded from agent archive, tools, activation, and Campaign Records manifest.
+- **Activate Books**: Refreshes Campaign Records after activation so new books appear without F5.
+
+### Fixed
+- **Since-last-run watermark**: Persists per chat, handles swipes/stale indices, restores correctly on undo/redo; auto-run throttle resets after manual agent passes.
+- **World Progression persistence**: Timer state saves to chat-linked state, survives reloads, and no longer bleeds between chats; “Next fire” display derives from stored label with memo-time fallback.
+- **Character creator XP**: `[XP]` block always included with level-specific thresholds; onboarding level dropdown forwarded correctly for all archetypes (Custom, Persona, etc.).
+- **Quest state on rollback & chat switch**: Clears per-chat quest bleed; `settings.quests` resyncs from memo on restore; memo is authoritative over stale completed entries in the UI.
+- **NPC manifest refresh**: Fixed scoping bugs when toggling portrait mode; settings toggle now reloads Campaign Records immediately.
+- **Onboarding prompt hints**: Opening/closing tags enforced to reduce unclosed block output from the model.
+- **`saveSettings` reference** in `narrative-hooks.js`.
+- **NPC detail popup**: Removed “(Immutable)” from Core Identity section header.
+
 ## [3.8.9] - 2026-07-01
 
 ### Fixed
