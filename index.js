@@ -9155,6 +9155,258 @@ const ROW_TYPE_OPTIONS = [
     ['text', 'Plain Text'],
 ];
 
+function buildExistingFieldsContextForAi(settings) {
+    let existingFieldsContext = '';
+    BLOCK_ORDER.forEach(tag => {
+        if (tag === 'QUESTS' && settings.syspromptModules?.quests === false) return;
+        if (!settings.modules || settings.modules[tag] !== false) {
+            const modLower = tag.toLowerCase();
+            const promptContent = (settings.stockPrompts && settings.stockPrompts[modLower])
+                ? settings.stockPrompts[modLower]
+                : DEFAULT_STOCK_PROMPTS[modLower] || '';
+            existingFieldsContext += `[${tag}] (Stock Module)\nPrompt: ${promptContent}\n\n`;
+        }
+    });
+    (settings.customFields || []).forEach(f => {
+        if (!settings.modules || settings.modules[f.tag.toUpperCase()] !== false) {
+            existingFieldsContext += `[${f.tag}] (Custom Field: ${f.label})\nPrompt: ${f.prompt}\nTemplate: ${f.template}\n\n`;
+        }
+    });
+    return existingFieldsContext.trim();
+}
+
+function parseAiJsonResponse(result) {
+    let jsonStr = result.trim();
+    const fenceMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (fenceMatch) jsonStr = fenceMatch[1].trim();
+    return JSON.parse(jsonStr);
+}
+
+async function showAiCustomModulePreviewPopup(parsed, settings) {
+    const { Popup } = SillyTavern.getContext();
+    const previewContent = `
+            <div style="display:flex; flex-direction:column; gap:10px; width:100%; box-sizing:border-box; max-height:80vh;">
+                <div style="font-size:13px; font-weight:bold;">🪄 AI Generated Custom Field</div>
+                <div style="border: 1px solid rgba(255,255,255,0.15); border-radius:8px; padding:12px; background:rgba(255,255,255,0.03); overflow-y:auto;">
+                    <div><b>Tag:</b> [${escapeHtml(parsed.tag)}]</div>
+                    <div><b>Label:</b> ${escapeHtml(parsed.icon)} ${escapeHtml(parsed.label)}</div>
+                    <div style="margin-top:6px;"><b>AI Prompt:</b></div>
+                    <div style="font-size:11px; opacity:0.8; white-space:pre-wrap; padding:6px 8px; background:rgba(0,0,0,0.2); border-radius:4px; margin-top:2px;">${escapeHtml(parsed.prompt)}</div>
+                    <div style="margin-top:6px;"><b>Example Template:</b></div>
+                    <div style="font-size:11px; opacity:0.8; white-space:pre-wrap; padding:6px 8px; background:rgba(0,0,0,0.2); border-radius:4px; margin-top:2px; font-family:monospace;">${escapeHtml(parsed.template)}</div>
+                    <div style="margin-top:12px; font-weight:bold; font-size:12px;">Live Preview:</div>
+                    <div id="rt_ai_cfe_preview_view" class="rpg-tracker-render-view" style="margin-top:4px; border:1px solid rgba(255,255,255,0.1); border-radius:6px; background:rgba(0,0,0,0.2); padding:4px;"></div>
+                </div>
+            </div>
+        `;
+
+    setTimeout(() => {
+        const renderView = document.getElementById('rt_ai_cfe_preview_view');
+        if (!renderView) return;
+
+        const previewTag = parsed.tag;
+        const fakeMemo = `[${previewTag}]\n${parsed.template}\n[/${previewTag}]`;
+        const ghostField = {
+            tag: previewTag,
+            label: parsed.label,
+            icon: parsed.icon,
+            template: parsed.template,
+            prompt: '',
+            enabled: true
+        };
+        const savedCustomFields = settings.customFields;
+        settings.customFields = [...(savedCustomFields || []), ghostField];
+        try {
+            renderView.innerHTML = renderMemoAsCards(fakeMemo, previewTag, {});
+            bindRenderedCardEvents(renderView, fakeMemo, true, null);
+        } finally {
+            settings.customFields = savedCustomFields;
+        }
+    }, 150);
+
+    return Popup.show.confirm('Accept Changes?', previewContent);
+}
+
+async function promptForAiModuleEditDescription(moduleLabel) {
+    const { Popup } = SillyTavern.getContext();
+    const inputContent = `
+            <div style="display:flex; flex-direction:column; gap:10px; width:100%; box-sizing:border-box;">
+                <div style="font-size:13px; opacity:0.9; font-weight:bold;">🪄 AI Module Editor</div>
+                <div style="font-size:11px; opacity:0.7; line-height:1.4;">
+                    Describe how you want to change <b>${escapeHtml(moduleLabel)}</b>. The AI will revise the module while preserving anything you do not ask to change.
+                </div>
+                <textarea id="rt_ai_edit_desc" rows="4" class="text_pole"
+                    style="font-size:12px; resize:vertical; width:100%;"
+                    placeholder="Example: Add a section for tracking attunement slots. Show attuned items as pills and list unused slots."></textarea>
+            </div>
+        `;
+
+    let description = '';
+    setTimeout(() => {
+        const textarea = document.getElementById('rt_ai_edit_desc');
+        if (textarea) {
+            textarea.addEventListener('input', () => { description = textarea.value.trim(); });
+        }
+    }, 100);
+
+    const inputResult = await Popup.show.confirm(`Edit ${moduleLabel} with AI`, inputContent, { okButton: 'Generate', cancelButton: 'Cancel' });
+    if (!inputResult) return null;
+    if (!description) {
+        toastr['warning']('Please describe the changes you want.', 'AI Module Editor');
+        return null;
+    }
+    return description;
+}
+
+async function showAiStockPromptPreviewPopup(displayTag, promptText) {
+    const { Popup } = SillyTavern.getContext();
+    const previewContent = `
+            <div style="display:flex; flex-direction:column; gap:10px; width:100%; box-sizing:border-box; max-height:80vh;">
+                <div style="font-size:13px; font-weight:bold;">🪄 AI Revised Prompt — [${escapeHtml(displayTag)}]</div>
+                <div style="font-size:11px; opacity:0.8; white-space:pre-wrap; padding:10px 12px; background:rgba(0,0,0,0.2); border-radius:6px; border:1px solid rgba(255,255,255,0.1); overflow-y:auto; max-height:60vh;">${escapeHtml(promptText)}</div>
+            </div>
+        `;
+    return Popup.show.confirm('Accept Changes?', previewContent);
+}
+
+function buildAiCustomModuleRules(existingTags, editingTag = null) {
+    const tagRule = editingTag
+        ? `- 'tag' must stay "${editingTag}" unless the user explicitly asks to rename the field`
+        : `- 'tag' (the field ID) must NOT conflict with any of the field tags listed in <existing_fields>`;
+    return `RULES:
+- 'tag' (the field ID) must be UPPERCASE, no spaces, use underscores
+${tagRule}
+- NEVER use asterisks (*) anywhere. Do not use them in the tag, prompt, template, or anywhere else. The * symbol is completely BANNED as it breaks rendering. Use ((HIGHLIGHT)) instead if you need emphasis.
+- You are ENCOURAGED to use any of the available rendering tags, even if they are used by other fields
+- icon must be a single emoji
+- prompt should start with 1-3 sentences of clear and specific instructions
+- prompt MUST include a newline, then 'FORMAT:', then the required layout with rendering markers
+- prompt MUST include a newline, then 'EXAMPLE:', then a realistic made up example of how it should look
+- The AI during gameplay only sees 'prompt', it does NOT see 'template'
+- template MUST use rendering tags — this is just the UI preview for the user. It should match the EXAMPLE you provided in the prompt.
+- Return ONLY the JSON. No explanation, no markdown fences.`;
+}
+
+async function runAiEditCustomModule(settings, field, description) {
+    const existingTags = BLOCK_ORDER.concat((settings.customFields || []).map(f => f.tag.toUpperCase()));
+    const existingFieldsContext = buildExistingFieldsContextForAi(settings);
+    const aiPrompt = `You are a configuration editor for a game state tracker extension.
+
+The user's current system prompt is provided below for reference:
+<current_prompt>
+${document.getElementById('main_prompt_quick_edit_textarea')?.value || settings.systemPromptTemplate || ''}
+</current_prompt>
+
+Here are ALL the user's currently enabled tracking fields (both stock and custom), including their exact instructions and formatting. Use these for inspiration on depth and style. Ensure your revised field complements them without duplicating functionality:
+<existing_fields>
+${existingFieldsContext}
+</existing_fields>
+
+You are EDITING an existing custom tracking field. Preserve anything the user did not ask to change.
+
+Current field configuration:
+{
+  "tag": "${field.tag}",
+  "label": "${field.label}",
+  "icon": "${field.icon}",
+  "prompt": ${JSON.stringify(field.prompt || '')},
+  "template": ${JSON.stringify(field.template || '')}
+}
+
+The user's requested changes:
+"${description}"
+
+Available rendering tags (MUST use at least one in the template). Tags can be placed inline (e.g., 'Health: ((BAR)) 50/100'). Pill tags optionally support parenthesis text for descriptions (e.g. 'Status: ((PILLS)) Sleeping (Unconscious)'):
+${RENDERING_TAGS_LIBRARY.map(t => '- ' + t).join('\n')}
+
+Return ONLY a valid JSON object with these fields:
+{
+  "tag": "UPPERCASE_FIELD_ID",
+  "label": "Human Readable Label",
+  "icon": "single emoji",
+  "prompt": "Instruction text telling the AI model what to track and exactly how to format it. MUST include a newline, then a literal 'FORMAT:' section, then a newline, then an 'EXAMPLE:' section.",
+  "template": "Example output showing rendering markers. MUST use at least one ((MARKER)) tag. Show realistic example data."
+}
+
+${buildAiCustomModuleRules(existingTags, field.tag.toUpperCase())}`;
+
+    toastr['info']('Revising custom module with AI...', 'AI Module Editor', { timeOut: 3000 });
+    const result = await sendStateRequest(settings, 'You are a JSON configuration generator. Return ONLY valid JSON.', aiPrompt);
+    if (!result) throw new Error('No response from AI');
+
+    const parsed = parseAiJsonResponse(result);
+    if (!parsed.tag || !parsed.label || !parsed.icon || !parsed.prompt || !parsed.template) {
+        throw new Error('AI returned incomplete field config');
+    }
+
+    const normalTag = parsed.tag.toUpperCase().replace(/[^A-Z0-9_]/g, '_');
+    const reservedConflict = BLOCK_ORDER.includes(normalTag);
+    const otherCustomConflict = (settings.customFields || []).some(f =>
+        f.tag.toUpperCase() === normalTag && f.tag.toUpperCase() !== field.tag.toUpperCase()
+    );
+    if (reservedConflict || otherCustomConflict) {
+        parsed.tag = field.tag.toUpperCase();
+    } else {
+        parsed.tag = normalTag;
+    }
+
+    const approved = await showAiCustomModulePreviewPopup(parsed, settings);
+    if (!approved) {
+        toastr['info']('Module edit cancelled.', 'AI Module Editor');
+        return null;
+    }
+    return parsed;
+}
+
+async function runAiEditStockModulePrompt(settings, modKey, blockTag, displayTag, currentPrompt, description) {
+    const existingFieldsContext = buildExistingFieldsContextForAi(settings);
+    const aiPrompt = `You are an instruction editor for a game state tracker extension.
+
+The user's current system prompt is provided below for reference:
+<current_prompt>
+${document.getElementById('main_prompt_quick_edit_textarea')?.value || settings.systemPromptTemplate || ''}
+</current_prompt>
+
+Here are ALL the user's currently enabled tracking fields (both stock and custom), including their exact instructions and formatting. Use these for inspiration on depth and style:
+<existing_fields>
+${existingFieldsContext}
+</existing_fields>
+
+You are EDITING the stock module prompt for [${blockTag}]. Preserve anything the user did not ask to change.
+
+Current prompt for [${blockTag}]:
+${currentPrompt}
+
+The user's requested changes:
+"${description}"
+
+Return ONLY a valid JSON object:
+{
+  "prompt": "The full revised instruction text for this stock module."
+}
+
+RULES:
+- Preserve structure and formatting conventions unless the user asks to change them
+- NEVER use asterisks (*) anywhere in the prompt. Use ((HIGHLIGHT)) instead if you need emphasis
+- Return ONLY the JSON. No explanation, no markdown fences.`;
+
+    toastr['info']('Revising module prompt with AI...', 'AI Module Editor', { timeOut: 3000 });
+    const result = await sendStateRequest(settings, 'You are a JSON configuration generator. Return ONLY valid JSON.', aiPrompt);
+    if (!result) throw new Error('No response from AI');
+
+    const parsed = parseAiJsonResponse(result);
+    if (!parsed.prompt || typeof parsed.prompt !== 'string') {
+        throw new Error('AI returned incomplete prompt');
+    }
+
+    const approved = await showAiStockPromptPreviewPopup(displayTag, parsed.prompt);
+    if (!approved) {
+        toastr['info']('Module edit cancelled.', 'AI Module Editor');
+        return null;
+    }
+    return parsed;
+}
+
 function buildRowTypeSelect(selectedVal) {
     const sel = document.createElement('select');
     sel.className = 'text_pole';
@@ -9229,6 +9481,7 @@ function openCustomFieldEditor(index) {
                 <div class="popup-footer flex-container gap-1 justifycontentend" style="padding:8px 14px; border-top:1px solid rgba(255,255,255,0.08); flex-shrink:0;">
                     <button id="rt_cfe_delete" class="menu_button interactable" style="color:#ff5555;font-size:12px;"><i class="fa-solid fa-trash"></i> Delete</button>
                     <button id="rt_cfe_export" class="menu_button interactable" style="font-size:12px;margin-right:auto;" title="Export this module as a shareable code"><i class="fa-solid fa-file-export"></i> Export</button>
+                    <button id="rt_cfe_edit_ai" class="menu_button interactable" style="font-size:12px; background:rgba(180,100,255,0.15); border-color:rgba(180,100,255,0.4);" title="Describe changes and let AI revise this module"><i class="fa-solid fa-wand-magic-sparkles"></i> Edit with AI</button>
                     <button id="rt_cfe_cancel" class="menu_button interactable" style="font-size:12px;">Cancel</button>
                     <button id="rt_cfe_save" class="menu_button interactable" style="font-size:12px;">Save Changes</button>
                 </div>
@@ -9386,8 +9639,26 @@ function openCustomFieldEditor(index) {
     document.getElementById('rt_cfe_close').onclick = close;
     document.getElementById('rpg-tracker-debug-btn').onclick = () => toggleDebugViewer();
     document.getElementById('rt_cfe_export').onclick = () => exportModules([field]);
+    document.getElementById('rt_cfe_edit_ai').onclick = async () => {
+        const description = await promptForAiModuleEditDescription(`[${field.tag}] ${field.label || field.tag}`);
+        if (!description) return;
+        try {
+            const parsed = await runAiEditCustomModule(s, field, description);
+            if (!parsed) return;
+            iconEl.value = parsed.icon;
+            tagEl.value = parsed.tag;
+            labelEl.value = parsed.label;
+            promptEl.value = parsed.prompt;
+            templateEl.value = parsed.template;
+            schedulePreview();
+            toastr['success'](`Module "${parsed.label}" revised. Review and click Save Changes.`, 'AI Module Editor');
+        } catch (err) {
+            console.error('[RPG Tracker] AI Module Editor error:', err);
+            toastr['error'](`Failed to edit module: ${err.message}`, 'AI Module Editor');
+        }
+    };
 }
-function openPromptEditor(tag, title, currentText, defaultText, onSave) {
+function openPromptEditor(blockTag, title, currentText, defaultText, onSave, promptModKey) {
     let overlay = document.getElementById('rt_pe_overlay');
 
     if (!overlay) {
@@ -9420,6 +9691,7 @@ function openPromptEditor(tag, title, currentText, defaultText, onSave) {
                         </div>
                         <textarea id="rt_pe_text" class="text_pole" rows="10" style="width: 100%; resize: vertical;"></textarea>
                         <div class="flex-container gap-1 justifycontentend">
+                            <button id="rt_pe_edit_ai" class="menu_button interactable" style="background:rgba(180,100,255,0.15); border-color:rgba(180,100,255,0.4);"><i class="fa-solid fa-wand-magic-sparkles"></i> Edit with AI</button>
                             <button id="rt_pe_reset" class="menu_button interactable" style="margin-right: auto;"><i class="fa-solid fa-arrow-rotate-left"></i> Reset</button>
                             <button id="rt_pe_cancel" class="menu_button interactable">Cancel</button>
                             <button id="rt_pe_save" class="menu_button interactable">Save Changes</button>
@@ -9438,17 +9710,18 @@ function openPromptEditor(tag, title, currentText, defaultText, onSave) {
     const closeBtn = document.getElementById('rt_pe_close');
     const cancelBtn = document.getElementById('rt_pe_cancel');
 
+    const modKey = promptModKey || blockTag.toLowerCase();
     const s = getSettings();
-    pageSizeEl.value = String(s.modulePageSizes?.[tag.toUpperCase()] ?? (tag.toUpperCase() === 'SPELLS' ? 5 : PAGE_SIZE));
-    pageSizeEl.addEventListener('input', () => {
+    pageSizeEl.value = String(s.modulePageSizes?.[blockTag.toUpperCase()] ?? (blockTag.toUpperCase() === 'SPELLS' ? 5 : PAGE_SIZE));
+    pageSizeEl.oninput = () => {
         if (!s.modulePageSizes) s.modulePageSizes = {};
         const val = parseInt(String(pageSizeEl.value), 10);
         if (!isNaN(val) && val >= 1) {
-            s.modulePageSizes[tag.toUpperCase()] = val;
+            s.modulePageSizes[blockTag.toUpperCase()] = val;
             saveSettings();
             refreshRenderedView();
         }
-    });
+    };
 
     const close = () => { overlay.style.display = 'none'; };
 
@@ -9460,7 +9733,7 @@ function openPromptEditor(tag, title, currentText, defaultText, onSave) {
         if (!s.modulePageSizes) s.modulePageSizes = {};
         const ps = parseInt(String(pageSizeEl.value), 10);
         if (!isNaN(ps) && ps >= 1) {
-            s.modulePageSizes[tag.toUpperCase()] = ps;
+            s.modulePageSizes[blockTag.toUpperCase()] = ps;
         }
         saveSettings();
         onSave(textEl.value);
@@ -9473,15 +9746,24 @@ function openPromptEditor(tag, title, currentText, defaultText, onSave) {
         }
     };
 
-    const cleanup = () => {
-        saveBtn.removeEventListener('click', saveHandler);
-        resetBtn.removeEventListener('click', resetHandler);
-        document.getElementById('rt_pe_close').removeEventListener('click', close);
-        document.getElementById('rt_pe_cancel').removeEventListener('click', close);
+    const editAiHandler = async () => {
+        const displayTag = blockTag === 'TIME' && modKey === 'time_24h' ? 'TIME (24h Format)' : blockTag;
+        const description = await promptForAiModuleEditDescription(`[${displayTag}]`);
+        if (!description) return;
+        try {
+            const parsed = await runAiEditStockModulePrompt(s, modKey, blockTag, displayTag, textEl.value, description);
+            if (!parsed) return;
+            textEl.value = parsed.prompt;
+            toastr['success'](`[${displayTag}] prompt revised. Review and click Save Changes.`, 'AI Module Editor');
+        } catch (err) {
+            console.error('[RPG Tracker] AI Module Editor error:', err);
+            toastr['error'](`Failed to edit prompt: ${err.message}`, 'AI Module Editor');
+        }
     };
 
     saveBtn.onclick = saveHandler;
     resetBtn.onclick = resetHandler;
+    document.getElementById('rt_pe_edit_ai').onclick = editAiHandler;
     document.getElementById('rt_pe_close').onclick = close;
     document.getElementById('rt_pe_cancel').onclick = close;
 }
@@ -9887,7 +10169,7 @@ function refreshOrderList() {
 
                 if (!s.stockPrompts) s.stockPrompts = { ...DEFAULT_STOCK_PROMPTS };
                 openPromptEditor(
-                    displayTag,
+                    tag,
                     `Edit Default [${displayTag}] Prompt`,
                     s.stockPrompts[mod] || DEFAULT_STOCK_PROMPTS[mod],
                     DEFAULT_STOCK_PROMPTS[mod],
@@ -9895,7 +10177,8 @@ function refreshOrderList() {
                         s.stockPrompts[mod] = newVal;
                         saveSettings();
                         toastr['success'](`[${displayTag}] prompt updated.`, 'RPG Tracker');
-                    }
+                    },
+                    mod
                 );
             } else {
                 openCustomFieldEditor(customIndex);
@@ -10563,6 +10846,13 @@ function buildSysprompt(rawText) {
                 settings.stockPrompts.quests.includes('OBJ_ACTIVE') &&
                 !settings.stockPrompts.quests.includes('OBJ_TOTAL')) {
                 settings.stockPrompts.quests = DEFAULT_STOCK_PROMPTS.quests;
+                changed = true;
+            }
+
+            // Fix "active only" quest prompt that caused models to drop completed quests before sync
+            if (settings.stockPrompts.quests?.includes('active** quests only') ||
+                settings.stockPrompts.quests?.includes('do not keep archived quests')) {
+                refreshQuestPrompt(settings);
                 changed = true;
             }
 

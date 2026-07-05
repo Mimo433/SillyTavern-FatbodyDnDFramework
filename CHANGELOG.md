@@ -2,6 +2,20 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [4.3.5] - 2026-07-05
+
+### Added
+- **Quest archive UI**: Completed and failed quests move to separate COMPLETED / FAILED sections; archived entries can be dismissed manually. **Show archived quests** toggle in settings (default on).
+- **Edit with AI (Modules)**: **Edit with AI** button in both the stock prompt editor and Custom Module Editor — describe changes in plain language and the AI revises the module with preview/accept flow, same pattern as Add Custom (AI).
+
+### Changed
+- **Quest memo cleanup**: Archived quests (completed, failed, past deadline) are synced to settings then stripped from the stored `[QUESTS]` memo automatically; the model no longer needs to omit them.
+- **Quest prompt wording**: Restored instructions to keep completed/failed quest entries with updated STATUS so the tracker can archive them before memo strip. Auto-migrates saved prompts that used the over-aggressive “active only” wording.
+
+### Fixed
+- **Empty `[QUESTS]` on completion**: State Tracker no longer told to emit an empty quest block when the last active quest completes — preventing lost archive sync.
+- **Stock prompt editor pagination**: TIME (24h) module now uses the correct block tag for pagination threshold lookup.
+
 ## [4.3.4] - 2026-07-05
 
 ### Performance
