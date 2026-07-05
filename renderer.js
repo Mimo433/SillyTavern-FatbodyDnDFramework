@@ -1582,8 +1582,10 @@ export function renderQuestLog(quests, currentTime, collapsed, detached, filterT
         if (quest.status === 'past deadline') { statusBadgeClass = 'rt-quest-badge-failed'; statusLabel = 'Past Deadline'; }
         if (quest.status === 'failed')    { statusBadgeClass = 'rt-quest-badge-failed';    statusLabel = 'Failed'; }
 
+        const questIsCompleted = quest.status === 'completed';
+
         const objectives = (quest.objectives || []).map(obj => {
-            const done = obj.status === 'completed';
+            const done = obj.status === 'completed' || (questIsCompleted && obj.status !== 'failed');
             const failed = obj.status === 'failed';
             const optLabel = obj.required ? '' : ' <span class="rt-quest-optional">(Optional)</span>';
             let objClass = 'rt-quest-obj';
