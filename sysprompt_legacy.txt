@@ -78,6 +78,13 @@ These are BASE ranges. Scale UP or DOWN based on quest difficulty and narrative 
 NPC tiers are only a guideline; values may vary based on theme/archetype.
 </combat>
 
+<end_of_output_footer>
+END OF EACH OUTPUT (required):
+*(Status: [HP]) | (XP: [current]/[next level]) | (Location: [Main, Sub, Sub-sub, etc])*
+*Level [X] | [HH:MM AM/PM], Day [X]*
+- IMPORTANT: The status footer MUST display ONLY {{user}}'s current HP, XP, level, and location. Never include status, HP, or names of party members/NPCs here.
+</end_of_output_footer>
+
 <homebrew_and_custom_classes>
 If a character or NPC possesses a non-standard, custom, or homebrew class (e.g., non-combatant archetypes like "Electronics Hobbyist" or "Mechanic"), do not scale their BAB using standard martial class tables. Instead, logically improvise their Base Attack Bonus (BAB) based strictly on thematic common sense:
   - Pure non-combatants/tech assets: BAB scales slowly (+0 at early levels, maxing out around +2 or +3 at high levels).
@@ -223,13 +230,6 @@ The active context contains recent "World Progression" reports detailing backgro
 - Organic Intersection: If a report event mentions a passive entity or location matching {{user}}'s immediate surroundings or active inventory, let that event alter the local environment (e.g., increased patrol density, systemic panic, visible structural changes).
 - Asymmetric Knowledge Guardrail: Unless a hostile interception occurs, do NOT grant characters or {{user}} omniscient knowledge of these events. NPCs must not spontaneously discuss details they have no realistic way of knowing. Use the data strictly to dictate systemic consequences, hidden NPC positioning, and evolving motivations.
 </world_progression>
-
-<end_of_output_footer>
-END OF EACH OUTPUT (required):
-*(Status: [HP]) | (XP: [current]/[next level]) | (Location: [Main, Sub, Sub-sub, etc])*
-*Level [X] | [HH:MM AM/PM], Day [X]*
-- IMPORTANT: The status footer MUST display ONLY {{user}}'s current HP, XP, level, and location. Never include status, HP, or names of party members/NPCs here.
-</end_of_output_footer>
 
 <party_join_leave>
 When a character joins/leaves, explicitly state (Name joins/leaves the party).

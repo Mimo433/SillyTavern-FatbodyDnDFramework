@@ -1,4 +1,4 @@
-import { EXAMPLES, COLOR_EXAMPLES, DEFAULT_STOCK_PROMPTS, RT_PROMPTS, BLOCK_ICONS, BLOCK_ORDER, PAGE_SIZE, NO_PAGINATE, QUESTS_NARRATOR, buildOnboardingXpHint } from './constants.js';
+import { EXAMPLES, COLOR_EXAMPLES, DEFAULT_STOCK_PROMPTS, RT_PROMPTS, BLOCK_ICONS, BLOCK_ORDER, PAGE_SIZE, NO_PAGINATE, QUESTS_NARRATOR, buildOnboardingXpHint, resolveTimePromptKey, resolveTimePromptDisplayTag } from './constants.js';
 import { MODULE_NAME, DEFAULT_MODULES, getSettings, getBarBackground, migrateCustomFields, saveChatState, saveProfile, deleteProfile, getEffectiveRouterCampaignPrefix, sanitizeCampaignPrefixString, buildNpcInstruction } from './state-manager.js';
 import { sendStateRequest, fetchOllamaModels, fetchOpenAIModels, testOpenAIConnection, getConnectionProfiles, getCurrentCompletionPreset, setCompletionPreset, syncCombatProfile, resetCombatProfileOverride } from './llm-client.js';
 import { getDiceToolName, getDiceCommandName, getDiceCommandAliases, doDiceRoll, registerDiceFunctionTool, registerDiceSlashCommand, installInterceptor, getNarrativeBlocks, onGenerationStarted, onGenerationEnded, ensureRelTagRegex, resetRouterTick, getRouterTick, resetRouterAutoTick, makeRngQueue, buildRngBlock, RNG_QUEUE_LEN, parseAndApplyNarrativeRelTags } from './narrative-hooks.js';
@@ -456,6 +456,98 @@ function syncNpcPortraitDependentUi(settings) {
 }
 
 /**
+ * Sync every time/date format control across the whole extension (Modules &
+ * Order pills, Extension Settings checkbox, both onboarding widgets) with the
+ * live settings values. This is the single place that pushes state out to the
+ * UI, so no surface can ever show a stale or contradicting value.
+ * @param {object} s
+ */
+function syncTimeFormatSettingsUi(s) {
+    const timeDdMmyyCb = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_time_ddmmyy_toggle'));
+    if (timeDdMmyyCb) timeDdMmyyCb.checked = !!s.useDdMmYyFormat;
+    const time24hCb = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_time_24h_toggle'));
+    if (time24hCb) time24hCb.checked = !!s.use24hTime;
+    $('#rpg_sysprompt_mod_time_ddmmyy').prop('checked', !!s.useDdMmYyFormat);
+    syncOnboardingUI();
+    if (typeof updateWorldProgressionLastFiredDisplayRef === 'function') {
+        updateWorldProgressionLastFiredDisplayRef();
+    }
+}
+
+/** Persist time/date format fields into the current chat snapshot when chat linking is on. */
+function persistChatTimeFormatIfLinked() {
+    const s = getSettings();
+    if (s.chatLinkEnabled && _currentChatId) saveChatState(_currentChatId);
+}
+
+/** Apply default or saved per-chat time/date format settings. */
+function applyChatTimeFormatSettings(saved) {
+    const s = getSettings();
+    s.use24hTime = saved?.use24hTime ?? false;
+    s.useDdMmYyFormat = saved?.useDdMmYyFormat ?? false;
+    s.initialDate = saved?.initialDate ?? 'Day 1';
+    if (s.routerModules?.npc) {
+        s.routerModules.npc.instruction = buildNpcInstruction(s.npcMajorWords, s.npcMinorWords, false);
+    }
+    syncTimeFormatSettingsUi(s);
+}
+
+/**
+ * Single source-of-truth setter for the Day N vs DD/MM/YYYY calendar format.
+ * Every control that toggles this setting (Modules & Order, Extension
+ * Settings, both onboarding widgets) MUST call this instead of writing
+ * `useDdMmYyFormat` directly, so the value and its dependent UI can never
+ * drift apart between the different places it's exposed.
+ * @param {boolean} isDate
+ */
+function setUseDdMmYyFormat(isDate) {
+    const s = getSettings();
+    s.useDdMmYyFormat = !!isDate;
+    if (isDate) {
+        if (s.initialDate === "Day 1" || !s.initialDate) s.initialDate = "01/01/2026";
+    } else if (!s.initialDate || s.initialDate === "01/01/2026" || s.initialDate === "01/01/26") {
+        s.initialDate = "Day 1";
+    }
+    if (s.routerModules?.npc) {
+        s.routerModules.npc.instruction = buildNpcInstruction(s.npcMajorWords, s.npcMinorWords, false);
+    }
+    saveSettings();
+    persistChatTimeFormatIfLinked();
+    syncTimeFormatSettingsUi(s);
+    scheduleAutoApply();
+}
+
+/**
+ * Single source-of-truth setter for the 12h vs 24h clock format.
+ * See {@link setUseDdMmYyFormat} for why every toggle must funnel through here.
+ * @param {boolean} is24h
+ */
+function setUse24hTime(is24h) {
+    const s = getSettings();
+    s.use24hTime = !!is24h;
+    saveSettings();
+    persistChatTimeFormatIfLinked();
+    syncTimeFormatSettingsUi(s);
+    scheduleAutoApply();
+}
+
+/**
+ * Single source-of-truth setter for the initial date/day anchor text.
+ * Keeps both onboarding text inputs (top widget + Narrator Configuration)
+ * in sync without stealing focus from whichever one the user is typing in.
+ * @param {string} val
+ * @param {HTMLInputElement|null} [sourceInput] - the input the user is typing into; left untouched.
+ */
+function setInitialDateValue(val, sourceInput = null) {
+    getSettings().initialDate = val;
+    saveSettings();
+    persistChatTimeFormatIfLinked();
+    document.querySelectorAll('#rt-onboarding-start-date, #rt_onboarding_initial_date_input').forEach(input => {
+        if (input !== sourceInput) /** @type {HTMLInputElement} */ (input).value = val;
+    });
+}
+
+/**
  * Synchronizes the onboarding UI elements with the current settings state.
  * This is called whenever a setting is saved to ensure both the main sidebar
  * and the tracker's onboarding screen stay perfectly in sync.
@@ -513,11 +605,14 @@ function syncOnboardingUI() {
     const customSyspromptCb = /** @type {HTMLInputElement|null} */ (onboarding.querySelector('#rt_onboarding_custom_sysprompt'));
     if (customSyspromptCb) customSyspromptCb.checked = !!s.customSysprompt;
 
-    // Time & Date format + Initial date/day Sync
-    const timeDdMmyy = /** @type {HTMLInputElement|null} */ (onboarding.querySelector('#rt_onboarding_time_ddmmyy'));
-    if (timeDdMmyy) {
-        timeDdMmyy.checked = !!s.useDdMmYyFormat;
-    }
+    // Time & Date format + Initial date/day Sync — all segmented toggles across
+    // both onboarding widgets are driven from the same settings values so they
+    // can never show a contradicting state.
+    syncSegToggle(onboarding.querySelector('#rt_onboarding_time_date_seg'), s.useDdMmYyFormat ? 'date' : 'day');
+    syncSegToggle(onboarding.querySelector('#rt_onboarding_time_clock_seg'), s.use24hTime ? '24' : '12');
+    syncSegToggle(onboarding.querySelector('#rt-onboarding-date-seg'), s.useDdMmYyFormat ? 'date' : 'day');
+    syncSegToggle(onboarding.querySelector('#rt-onboarding-clock-seg'), s.use24hTime ? '24' : '12');
+
     const initialDateInput = /** @type {HTMLInputElement|null} */ (onboarding.querySelector('#rt_onboarding_initial_date_input'));
     const initialDateLabel = /** @type {HTMLElement|null} */ (onboarding.querySelector('#rt_onboarding_initial_date_label'));
     if (initialDateInput) {
@@ -528,16 +623,26 @@ function syncOnboardingUI() {
         initialDateInput.placeholder = s.useDdMmYyFormat ? '01/01/2026' : 'Day 1';
     }
 
-    // Character Creator Start Date & Toggle Sync
-    const creatorDateType = /** @type {HTMLSelectElement|null} */ (onboarding.querySelector('#rt-onboarding-date-type'));
+    // Character Creator Start Date Sync (segmented toggle synced above)
     const creatorStartDate = /** @type {HTMLInputElement|null} */ (onboarding.querySelector('#rt-onboarding-start-date'));
-    if (creatorDateType) {
-        creatorDateType.value = s.useDdMmYyFormat ? 'date' : 'day';
-    }
     if (creatorStartDate) {
         creatorStartDate.value = s.initialDate && s.initialDate !== 'Day 1' ? s.initialDate : '01/01/2026';
         creatorStartDate.style.display = s.useDdMmYyFormat ? 'inline-block' : 'none';
     }
+}
+
+/**
+ * Marks the button matching `activeValue` as active within a `.rt-seg-toggle`
+ * group and clears the rest. Used to keep every Day/Date and 12h/24h control
+ * across the onboarding screen visually in sync with the underlying setting.
+ * @param {Element|null} segEl
+ * @param {string} activeValue
+ */
+function syncSegToggle(segEl, activeValue) {
+    if (!segEl) return;
+    segEl.querySelectorAll('button').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.value === activeValue);
+    });
 }
 // ── Renderer / navigation state ──
 let _historyViewIndex = -1;    // -1 = live, 0 = most recent snapshot, higher = older
@@ -946,6 +1051,8 @@ function loadChatState(chatId) {
     s.worldOpenaiKey = saved.worldOpenaiKey || "";
     s.worldOpenaiModel = saved.worldOpenaiModel || "";
 
+    applyChatTimeFormatSettings(saved);
+
     // Update settings UI inputs if rendered
     $('#rpg_world_progression_randomize_npcs').prop('checked', !!s.worldProgressionRandomizeNPCs);
     $('#rpg_world_progression_random_skeleton_npc_count').val(s.worldProgressionRandomSkeletonNPCCount ?? 2);
@@ -1076,6 +1183,7 @@ function loadChatState(chatId) {
 
     refreshOrderList();
     syncMemoView();
+    scheduleAutoApply();
 
     // Refresh Lorebook Agent UI
     if (typeof renderRouterUI === 'function') {
@@ -1378,6 +1486,10 @@ function onChatChanged(newChatId) {
         s.routerLog = [];
         s.worldProgressionLastFiredAtMinutes = -1;
         s.worldProgressionLastFiredPeriodLabel = '';
+
+        applyChatTimeFormatSettings(null);
+        refreshOrderList();
+        scheduleAutoApply();
 
         _historyViewIndex = -1;
 
@@ -2942,16 +3054,20 @@ function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRefresh =
 
     // Genre tab toggle listener & persistent preference save
     const genreSelect = el.querySelector('#rt-onboarding-genre');
-    const fantasyGroup = el.querySelector('.rt-fantasy-buttons');
-    const realisticGroup = el.querySelector('.rt-realistic-buttons');
+    const genreGroups = {
+        fantasy: el.querySelector('.rt-fantasy-buttons'),
+        realistic: el.querySelector('.rt-realistic-buttons'),
+        scifi: el.querySelector('.rt-scifi-buttons'),
+        horror: el.querySelector('.rt-horror-buttons'),
+    };
     if (genreSelect) {
         genreSelect.addEventListener('change', () => {
             const val = genreSelect.value;
             getSettings().onboardingGenre = val;
             saveSettings();
-            const isRealistic = val === 'realistic';
-            if (fantasyGroup) fantasyGroup.style.display = isRealistic ? 'none' : 'flex';
-            if (realisticGroup) realisticGroup.style.display = isRealistic ? 'flex' : 'none';
+            Object.entries(genreGroups).forEach(([key, groupEl]) => {
+                if (groupEl) groupEl.style.display = key === val ? 'flex' : 'none';
+            });
         });
     }
 
@@ -2973,39 +3089,32 @@ function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRefresh =
         });
     }
 
-    // Start Date type toggle listener (Day 1 vs. Explicit Date)
-    const dateTypeSelect = el.querySelector('#rt-onboarding-date-type');
-    const startDateInput = el.querySelector('#rt-onboarding-start-date');
-    if (dateTypeSelect && startDateInput) {
-        dateTypeSelect.addEventListener('change', () => {
-            const isDate = dateTypeSelect.value === 'date';
-            syncSettingsAndUI(s => {
-                s.useDdMmYyFormat = isDate;
-                if (isDate) {
-                    if (s.initialDate === "Day 1" || !s.initialDate) {
-                        s.initialDate = "01/01/2026";
-                    }
-                } else {
-                    s.initialDate = "Day 1";
-                }
-                if (s.routerModules?.npc) {
-                    s.routerModules.npc.instruction = buildNpcInstruction(s.npcMajorWords, s.npcMinorWords, false);
-                }
-            });
-            syncOnboardingUI();
+    // Time & Date segmented toggles — wired identically in both onboarding
+    // widgets (top bar + Narrator Configuration) so they can never diverge.
+    // Every click funnels through the shared setUseDdMmYyFormat/setUse24hTime
+    // setters, which push the resulting state back out to both widgets.
+    const bindDateFormatSeg = (segId) => {
+        const segEl = el.querySelector(`#${segId}`);
+        if (!segEl) return;
+        segEl.querySelectorAll('button').forEach(btn => {
+            btn.addEventListener('click', () => setUseDdMmYyFormat(btn.dataset.value === 'date'));
         });
-
-        startDateInput.addEventListener('input', () => {
-            const val = startDateInput.value.trim();
-            getSettings().initialDate = val;
-            saveSettings();
-
-            // Sync other onboarding input directly to prevent focus loss from re-rendering
-            const otherOnbInput = el.querySelector('#rt_onboarding_initial_date_input');
-            if (otherOnbInput) {
-                otherOnbInput.value = val;
-            }
+    };
+    const bindClockFormatSeg = (segId) => {
+        const segEl = el.querySelector(`#${segId}`);
+        if (!segEl) return;
+        segEl.querySelectorAll('button').forEach(btn => {
+            btn.addEventListener('click', () => setUse24hTime(btn.dataset.value === '24'));
         });
+    };
+    bindDateFormatSeg('rt-onboarding-date-seg');
+    bindDateFormatSeg('rt_onboarding_time_date_seg');
+    bindClockFormatSeg('rt-onboarding-clock-seg');
+    bindClockFormatSeg('rt_onboarding_time_clock_seg');
+
+    const startDateInput = /** @type {HTMLInputElement|null} */ (el.querySelector('#rt-onboarding-start-date'));
+    if (startDateInput) {
+        startDateInput.addEventListener('input', () => setInitialDateValue(startDateInput.value.trim(), startDateInput));
     }
 
     el.querySelectorAll('.rt-random-char-btn').forEach(btn => {
@@ -3015,21 +3124,16 @@ function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRefresh =
             const level = parseInt(String(levelSelectEl?.value ?? getSettings().onboardingLevel ?? 1), 10) || 1;
             getSettings().onboardingLevel = level;
             saveSettings();
-            const isCalendar = dateTypeSelect?.value === 'date';
-            const startDateVal = isCalendar ? (startDateInput?.value.trim() || '01/01/2026') : 'Day 1';
+            // Time/date format and initial date are already the single source of truth
+            // (kept in sync by setUseDdMmYyFormat/setUseDate24hTime/setInitialDateValue) —
+            // just read them directly instead of re-deriving from a specific widget.
+            const isCalendar = !!getSettings().useDdMmYyFormat;
+            const startDateVal = isCalendar
+                ? (getSettings().initialDate && getSettings().initialDate !== 'Day 1' ? getSettings().initialDate : '01/01/2026')
+                : 'Day 1';
             const customInstructions = el.querySelector('#rt-onboarding-custom-instructions')?.value.trim() || '';
             const levelPrefix = `STARTING LEVEL: ${level} (mandatory — the character MUST be exactly Level ${level}).`;
             const xpHint = buildOnboardingXpHint(level);
-
-            // Sync the start date and format selection back to the core settings
-            syncSettingsAndUI(s => {
-                s.useDdMmYyFormat = isCalendar;
-                s.initialDate = startDateVal;
-                if (s.routerModules?.npc) {
-                    s.routerModules.npc.instruction = buildNpcInstruction(s.npcMajorWords, s.npcMinorWords, false);
-                }
-            });
-            syncOnboardingUI();
 
             const labels = {
                 magic: '✨ Casting...',
@@ -3038,6 +3142,12 @@ function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRefresh =
                 professional: '💼 Analyzing...',
                 survivor: '🏃 Surviving...',
                 scholar: '🧠 Researching...',
+                scifi_pilot: '🚀 Piloting...',
+                scifi_engineer: '🤖 Engineering...',
+                scifi_marine: '🔫 Deploying...',
+                horror_investigator: '🕵️ Investigating...',
+                horror_occultist: '👻 Summoning...',
+                horror_survivor: '🔪 Enduring...',
                 persona: '🎭 Embodying...',
                 custom: '⚙️ Customizing...'
             };
@@ -3072,13 +3182,31 @@ Gear:
 - Use realistic modern/historical currency (e.g. $, USD, GBP, or simple cash/money) instead of GP/SP/CP.
 - Wing it and homebrew modern capabilities: adapt attributes, saves, gear, and skills to fit a realistic setting. Keep items, weapons, and tools realistic (no fantasy or magical weapons).`;
 
+            const SCIFI_HINT = `\n\nCRITICAL SCI-FI RULE: This is a science-fiction setting.
+- Do NOT output a [SPELLS] block. Avoid D&D classes and fantasy races.
+- Use futuristic sci-fi gear (energy weapons, cybernetics, powered armor, starship equipment) instead of medieval fantasy gear.
+- Use a sci-fi currency (e.g. Credits) instead of GP/SP/CP.
+- Wing it and homebrew futuristic capabilities: adapt attributes, saves, gear, and skills to fit a sci-fi setting.`;
+
+            const HORROR_HINT = `\n\nCRITICAL HORROR RULE: This is a horror/occult setting.
+- Do NOT output a [SPELLS] block; represent any occult rituals or supernatural resistances as entries in [ABILITIES] instead.
+- Avoid D&D classes and fantasy races. Keep the character grounded and vulnerable — horror characters are not superheroes.
+- Use realistic modern/historical currency instead of GP/SP/CP.
+- Wing it and homebrew fitting capabilities: adapt attributes, saves, gear, and skills for a tense horror survival setting.`;
+
             const prompts = {
                 magic: `${levelPrefix} Generate a random Level ${level} D&D Magic User (Wizard, Sorcerer, or Warlock). Give them a random fantasy name (do NOT use {{user}}). Output [CHARACTER], [SPELLS], [INVENTORY], [ABILITIES], [XP], and [TIME] blocks. Include appropriate spells (using 'Cantrips:' for level 0 spells), items, and attributes consistent with Level ${level}.${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}`,
                 melee: `${levelPrefix} Generate a random Level ${level} D&D Melee Fighter (Fighter, Barbarian, or Paladin). Give them a random fantasy name (do NOT use {{user}}). Output [CHARACTER], [INVENTORY], [ABILITIES], [XP], and [TIME] blocks. Focus on high physical attributes, heavy armor, and signature weapons consistent with Level ${level}.${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}`,
                 rogue: `${levelPrefix} Generate a random Level ${level} D&D Rogue or Thief-style character. Give them a random fantasy name (do NOT use {{user}}). Output [CHARACTER], [INVENTORY], [ABILITIES], [XP], and [TIME] blocks. Focus on high Dexterity, stealth-related equipment (thieves' tools, daggers), and class features like Sneak Attack consistent with Level ${level}.${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}`,
                 professional: `${levelPrefix} Generate a random Level ${level} modern professional/specialist character (e.g. detective, agent, scientist, doctor, law enforcement, or investigator). Give them a realistic name (do NOT use {{user}}). Output [CHARACTER], [INVENTORY], [ABILITIES], [XP], and [TIME] blocks. Focus on specialized professional skills, modern gear, and attributes consistent with a Level ${level} specialist.${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}${REALISTIC_HINT}`,
                 survivor: `${levelPrefix} Generate a random Level ${level} survivor character (e.g. survivalist, soldier, athlete, or civilian). Give them a realistic name (do NOT use {{user}}). Output [CHARACTER], [INVENTORY], [ABILITIES], [XP], and [TIME] blocks. Focus on physical resilience, survival/scavenged gear, and attributes consistent with a Level ${level} survivor.${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}${REALISTIC_HINT}`,
-                scholar: `${levelPrefix} Generate a random Level ${level} intellectual/scholar character (e.g. occultist, inventor, academic, hacker, or historian). Give them a realistic name (do NOT use {{user}}). Output [CHARACTER], [INVENTORY], [ABILITIES], [XP], and [TIME] blocks. Focus on intelligence, knowledge-based traits, research tools/gear, and attributes consistent with an intellectual Level ${level} scholar.${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}${REALISTIC_HINT}`
+                scholar: `${levelPrefix} Generate a random Level ${level} intellectual/scholar character (e.g. occultist, inventor, academic, hacker, or historian). Give them a realistic name (do NOT use {{user}}). Output [CHARACTER], [INVENTORY], [ABILITIES], [XP], and [TIME] blocks. Focus on intelligence, knowledge-based traits, research tools/gear, and attributes consistent with an intellectual Level ${level} scholar.${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}${REALISTIC_HINT}`,
+                scifi_pilot: `${levelPrefix} Generate a random Level ${level} sci-fi pilot/ace character (starfighter pilot, freighter captain, or mech pilot). Give them a realistic or sci-fi-style name (do NOT use {{user}}). Output [CHARACTER], [INVENTORY], [ABILITIES], [XP], and [TIME] blocks. Focus on piloting skills, a signature ship/vehicle callsign, and sidearm/survival gear consistent with Level ${level}.${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}${SCIFI_HINT}`,
+                scifi_engineer: `${levelPrefix} Generate a random Level ${level} sci-fi engineer/technician character (ship engineer, hacker, or robotics specialist). Give them a realistic or sci-fi-style name (do NOT use {{user}}). Output [CHARACTER], [INVENTORY], [ABILITIES], [XP], and [TIME] blocks. Focus on technical skills, tools/gadgets, and gear consistent with a Level ${level} engineer.${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}${SCIFI_HINT}`,
+                scifi_marine: `${levelPrefix} Generate a random Level ${level} sci-fi combat marine/soldier character. Give them a realistic or sci-fi-style name (do NOT use {{user}}). Output [CHARACTER], [INVENTORY], [ABILITIES], [XP], and [TIME] blocks. Focus on combat training, powered armor or tactical gear, and weaponry consistent with a Level ${level} marine.${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}${SCIFI_HINT}`,
+                horror_investigator: `${levelPrefix} Generate a random Level ${level} horror investigator character (detective, paranormal investigator, or journalist chasing the truth). Give them a realistic name (do NOT use {{user}}). Output [CHARACTER], [INVENTORY], [ABILITIES], [XP], and [TIME] blocks. Focus on investigative skills, mundane gear, and a fraying grip on sanity consistent with Level ${level}.${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}${HORROR_HINT}`,
+                horror_occultist: `${levelPrefix} Generate a random Level ${level} occultist character with forbidden knowledge (cultist-hunter, occult scholar, or dabbler in the unknown). Give them a realistic name (do NOT use {{user}}). Output [CHARACTER], [INVENTORY], [ABILITIES], [XP], and [TIME] blocks. Represent any ritual or occult knowledge as entries in [ABILITIES] rather than spells, consistent with Level ${level}.${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}${HORROR_HINT}`,
+                horror_survivor: `${levelPrefix} Generate a random Level ${level} horror survivor character (ordinary person thrust into a nightmare — final girl/guy archetype, small-town resident, or camp counselor). Give them a realistic name (do NOT use {{user}}). Output [CHARACTER], [INVENTORY], [ABILITIES], [XP], and [TIME] blocks. Focus on resourcefulness, improvised weapons/tools, and fragile but resilient stats consistent with Level ${level}.${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}${HORROR_HINT}`
             };
 
             // ── Custom archetype: freeform character based entirely on custom instructions ──
@@ -3312,38 +3440,11 @@ Gear:
         });
     }
 
-    // Time & Date format + Initial date/day (onboarding)
-    const onboardingTimeDdMmyyCb = el.querySelector('#rt_onboarding_time_ddmmyy');
-    if (onboardingTimeDdMmyyCb) {
-        onboardingTimeDdMmyyCb.addEventListener('change', () => {
-            const isChecked = !!onboardingTimeDdMmyyCb.checked;
-            syncSettingsAndUI(settings => {
-                settings.useDdMmYyFormat = isChecked;
-                if (isChecked && (settings.initialDate === "Day 1" || !settings.initialDate)) {
-                    settings.initialDate = "01/01/2026";
-                } else if (!isChecked && (settings.initialDate === "01/01/2026" || settings.initialDate === "01/01/26")) {
-                    settings.initialDate = "Day 1";
-                }
-                if (settings.routerModules?.npc) {
-                    settings.routerModules.npc.instruction = buildNpcInstruction(settings.npcMajorWords, settings.npcMinorWords, false);
-                }
-            });
-            syncOnboardingUI();
-        });
-    }
-    const onboardingInitialDateInput = el.querySelector('#rt_onboarding_initial_date_input');
+    // Time & Date format (Narrator Configuration widget) — segmented toggles are
+    // bound above via bindDateFormatSeg/bindClockFormatSeg for both onboarding widgets.
+    const onboardingInitialDateInput = /** @type {HTMLInputElement|null} */ (el.querySelector('#rt_onboarding_initial_date_input'));
     if (onboardingInitialDateInput) {
-        onboardingInitialDateInput.addEventListener('input', () => {
-            const val = onboardingInitialDateInput.value.trim();
-            getSettings().initialDate = val;
-            saveSettings();
-
-            // Sync character creator start date directly
-            const creatorStartDate = el.querySelector('#rt-onboarding-start-date');
-            if (creatorStartDate) {
-                creatorStartDate.value = val;
-            }
-        });
+        onboardingInitialDateInput.addEventListener('input', () => setInitialDateValue(onboardingInitialDateInput.value.trim(), onboardingInitialDateInput));
     }
 
     // Apply System Prompt button (onboarding) — same logic as settings panel "Update Main Sysprompt"
@@ -4551,7 +4652,7 @@ function createPanel() {
                             <p style="margin-top:4px;"><b>Max Active</b> caps how many entries can be active simultaneously (FIFO pruning keeps token cost predictable).</p>
 
                             <h4 style="margin-bottom: 5px;">📂 Campaign Records</h4>
-                            <p>All lorebooks created by the Agent for the current campaign are shown grouped by book. Click any folder to expand it; click any entry to read its full content. Books are automatically activated and deactivated based on the current chat — no manual action needed. This includes the <b>World Section</b> (stored in <code>{prefix}_World</code>) created by the World Progression engine, which houses off-screen progression reports.</p>
+                            <p>The Agent writes directly into SillyTavern's native Lorebook system, creating namespaced campaign books for the current story (e.g. <i>Eldoria_NPCs</i>, <i>Eldoria_Locations</i>, <i>Eldoria_Factions</i>). All books for the active campaign are shown here, grouped by type. Click any folder to expand it; click any entry to read its full content. Books are automatically activated and deactivated based on the current chat — no manual action needed. This includes the <b>World Section</b> (<code>{prefix}_World</code>) created by the World Progression engine, which houses off-screen progression reports.</p>
 
                             <h4 style="margin-bottom: 5px;">🧹 Cleanup & Compression</h4>
                             <p>To keep context sizes optimized, the framework uses a two-fold cleanup system:</p>
@@ -4570,10 +4671,8 @@ function createPanel() {
                             <h4 style="margin-bottom: 5px;">🕹️ Controls Reference</h4>
                             <ul style="padding-left: 20px; margin-top: 0;">
                                 <li><b>Main Lookback</b>: Messages the Agent scans during automatic post-generation runs.</li>
-                                <li><b>Max Tokens</b>: Caps the Agent's response length per turn.</li>
                                 <li><b>Max Turns</b>: Maximum ReAct loop iterations before the Agent is forced to finish (Advanced Mode).</li>
                                 <li><b>Max Active</b>: Maximum simultaneously active lore entries.</li>
-                                <li><b>Campaign Prefix</b>: Namespace for all lorebooks this Agent creates (e.g. <i>Eldoria</i> → <i>Eldoria_NPCs</i>, <i>Eldoria_Locations</i>…).</li>
                                 <li><b>Direct Command</b>: Runs a one-off agent pass with a custom instruction and its own lookback window — useful for targeted research or corrections.</li>
                             </ul>
                         </div>
@@ -9160,7 +9259,7 @@ function buildExistingFieldsContextForAi(settings) {
     BLOCK_ORDER.forEach(tag => {
         if (tag === 'QUESTS' && settings.syspromptModules?.quests === false) return;
         if (!settings.modules || settings.modules[tag] !== false) {
-            const modLower = tag.toLowerCase();
+            const modLower = tag === 'TIME' ? resolveTimePromptKey(settings) : tag.toLowerCase();
             const promptContent = (settings.stockPrompts && settings.stockPrompts[modLower])
                 ? settings.stockPrompts[modLower]
                 : DEFAULT_STOCK_PROMPTS[modLower] || '';
@@ -9747,7 +9846,7 @@ function openPromptEditor(blockTag, title, currentText, defaultText, onSave, pro
     };
 
     const editAiHandler = async () => {
-        const displayTag = blockTag === 'TIME' && modKey === 'time_24h' ? 'TIME (24h Format)' : blockTag;
+        const displayTag = blockTag === 'TIME' ? resolveTimePromptDisplayTag(modKey) : blockTag;
         const description = await promptForAiModuleEditDescription(`[${displayTag}]`);
         if (!description) return;
         try {
@@ -10037,12 +10136,7 @@ export function syncSettingsAndUI(updateFn) {
     // Custom Sysprompt
     const customSyspromptEl = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_tracker_custom_sysprompt'));
     if (customSyspromptEl) customSyspromptEl.checked = !!fresh.customSysprompt;
-    const timeDdMmyyCb = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_time_ddmmyy_toggle'));
-    if (timeDdMmyyCb) timeDdMmyyCb.checked = !!fresh.useDdMmYyFormat;
-    const syspromptTimeDdMmyyCb = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_sysprompt_mod_time_ddmmyy'));
-    if (syspromptTimeDdMmyyCb) syspromptTimeDdMmyyCb.checked = !!fresh.useDdMmYyFormat;
-    const onboardingTimeDdMmyyCb = /** @type {HTMLInputElement|null} */ (document.getElementById('rt_onboarding_time_ddmmyy'));
-    if (onboardingTimeDdMmyyCb) onboardingTimeDdMmyyCb.checked = !!fresh.useDdMmYyFormat;
+    syncTimeFormatSettingsUi(fresh);
     const narratorBlockEl = document.getElementById('rpg_narrator_config_block');
     if (narratorBlockEl) narratorBlockEl.style.display = !!fresh.customSysprompt ? 'none' : '';
 
@@ -10162,9 +10256,9 @@ function refreshOrderList() {
             if (isStock) {
                 let mod = tag.toLowerCase();
                 let displayTag = tag;
-                if (tag === 'TIME' && s.use24hTime) {
-                    mod = 'time_24h';
-                    displayTag = 'TIME (24h Format)';
+                if (tag === 'TIME') {
+                    mod = resolveTimePromptKey(s);
+                    displayTag = resolveTimePromptDisplayTag(mod);
                 }
 
                 if (!s.stockPrompts) s.stockPrompts = { ...DEFAULT_STOCK_PROMPTS };
@@ -10195,7 +10289,7 @@ function refreshOrderList() {
             resetBtn.innerHTML = '<i class="fa-solid fa-rotate-left"></i>';
             resetBtn.onclick = () => {
                 let mod = tag.toLowerCase();
-                if (tag === 'TIME' && s.use24hTime) mod = 'time_24h';
+                if (tag === 'TIME') mod = resolveTimePromptKey(s);
 
                 if (confirm(`Reset [${tag}] prompt to default? This will lose any custom changes.`)) {
                     if (!s.stockPrompts) s.stockPrompts = { ...DEFAULT_STOCK_PROMPTS };
@@ -10245,18 +10339,11 @@ function refreshOrderList() {
             pill.style.cssText = 'display:inline-flex; align-items:center; gap:4px; font-size:10px; opacity:0.8; cursor:pointer; user-select:none; margin-right:4px; white-space:nowrap;';
 
             const cb24h = document.createElement('input');
+            cb24h.id = 'rpg_time_24h_toggle';
             cb24h.type = 'checkbox';
             cb24h.checked = !!s.use24hTime;
             cb24h.style.cssText = 'margin:0; cursor:pointer;';
-            cb24h.onchange = () => {
-                getSettings().use24hTime = cb24h.checked;
-                saveSettings();
-                // Refresh any visible timing displays
-                if (typeof updateWorldProgressionLastFiredDisplayRef === 'function') {
-                    updateWorldProgressionLastFiredDisplayRef();
-                }
-                scheduleAutoApply();
-            };
+            cb24h.onchange = () => setUse24hTime(cb24h.checked);
 
             const lbl24h = document.createElement('span');
             lbl24h.textContent = '24h';
@@ -10274,24 +10361,7 @@ function refreshOrderList() {
             cbDate.type = 'checkbox';
             cbDate.checked = !!s.useDdMmYyFormat;
             cbDate.style.cssText = 'margin:0; cursor:pointer;';
-            cbDate.onchange = () => {
-                syncSettingsAndUI(fresh => {
-                    fresh.useDdMmYyFormat = cbDate.checked;
-                    if (cbDate.checked && (fresh.initialDate === "Day 1" || !fresh.initialDate)) {
-                        fresh.initialDate = "01/01/2026";
-                    } else if (!cbDate.checked && (fresh.initialDate === "01/01/2026" || fresh.initialDate === "01/01/26")) {
-                        fresh.initialDate = "Day 1";
-                    }
-                    if (fresh.routerModules?.npc) {
-                        fresh.routerModules.npc.instruction = buildNpcInstruction(fresh.npcMajorWords, fresh.npcMinorWords, false);
-                    }
-                });
-                if (typeof updateWorldProgressionLastFiredDisplayRef === 'function') {
-                    updateWorldProgressionLastFiredDisplayRef();
-                }
-                syncOnboardingUI();
-                scheduleAutoApply();
-            };
+            cbDate.onchange = () => setUseDdMmYyFormat(cbDate.checked);
 
             const lblDate = document.createElement('span');
             lblDate.textContent = 'DD/MM/YYYY';
@@ -11872,7 +11942,7 @@ function buildSysprompt(rawText) {
             BLOCK_ORDER.forEach(tag => {
                 if (tag === 'QUESTS' && settings.syspromptModules?.quests === false) return;
                 if (!settings.modules || settings.modules[tag] !== false) {
-                    const modLower = tag.toLowerCase();
+                    const modLower = tag === 'TIME' ? resolveTimePromptKey(settings) : tag.toLowerCase();
                     const promptContent = (settings.stockPrompts && settings.stockPrompts[modLower]) 
                         ? settings.stockPrompts[modLower] 
                         : DEFAULT_STOCK_PROMPTS[modLower] || '';
@@ -13438,23 +13508,7 @@ RULES:
             handleRelBarsChange($(this).prop('checked'));
         });
         $('#rpg_sysprompt_mod_time_ddmmyy').prop('checked', !!settings.useDdMmYyFormat).on('change', function () {
-            const isChecked = !!$(this).prop('checked');
-            syncSettingsAndUI(s => {
-                s.useDdMmYyFormat = isChecked;
-                if (isChecked && (s.initialDate === "Day 1" || !s.initialDate)) {
-                    s.initialDate = "01/01/2026";
-                } else if (!isChecked && (s.initialDate === "01/01/2026" || s.initialDate === "01/01/26")) {
-                    s.initialDate = "Day 1";
-                }
-                if (s.routerModules?.npc) {
-                    s.routerModules.npc.instruction = buildNpcInstruction(s.npcMajorWords, s.npcMinorWords, false);
-                }
-            });
-            if (typeof updateWorldProgressionLastFiredDisplayRef === 'function') {
-                updateWorldProgressionLastFiredDisplayRef();
-            }
-            syncOnboardingUI();
-            scheduleAutoApply();
+            setUseDdMmYyFormat(!!$(this).prop('checked'));
         });
         $('#rpg_tracker_npc_rel_toast').prop('checked', settings.npcRelationshipToast !== false).on('change', function () {
             settings.npcRelationshipToast = $(this).prop('checked');

@@ -2,6 +2,19 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [4.3.6] - 2026-07-05
+
+### Added
+- **Per-chat time/date settings**: 24h clock, Day vs DD/MM/YYYY calendar, and initial date anchor are saved per chat ID when chat linking is enabled.
+- **Onboarding layout**: Redesigned top config row with segmented Day/Date and 12h/24h toggles, Sci-Fi and Horror genre templates with matching archetype buttons, and section dividers (How It Works / Setup Guide).
+
+### Changed
+- **Time/date UI sync**: All time and date controls (onboarding, Modules & Order pills, Extension Settings) funnel through shared setters so they never show contradictory state.
+- **TIME module prompt editor**: Edit/Reset now picks the correct stock prompt variant (`time`, `time_24h`, `time_ddmmyy`, `time_ddmmyy_24h`) based on both clock and calendar toggles.
+- **Status footer placement**: `<end_of_output_footer>` moved immediately after `</combat>` in both sysprompt files for higher prompt attention.
+- **Onboarding copy**: Updated How It Works, Initial Setup (time/date step), and simplified model recommendations (MiMo 2.5 Pro GM, Gemini 3.1 Flash-Lite for tracker/agent).
+- **Lorebook Agent docs**: Removed obsolete Max Tokens control reference; Campaign Records now explains native Lorebook book creation instead of a separate Campaign Prefix control entry.
+
 ## [4.3.5] - 2026-07-05
 
 ### Added

@@ -1153,6 +1153,11 @@ export function saveChatState(chatId) {
         worldOpenaiKey: s.worldOpenaiKey || "",
         worldOpenaiModel: s.worldOpenaiModel || "",
 
+        // Per-chat time/date formatting (24h clock, DD/MM/YYYY vs Day N, initial anchor)
+        use24hTime: !!s.use24hTime,
+        useDdMmYyFormat: !!s.useDdMmYyFormat,
+        initialDate: s.initialDate || 'Day 1',
+
         // Preserve lorebook stack link — written by Link button and router, not by normal state saves
         campaignBooks: existing.campaignBooks || [],
     };

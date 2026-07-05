@@ -176,6 +176,31 @@ Current Time: HH:MM, DD/MM/YYYY
 'Last Rest' is ONLY triggered on Long Rest, NOT Short Rest (when Hit Dice, etc, are spent.) If the [TIME] delta between PREVIOUS STATE MEMO and your current update is only an hour, it is a Short Rest.`,
 };
 
+/** Stock-prompt key for [TIME] based on the active clock + calendar toggles. */
+export function resolveTimePromptKey(settings) {
+    if (settings.useDdMmYyFormat) {
+        return settings.use24hTime ? 'time_ddmmyy_24h' : 'time_ddmmyy';
+    }
+    return settings.use24hTime ? 'time_24h' : 'time';
+}
+
+/** Human-readable label for the prompt editor title bar. */
+export function resolveTimePromptDisplayTag(key) {
+    switch (key) {
+        case 'time_24h': return 'TIME (24h Format)';
+        case 'time_ddmmyy': return 'TIME (DD/MM/YYYY Format)';
+        case 'time_ddmmyy_24h': return 'TIME (24h + DD/MM/YYYY)';
+        default: return 'TIME';
+    }
+}
+
+/** Resolved [TIME] stock prompt text for the current format toggles. */
+export function getResolvedTimePrompt(settings) {
+    const key = resolveTimePromptKey(settings);
+    const promptsMap = settings.stockPrompts || DEFAULT_STOCK_PROMPTS;
+    return promptsMap[key] || DEFAULT_STOCK_PROMPTS[key] || DEFAULT_STOCK_PROMPTS.time;
+}
+
 
 export const QUESTS_NARRATOR = `When the player formally accepts a quest from an NPC, describe it clearly in the narrative and conclude with the tag [QUEST ACCEPTED]. State who gave the quest, where they are located, what the task entails, how many objectives there are (there should always be multiple — they should be obtainable immediate objectives and not long term goals), the difficulty (Very Easy to Very Hard), any time pressure, and what rewards were promised. Do NOT do this for rumors, casual requests, or tasks the player has not yet agreed to.
 
@@ -258,6 +283,13 @@ Legendary — World-threat    | HP 150–500+ | AC 19–22 | BAB +9 to +12
 These are BASE ranges. Scale UP or DOWN based on quest difficulty and narrative context.
 
 </combat>
+
+<end_of_output_footer>
+END OF EACH OUTPUT (required):
+*(Status: [HP]) | (XP: [current]/[next level]) | (Location: [Main, Sub, Sub-sub, etc])*
+*Level [X] | [HH:MM AM/PM], Day [X]*
+- IMPORTANT: The status footer MUST display ONLY {{user}}'s current HP, XP, level, and location. Never include status, HP, or names of party members/NPCs here.
+</end_of_output_footer>
 
 <homebrew_and_custom_classes>
 If a character or NPC possesses a non-standard, custom, or homebrew class (e.g., non-combatant archetypes like "Electronics Hobbyist" or "Mechanic"), do not scale their BAB using standard martial class tables. Instead, logically improvise their Base Attack Bonus (BAB) based strictly on thematic common sense:
@@ -396,13 +428,6 @@ The active context contains recent "World Progression" reports detailing backgro
 - Organic Intersection: If a report event mentions a passive entity or location matching {{user}}'s immediate surroundings or active inventory, let that event alter the local environment (e.g., increased patrol density, systemic panic, visible structural changes).
 - Asymmetric Knowledge Guardrail: Unless a hostile interception occurs, do NOT grant characters or {{user}} omniscient knowledge of these events. NPCs must not spontaneously discuss details they have no realistic way of knowing. Use the data strictly to dictate systemic consequences, hidden NPC positioning, and evolving motivations.
 </world_progression>
-
-<end_of_output_footer>
-END OF EACH OUTPUT (required):
-*(Status: [HP]) | (XP: [current]/[next level]) | (Location: [Main, Sub, Sub-sub, etc])*
-*Level [X] | [HH:MM AM/PM], Day [X]*
-- IMPORTANT: The status footer MUST display ONLY {{user}}'s current HP, XP, level, and location. Never include status, HP, or names of party members/NPCs here.
-</end_of_output_footer>
 
 <party_join_leave>
 When a character joins/leaves, explicitly state (Name joins/leaves the party).
@@ -584,6 +609,13 @@ These are BASE ranges. Scale UP or DOWN based on quest difficulty and narrative 
 NPC tiers are only a guideline; values may vary based on theme/archetype.
 </combat>
 
+<end_of_output_footer>
+END OF EACH OUTPUT (required):
+*(Status: [HP]) | (XP: [current]/[next level]) | (Location: [Main, Sub, Sub-sub, etc])*
+*Level [X] | [HH:MM AM/PM], Day [X]*
+- IMPORTANT: The status footer MUST display ONLY {{user}}'s current HP, XP, level, and location. Never include status, HP, or names of party members/NPCs here.
+</end_of_output_footer>
+
 <homebrew_and_custom_classes>
 If a character or NPC possesses a non-standard, custom, or homebrew class (e.g., non-combatant archetypes like "Electronics Hobbyist" or "Mechanic"), do not scale their BAB using standard martial class tables. Instead, logically improvise their Base Attack Bonus (BAB) based strictly on thematic common sense:
   - Pure non-combatants/tech assets: BAB scales slowly (+0 at early levels, maxing out around +2 or +3 at high levels).
@@ -729,13 +761,6 @@ The active context contains recent "World Progression" reports detailing backgro
 - Organic Intersection: If a report event mentions a passive entity or location matching {{user}}'s immediate surroundings or active inventory, let that event alter the local environment (e.g., increased patrol density, systemic panic, visible structural changes).
 - Asymmetric Knowledge Guardrail: Unless a hostile interception occurs, do NOT grant characters or {{user}} omniscient knowledge of these events. NPCs must not spontaneously discuss details they have no realistic way of knowing. Use the data strictly to dictate systemic consequences, hidden NPC positioning, and evolving motivations.
 </world_progression>
-
-<end_of_output_footer>
-END OF EACH OUTPUT (required):
-*(Status: [HP]) | (XP: [current]/[next level]) | (Location: [Main, Sub, Sub-sub, etc])*
-*Level [X] | [HH:MM AM/PM], Day [X]*
-- IMPORTANT: The status footer MUST display ONLY {{user}}'s current HP, XP, level, and location. Never include status, HP, or names of party members/NPCs here.
-</end_of_output_footer>
 
 <party_join_leave>
 When a character joins/leaves, explicitly state (Name joins/leaves the party).

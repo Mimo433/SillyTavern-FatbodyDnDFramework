@@ -10,7 +10,7 @@
  */
 
 import { getSettings } from './state-manager.js';
-import { DEFAULT_STOCK_PROMPTS } from './constants.js';
+import { DEFAULT_STOCK_PROMPTS, resolveTimePromptKey } from './constants.js';
 
 // ── String utilities ──────────────────────────────────────────────────────────
 
@@ -1022,14 +1022,9 @@ export function buildModulesInstructionText(settings) {
 
             // ── Dynamic prompt swap for Time Module ─────────────────────────
             if (key === 'time') {
-                if (settings.useDdMmYyFormat) {
-                    if (settings.use24hTime) {
-                        p = promptsMap['time_ddmmyy_24h'] || DEFAULT_STOCK_PROMPTS.time_ddmmyy_24h;
-                    } else {
-                        p = promptsMap['time_ddmmyy'] || DEFAULT_STOCK_PROMPTS.time_ddmmyy;
-                    }
-                } else if (settings.use24hTime) {
-                    p = promptsMap['time_24h'] || DEFAULT_STOCK_PROMPTS.time_24h;
+                const timeKey = resolveTimePromptKey(settings);
+                if (timeKey !== 'time') {
+                    p = promptsMap[timeKey] || DEFAULT_STOCK_PROMPTS[timeKey];
                 }
             }
 

@@ -1189,96 +1189,114 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
 
     export function renderMemoAsCards(memo, filterTag, sectionPages) {
         if (!memo || !memo.trim()) {
+            const obSettings = getSettings();
+            const useDdMmYy = !!obSettings.useDdMmYyFormat;
+            const use24h = !!obSettings.use24hTime;
+            const onboardingGenre = obSettings.onboardingGenre || 'fantasy';
+            const startDateInputVal = obSettings.initialDate && obSettings.initialDate !== 'Day 1' ? obSettings.initialDate : '01/01/2026';
+
             return `<div class="rt-empty" style="text-align: left; align-items: flex-start; padding: 12px; gap: 10px; overflow-y: auto;">
-                <div style="text-align: center; width: 100%; margin-bottom: 4px; flex-shrink: 0;">
-                    <div class="rt-empty-icon">📜</div>
-                    <div style="font-size: 17px; font-weight: bold; color: var(--rt-text);">Multihog D&D Framework</div>
+                <div style="text-align: center; width: 100%; margin-bottom: 2px; flex-shrink: 0;">
+                    <div class="rt-empty-icon" style="font-size: 1.7em; margin-bottom: 0;">📜</div>
+                    <div style="font-size: 16px; font-weight: bold; color: var(--rt-text);">Multihog D&D Framework</div>
                 </div>
 
                 <!-- Configuration Grid -->
-                <div style="display: flex; flex-direction: column; gap: 6px; width: 100%; margin: 6px 0; flex-shrink: 0;">
-                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap;">
-                        <label style="display: flex; align-items: center; gap: 4px; font-size: 11px; opacity: 0.85; cursor: pointer; user-select: none;">
-                            <span style="font-weight: bold; font-style: italic;">Level:</span>
+                <div style="display: flex; flex-direction: column; gap: 8px; width: 100%; margin: 4px 0; flex-shrink: 0;">
+                    <div class="rt-onboarding-config-row">
+                        <div class="rt-onboarding-field">
+                            <span class="rt-onboarding-field-label">Level</span>
                             <select id="rt-starting-level" class="text_pole" style="width: auto; min-width: 60px; padding: 2px 4px; font-size: 11px; height: 22px; border-radius: 4px; background: var(--black70a);">
                                 ${[...Array(20).keys()].map(i => {
                                     const lvl = i + 1;
-                                    const isSel = lvl === parseInt(getSettings().onboardingLevel || '1') ? 'selected' : '';
+                                    const isSel = lvl === parseInt(obSettings.onboardingLevel || '1') ? 'selected' : '';
                                     return `<option value="${lvl}" ${isSel}>Level ${lvl}</option>`;
                                 }).join('')}
                             </select>
-                        </label>
-                        <label style="display: flex; align-items: center; gap: 4px; font-size: 11px; opacity: 0.85; cursor: pointer; user-select: none;">
-                            <span style="font-weight: bold; font-style: italic;">Genre:</span>
+                        </div>
+                        <div class="rt-onboarding-field">
+                            <span class="rt-onboarding-field-label">Genre</span>
                             <select id="rt-onboarding-genre" class="text_pole" style="width: auto; min-width: 90px; padding: 2px 4px; font-size: 11px; height: 22px; border-radius: 4px; background: var(--black70a);">
-                                <option value="fantasy" ${getSettings().onboardingGenre === 'fantasy' ? 'selected' : ''}>⚔️ Fantasy RPG</option>
-                                <option value="realistic" ${getSettings().onboardingGenre === 'realistic' ? 'selected' : ''}>🏙️ Modern / Realistic</option>
+                                <option value="fantasy" ${onboardingGenre === 'fantasy' ? 'selected' : ''}>⚔️ Fantasy RPG</option>
+                                <option value="realistic" ${onboardingGenre === 'realistic' ? 'selected' : ''}>🏙️ Modern / Realistic</option>
+                                <option value="scifi" ${onboardingGenre === 'scifi' ? 'selected' : ''}>🚀 Sci-Fi</option>
+                                <option value="horror" ${onboardingGenre === 'horror' ? 'selected' : ''}>👻 Horror</option>
                             </select>
-                        </label>
-                        <label style="display: flex; align-items: center; gap: 4px; font-size: 11px; opacity: 0.85; cursor: pointer; user-select: none;">
-                            <span style="font-weight: bold; font-style: italic;">Start:</span>
-                            <select id="rt-onboarding-date-type" class="text_pole" style="width: auto; min-width: 65px; padding: 2px 4px; font-size: 11px; height: 22px; border-radius: 4px; background: var(--black70a);">
-                                <option value="day" ${!getSettings().useDdMmYyFormat ? 'selected' : ''}>Day 1</option>
-                                <option value="date" ${getSettings().useDdMmYyFormat ? 'selected' : ''}>Date (DD/MM/YYYY)</option>
-                            </select>
-                            <input type="text" id="rt-onboarding-start-date" class="text_pole" value="${getSettings().initialDate && getSettings().initialDate !== 'Day 1' ? getSettings().initialDate : '01/01/2026'}" placeholder="01/01/2026" style="width: 75px; text-align: center; height: 22px; font-size: 11px; border-radius: 4px; background: var(--black70a); display: ${getSettings().useDdMmYyFormat ? 'inline-block' : 'none'};" />
-                        </label>
+                        </div>
+                        <div class="rt-onboarding-field">
+                            <span class="rt-onboarding-field-label">Time &amp; Date</span>
+                            <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                                <div class="rt-seg-toggle" id="rt-onboarding-date-seg" role="group" title="Choose the calendar format used for [TIME] tracking.">
+                                    <button type="button" data-value="day" class="${!useDdMmYy ? 'active' : ''}">Day 1</button>
+                                    <button type="button" data-value="date" class="${useDdMmYy ? 'active' : ''}">DD/MM/YYYY</button>
+                                </div>
+                                <input type="text" id="rt-onboarding-start-date" class="text_pole" value="${startDateInputVal}" placeholder="01/01/2026" style="width: 80px; text-align: center; height: 22px; font-size: 11px; border-radius: 4px; background: var(--black70a); display: ${useDdMmYy ? 'inline-block' : 'none'};" />
+                                <div class="rt-seg-toggle" id="rt-onboarding-clock-seg" role="group" title="Choose the clock format used for [TIME] tracking.">
+                                    <button type="button" data-value="12" class="${!use24h ? 'active' : ''}">12h</button>
+                                    <button type="button" data-value="24" class="${use24h ? 'active' : ''}">24h</button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <textarea id="rt-onboarding-custom-instructions" class="text_pole" placeholder="Custom setting/character instructions (e.g. Victorian London, space marine, gritty realism, cyberpunk decker...)" style="width: 100%; min-height: 40px; max-height: 120px; font-size: 11px; padding: 4px 6px; border-radius: 4px; background: var(--black70a); resize: vertical; margin-top: 2px;">${escapeHtml(getSettings().onboardingCustomInstructions || '')}</textarea>
+                    <textarea id="rt-onboarding-custom-instructions" class="text_pole" placeholder="Custom setting/character instructions (e.g. Victorian London, space marine, gritty realism, cyberpunk decker...)" style="width: 100%; min-height: 40px; max-height: 120px; font-size: 11px; padding: 4px 6px; border-radius: 4px; background: var(--black70a); resize: vertical; margin-top: 2px;">${escapeHtml(obSettings.onboardingCustomInstructions || '')}</textarea>
                 </div>
 
                 <!-- Archetype Buttons -->
-                <div class="rt-onboarding-buttons rt-fantasy-buttons" style="width: 100%; display: ${getSettings().onboardingGenre === 'realistic' ? 'none' : 'flex'}; justify-content: center; gap: 4px; margin: 4px 0; flex-shrink: 0;">
+                <div class="rt-onboarding-buttons rt-fantasy-buttons" style="width: 100%; display: ${onboardingGenre === 'fantasy' ? 'flex' : 'none'}; justify-content: center; gap: 4px; margin: 4px 0; flex-shrink: 0; flex-wrap: wrap;">
                     <button class="rt-random-char-btn" data-archetype="magic">✨ Magic</button>
                     <button class="rt-random-char-btn" data-archetype="melee">⚔️ Melee</button>
                     <button class="rt-random-char-btn" data-archetype="rogue">🗡️ Rogue</button>
                     <button class="rt-random-char-btn" data-archetype="persona">🎭 Persona</button>
                     <button class="rt-random-char-btn" data-archetype="custom">⚙️ Custom</button>
                 </div>
-                <div class="rt-onboarding-buttons rt-realistic-buttons" style="width: 100%; display: ${getSettings().onboardingGenre === 'realistic' ? 'flex' : 'none'}; justify-content: center; gap: 4px; margin: 4px 0; flex-shrink: 0;">
+                <div class="rt-onboarding-buttons rt-realistic-buttons" style="width: 100%; display: ${onboardingGenre === 'realistic' ? 'flex' : 'none'}; justify-content: center; gap: 4px; margin: 4px 0; flex-shrink: 0; flex-wrap: wrap;">
                     <button class="rt-random-char-btn" data-archetype="professional">💼 Professional</button>
                     <button class="rt-random-char-btn" data-archetype="survivor">🏃 Survivor</button>
                     <button class="rt-random-char-btn" data-archetype="scholar">🧠 Scholar</button>
                     <button class="rt-random-char-btn" data-archetype="persona">🎭 Persona</button>
                     <button class="rt-random-char-btn" data-archetype="custom">⚙️ Custom</button>
                 </div>
-
-                <div style="font-size: 13px; opacity: 0.9; display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; line-height: 1.4;">
-                    <div><b style="color: var(--rt-accent);">Auto-Tracking:</b> As you roleplay, the extension intelligently parses assistant responses. It detects losses of HP, new loot, or combat triggers, running background passes to update the state.</div>
-
-                    <div><b style="color: var(--rt-accent);">Prompt Injection:</b> The State Memo and RNG Queue are injected seamlessly into your outgoing prompt. It acts as the "source of truth," assuring the model accurately remembers HP, inventory, and mechanical outcomes.</div>
-
-                    <div><b style="color: var(--rt-accent);">Validation:</b> Use the Delta Log (δ) to verify changes. If the AI ever makes a mistake, step backwards using the Snapshot Navigation (←/→) to restore a clean state. A capable model like Gemini 3 Flash should almost never make a mistake, so you probably will not need the Delta Log often — but it is there when you want it.</div>
-
-                    <div><b style="color: var(--rt-accent);">Lorebook Agent &#x1F916;:</b> Open it from the robot button in the header. It autonomously manages your lorebook — creating, updating, activating, deactivating, and deleting entries as your story evolves. Click <b>?</b> inside the agent panel for full documentation.</div>
-
-                    <div><b style="color: var(--rt-accent);">World Progression 🌍:</b> Simulates off-screen world activity by generating reports of background events at regular in-world intervals (such as daily). You can seed the simulation with an optional <b>World Skeleton</b> to introduce undiscovered factions, locations, NPCs, and conflicts outside the narrative. It includes <b>Focus Randomization</b> to keep events varied, and <b>Backlog Consolidation</b> to periodically compress older reports and prevent token bloat. <i>Configure these options inside the <b>World Progression</b> section of the Extension Settings menu (accessible via SillyTavern's Extensions panel).</i></div>
+                <div class="rt-onboarding-buttons rt-scifi-buttons" style="width: 100%; display: ${onboardingGenre === 'scifi' ? 'flex' : 'none'}; justify-content: center; gap: 4px; margin: 4px 0; flex-shrink: 0; flex-wrap: wrap;">
+                    <button class="rt-random-char-btn" data-archetype="scifi_pilot">🚀 Pilot</button>
+                    <button class="rt-random-char-btn" data-archetype="scifi_engineer">🤖 Engineer</button>
+                    <button class="rt-random-char-btn" data-archetype="scifi_marine">🔫 Marine</button>
+                    <button class="rt-random-char-btn" data-archetype="persona">🎭 Persona</button>
+                    <button class="rt-random-char-btn" data-archetype="custom">⚙️ Custom</button>
+                </div>
+                <div class="rt-onboarding-buttons rt-horror-buttons" style="width: 100%; display: ${onboardingGenre === 'horror' ? 'flex' : 'none'}; justify-content: center; gap: 4px; margin: 4px 0; flex-shrink: 0; flex-wrap: wrap;">
+                    <button class="rt-random-char-btn" data-archetype="horror_investigator">🕵️ Investigator</button>
+                    <button class="rt-random-char-btn" data-archetype="horror_occultist">👻 Occultist</button>
+                    <button class="rt-random-char-btn" data-archetype="horror_survivor">🔪 Survivor</button>
+                    <button class="rt-random-char-btn" data-archetype="persona">🎭 Persona</button>
+                    <button class="rt-random-char-btn" data-archetype="custom">⚙️ Custom</button>
                 </div>
 
-                <div style="font-size: 13px; opacity: 0.9; margin-top: 12px; flex-shrink: 0; line-height: 1.4; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 12px;">
+                <div class="rt-onboarding-divider"><span>How It Works</span></div>
+
+                <div style="font-size: 13px; opacity: 0.9; display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; line-height: 1.4;">
+                    <div><b style="color: var(--rt-accent);">Auto-Tracking:</b> As you roleplay, the extension intelligently parses assistant responses using natural language. It detects losses of HP, new loot, or combat triggers, running background passes to update the state.</div>
+
+                    <div><b style="color: var(--rt-accent);">Prompt Injection:</b> The State Memo and RNG Queue are injected seamlessly into your outgoing prompt. It acts as the "source of truth," assuring the narrator/GM model accurately sees HP, inventory, and mechanical outcomes. Buffs/debuffs tick down automatically based on in-story real-time passed. It JUST WORKS™!</div>
+
+                    <div><b style="color: var(--rt-accent);">Lorebook Agent 🤖:</b> Open it from the robot button in the header and preferably detach it from the State Tracker UI. It autonomously manages your lorebook — creating, updating, activating, deactivating, and deleting entries as your story evolves. Click <b>?</b> inside the agent panel for full documentation.</div>
+
+                    <div><b style="color: var(--rt-accent);">World Progression 🌍:</b> Simulates off-screen world activity by generating reports of background events at regular in-world intervals (such as daily). You can seed the simulation with an optional World Skeleton to introduce undiscovered factions, locations, NPCs, and conflicts outside the narrative. It includes Focus Randomization to keep events varied, and Backlog Consolidation to periodically compress older reports and prevent token bloat. Configure these options inside the World Progression section of the Extension Settings menu (accessible via SillyTavern's Extensions panel).</div>
+                </div>
+
+                <div class="rt-onboarding-divider"><span>Setup Guide</span></div>
+
+                <div style="font-size: 13px; opacity: 0.9; flex-shrink: 0; line-height: 1.4; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 12px;">
                     <b style="color: var(--rt-accent); font-size: 14px;">Initial Setup:</b><br><br>
-                    1. Use the archetype buttons above to roll a new character, or <b>manually describe a character</b> by clicking 💬.<br><br>
+                    1. Set your starting level, genre, and time/date format (Day vs. calendar date, 12h vs. 24h) in the controls above, then use the archetype buttons to roll a new character, or <b>manually describe a character</b> by clicking 💬.<br><br>
                     2. Create a character card for your "narrator" (e.g. Game Master). <b>Leave the card fields empty</b>, as the framework handles all logic via the system prompt.<br><br>
                     3. Toggle the options below — the system prompt is <b>applied automatically</b> whenever you change a setting.<br><br>
-                    💡 <b>Model Recommendation:</b> I highly recommend using <b>Gemini 3.1 Flash Lite</b>. It is 100% reliable for both ReAct tool-use and standard parsing, and is extremely cheap. Set it up inside SillyTavern's Extension Settings drawer:
-                    <ul style="margin: 4px 0 0 16px; padding: 0;">
-                        <li><b>State Tracker:</b> <code>State Tracker Model</code> &rarr; <code>Connection Settings</code></li>
-                        <li><b>Lorebook Agent &amp; World Progression:</b> <code>Lorebook Agent</code> &rarr; <code>Connection Settings</code></li>
-                    </ul>
                     <div style="margin-top: 8px;">
                         🪙 <b>Token Optimization:</b> To reduce token costs, especially when in tool use mode, consider using a summarizer such as the <b>Summaryception</b> extension. Summarization combined with <b>Lorebook Agent</b> will guarantee the AI stays on track and keep token costs low.
                     </div>
                     <div style="margin-top: 12px;">
-                        🤖 <b>Recommended Models:</b>
-                        <ol style="margin: 6px 0 0 16px; padding: 0; display: flex; flex-direction: column; gap: 6px;">
-                            <li><b>Mistral Le Chaton Fat:</b> The new uncontested heavyweight champion.</li>
-                            <li><b>MiMo 2.5 Pro:</b> Great bang for the buck; high output quality.</li>
-                            <li><b>Gemini 3 Flash (or 3.5 Flash):</b> Good quality, costs quite low. Handles everything well and doesn't get bogged down thinking. Probably a good idea to put reasoning effort to medium to force them to think at least a little.</li>
-                            <li><b>DeepSeek 4 Pro:</b> Very good overall and very low cost but sometimes fails to obey formatting rules. May forget status footer sometimes.</li>
-                            <li><b>DeepSeek 3.2:</b> Extremely low cost and decent quality. Next to free.</li>
-                            <li><b>Kimi, GLM:</b> Good models but sometimes think too long, Kimi especially. Adjusting reasoning effort may help.</li>
-                            <li><b>Claude Sonnet+, GPT, Gemini Pro, etc.:</b> Obviously amazing but expensive.</li>
-                        </ol>
+                        🤖 <b>What Model to Use?</b><br><br>
+                        <b>MiMo 2.5 Pro:</b> Great bang for the buck; high output quality. This is what I use for the GM myself through OpenRouter.<br><br>
+                        For the State Tracker and Lorebook Agent, I use <b>Gemini 3.1 Flash-Lite</b>. It's very inexpensive and handles the job amazingly well. Gemini 3 Flash or 3.5 Flash are of course even better, but I don't think they're needed. Flash-Lite does the job.
                     </div>
                 </div>
 
@@ -1343,11 +1361,21 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 2px;">
                         <span style="font-size: 0.85em; font-weight: bold; opacity: 0.8;">Time & Date</span>
                     </div>
-                    <div style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; padding-left: 5px;">
-                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                            <input type="checkbox" id="rt_onboarding_time_ddmmyy" />
-                            <span>Use DD/MM/YYYY Format</span>
-                        </label>
+                    <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; padding-left: 5px;">
+                        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                            <span style="font-size: 0.8em; opacity: 0.75;">Calendar:</span>
+                            <div class="rt-seg-toggle" id="rt_onboarding_time_date_seg" role="group">
+                                <button type="button" data-value="day" class="${!useDdMmYy ? 'active' : ''}">Day 1</button>
+                                <button type="button" data-value="date" class="${useDdMmYy ? 'active' : ''}">DD/MM/YYYY</button>
+                            </div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                            <span style="font-size: 0.8em; opacity: 0.75;">Clock:</span>
+                            <div class="rt-seg-toggle" id="rt_onboarding_time_clock_seg" role="group">
+                                <button type="button" data-value="12" class="${!use24h ? 'active' : ''}">12h</button>
+                                <button type="button" data-value="24" class="${use24h ? 'active' : ''}">24h</button>
+                            </div>
+                        </div>
                         <div style="display: flex; align-items: center; gap: 8px; margin-top: 2px;">
                             <span id="rt_onboarding_initial_date_label" style="font-size: 0.8em; opacity: 0.75;">Initial Day:</span>
                             <input type="text" id="rt_onboarding_initial_date_input" placeholder="Day 1" style="width: 100px; background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.15); color: var(--rt-text, #eee); font-size: 0.85em; padding: 2px 6px; border-radius: 4px;" />
