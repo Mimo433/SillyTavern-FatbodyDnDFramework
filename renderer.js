@@ -1290,6 +1290,7 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                     1. Set your starting level, genre, and time/date format (Day vs. calendar date, 12h vs. 24h) in the controls above, then use the archetype buttons to roll a new character, or <b>manually describe a character</b> by clicking 💬.<br><br>
                     2. Create a character card for your "narrator" (e.g. Game Master). <b>Leave the card fields empty</b>, as the framework handles all logic via the system prompt.<br><br>
                     3. Toggle the options below — the system prompt is <b>applied automatically</b> whenever you change a setting.<br><br>
+                    4. Make sure your Persona in SillyTavern matches the character name in the State Tracker after character creation. You can also describe your character in Persona as normal in SillyTavern.<br><br>
                     <div style="margin-top: 8px;">
                         🪙 <b>Token Optimization:</b> To reduce token costs, especially when in tool use mode, consider using a summarizer such as the <b>Summaryception</b> extension. Summarization combined with <b>Lorebook Agent</b> will guarantee the AI stays on track and keep token costs low.
                     </div>

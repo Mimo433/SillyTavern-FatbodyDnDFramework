@@ -2,6 +2,14 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [4.3.7] - 2026-07-05
+
+### Added
+- **Onboarding Initial Setup step 4**: Reminder to match SillyTavern Persona name to the State Tracker character after creation.
+
+### Fixed
+- **Scenario Profiles stock modules**: Profiles now save and restore stock module prompt edits (all TIME variants), module enable/order, and per-module pagination settings. Chat-linked state uses the same snapshot helpers.
+
 ## [4.3.6] - 2026-07-05
 
 ### Added

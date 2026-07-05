@@ -1079,7 +1079,7 @@ export function saveChatState(chatId) {
         customPortraits: JSON.parse(JSON.stringify(s.customPortraits || {})),
         modules:      JSON.parse(JSON.stringify(s.modules)),
         blockOrder:   JSON.parse(JSON.stringify(s.blockOrder  || BLOCK_ORDER)),
-        stockPrompts: JSON.parse(JSON.stringify(s.stockPrompts || DEFAULT_STOCK_PROMPTS)),
+        stockPrompts: snapshotStockPromptsForProfile(s.stockPrompts),
         customFields: JSON.parse(JSON.stringify(s.customFields || [])),
         quests:       JSON.parse(JSON.stringify(s.quests || [])), // persist full array (incl. completed) for cross-session UI display
         historyIndex: s.historyIndex ?? -1,
@@ -1167,6 +1167,36 @@ export function saveChatState(chatId) {
 // ── Profile I/O ───────────────────────────────────────────────────────────────
 
 /**
+ * Deep-clones stock module prompts for profile/chat persistence, merging the
+ * live overrides on top of DEFAULT_STOCK_PROMPTS so every variant key
+ * (time_24h, time_ddmmyy, etc.) is captured even if only a subset was edited.
+ * @param {Record<string, string>|null|undefined} stockPrompts
+ * @returns {Record<string, string>}
+ */
+export function snapshotStockPromptsForProfile(stockPrompts) {
+    return {
+        ...JSON.parse(JSON.stringify(DEFAULT_STOCK_PROMPTS)),
+        ...JSON.parse(JSON.stringify(stockPrompts || {})),
+    };
+}
+
+/**
+ * Restores stock module prompts from a profile snapshot, filling any keys
+ * missing in older profiles from current defaults.
+ * @param {Record<string, string>|null|undefined} profileStockPrompts
+ * @returns {Record<string, string>}
+ */
+export function loadStockPromptsFromProfile(profileStockPrompts) {
+    if (!profileStockPrompts) {
+        return JSON.parse(JSON.stringify(DEFAULT_STOCK_PROMPTS));
+    }
+    return {
+        ...JSON.parse(JSON.stringify(DEFAULT_STOCK_PROMPTS)),
+        ...JSON.parse(JSON.stringify(profileStockPrompts)),
+    };
+}
+
+/**
  * Saves the current tracker state into a named profile slot.
  * @param {string} name
  */
@@ -1179,7 +1209,8 @@ export function saveProfile(name) {
         memoHistory: JSON.parse(JSON.stringify(s.memoHistory)),
         modules: JSON.parse(JSON.stringify(s.modules)),
         blockOrder: JSON.parse(JSON.stringify(s.blockOrder || BLOCK_ORDER)),
-        stockPrompts: JSON.parse(JSON.stringify(s.stockPrompts || DEFAULT_STOCK_PROMPTS)),
+        stockPrompts: snapshotStockPromptsForProfile(s.stockPrompts),
+        modulePageSizes: JSON.parse(JSON.stringify(s.modulePageSizes || {})),
         customFields: JSON.parse(JSON.stringify(s.customFields || [])),
         // quests are derived from currentMemo on load — not persisted separately
         lastDelta: s.lastDelta || '',
