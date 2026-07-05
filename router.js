@@ -1,7 +1,7 @@
 import { getSettings, getEffectiveRouterCampaignPrefix, persistWorldProgressionTimer, persistRouterLastRunWatermark, persistRouterLastRunTimestamp } from './state-manager.js';
 import { sendStateRequest, sendAgentTurn } from './llm-client.js';
 import { getRequestHeaders } from '../../../../script.js';
-import { extractCurrentTimeStr, cleanMessageContent, parseInWorldTime, formatInWorldTime, findNthUserMessageStartIdx, formatAgentChatLogFromIndex } from './memo-processor.js';
+import { extractCurrentTimeStr, cleanMessageContent, parseInWorldTime, formatInWorldTime, findNthUserMessageStartIdx, formatAgentChatLogFromIndex, sanitizeLorebookRecordContent } from './memo-processor.js';
 
 let _routerRunning = false;
 let _routerNormalRunCount = 0; // tracks completed normal (non-cleanup) passes for auto-cleanup interval
@@ -1474,6 +1474,7 @@ async function applyAction(action, allBooks = {}, currentTime = '', breadcrumb =
         if (book?.entries?.[uid]) {
             // Strip [ID:] stamp from anywhere in the delta (model sometimes echoes it)
             let delta = (up.content || '').replace(/\[ID:[^\]]+\]\n?/gi, '').trim();
+            delta = sanitizeLorebookRecordContent(delta);
             // Ensure each [Day X,...] or [DD/MM/YY,...] timestamp begins on its own line
             delta = delta.replace(/(.)\s+(\[(?:Day\s+\d+|\d{1,2}\/\d{1,2}\/\d+))/gi, '$1\n$2');
             // Append delta to the existing chronicle
@@ -1639,9 +1640,7 @@ async function applyAction(action, allBooks = {}, currentTime = '', breadcrumb =
             }
             rec.keys = [];
         } else {
-            if (timePrefix && !TIMESTAMP_REGEX.test(rec.content)) {
-                rec.content = timePrefix + rec.content;
-            }
+            rec.content = sanitizeLorebookRecordContent(rec.content || '');
             // Add location hierarchy keywords (plain fragments, no 'In:' prefix)
             // Matches status footer tokens for native ST keyword triggering.
             {

@@ -88,6 +88,24 @@ export function escapeHtml(str) {
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+/**
+ * Strips bare timestamp-only lines and a leading timestamp immediately before [CORE].
+ * Used when saving or displaying lorebook record content.
+ * @param {string} content
+ * @returns {string}
+ */
+export function sanitizeLorebookRecordContent(content) {
+    if (!content) return '';
+    let s = content.trim();
+    s = s.replace(/^\s*\[[^\]]+\]\s*(?=\[CORE\])/i, '');
+    s = s.split('\n')
+        .filter(line => !/^\[[^\]]+\]\s*$/.test(line.trim()))
+        .join('\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+    return s;
+}
+
 /** Wraps parenthetical groups in a highlight span. */
 export function highlightParens(text) {
     return text.replace(/\(([^)]+)\)/g, '<span class="rt-paren-highlight">($1)</span>');
