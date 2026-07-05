@@ -6090,6 +6090,7 @@ function createPanel() {
                                     stale: !!isDirty,
                                     dirty: dirtySnap || null,
                                 });
+                                entryBody.classList.add('rt-npc-card-entry');
                                 entryBody.style.display = 'none';
                                 entryBody.style.marginTop = '6px';
                                 entryBody.style.borderTop = '1px solid rgba(212, 169, 64, 0.1)';

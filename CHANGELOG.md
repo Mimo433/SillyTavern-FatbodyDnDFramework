@@ -2,6 +2,11 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [4.3.8] - 2026-07-05
+
+### Fixed
+- **NPC card expand layout**: Expanded lore entries now stack below the portrait/header row instead of overlapping status badges and relationship bars when NPC portraits are enabled.
+
 ## [4.3.7] - 2026-07-05
 
 ### Added
