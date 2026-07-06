@@ -2,7 +2,7 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
-## [4.5.1] - 2026-07-06
+## [4.5.2] - 2026-07-06
 
 ### Fixed
 - **System Prompt Injection Safeguards**: 
