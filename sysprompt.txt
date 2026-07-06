@@ -72,7 +72,7 @@ These are BASE ranges. Scale UP or DOWN based on quest difficulty and narrative 
 </combat>
 
 <end_of_output_footer>
-END OF EACH OUTPUT (required):
+END OF EACH OUTPUT (always required, even after tool chains!):
 *(Status: [HP]) | (XP: [current]/[next level]) | (Location: [Main, Sub, Sub-sub, etc])*
 *Level [X] | [HH:MM AM/PM], Day [X]*
 - IMPORTANT: The status footer MUST display ONLY {{user}}'s current HP, XP, level, and location. Never include status, HP, or names of party members/NPCs here.
