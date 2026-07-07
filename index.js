@@ -3755,6 +3755,13 @@ function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRefresh =
             const levelSelectEl = el.querySelector('#rt-starting-level');
             const level = parseInt(String(levelSelectEl?.value ?? getSettings().onboardingLevel ?? 1), 10) || 1;
             getSettings().onboardingLevel = level;
+
+            // char_roll just opens a UI panel — no need to persist or trigger I/O
+            if (archetype === 'char_roll') {
+                showCharacterRollPanel(el);
+                return;
+            }
+
             saveSettings();
             // Time/date format and initial date are already the single source of truth
             // (kept in sync by setUseDdMmYyFormat/setUseDate24hTime/setInitialDateValue) —
@@ -3878,12 +3885,6 @@ Gear:
                 await sendDirectPrompt(personaPrompt);
                 return;
             }
-            // ── char_roll archetype: opens the inline Character Roll panel ──
-            if (archetype === 'char_roll') {
-                showCharacterRollPanel(el);
-                return;
-            }
-
 
             el.querySelectorAll('.rt-random-char-btn').forEach(b => b.disabled = true);
             btn.textContent = labels[archetype] || '🎲 Rolling...';
