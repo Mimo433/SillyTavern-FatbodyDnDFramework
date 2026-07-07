@@ -2747,7 +2747,7 @@ async function handleCharRollGenerate(el, panel) {
     const ctx2 = SillyTavern.getContext();
     const charId = ctx2.characterId;
     const card = charId !== undefined ? ctx2.characters?.[charId] : null;
-    const cardSnippet = card ? `\nActive Card: ${(card.name || '')} — ${(card.description || '').substring(0, 1000)}` : '';
+    const cardSnippet = card ? `\nActive Card: ${(card.name || '')} — ${(card.description || '')}` : '';
 
     let classLine = '';
     if (isStoryFitting) {
@@ -2878,7 +2878,8 @@ Rules:
     const { chat } = SillyTavern.getContext();
     let chatLog = '';
     if (chat && chat.length > 0) {
-        const recentChat = chat.slice(-5);
+        const numMsgs = s.directPromptContext > 0 ? s.directPromptContext : 15;
+        const recentChat = chat.slice(-numMsgs);
         chatLog = `## NARRATIVE HISTORY (Last ${recentChat.length} messages)\n` +
             recentChat.map(m => {
                 const name = m.is_user ? 'Player' : (m.name || 'Narrator');
@@ -2886,7 +2887,7 @@ Rules:
             }).join('\n\n');
     }
 
-    const userPrompt = `CHARACTER CARD:\n${cleanMemo.substring(0, 3000)}\n\n${chatLog}\n\nWrite the persona description for ${charName || 'this character'}.\nIMPORTANT REMINDER: The total word count across all sections MUST be approximately ${wordCount} words!`;
+    const userPrompt = `CHARACTER CARD:\n${cleanMemo}\n\n${chatLog}\n\nWrite the persona description for ${charName || 'this character'}.\nIMPORTANT REMINDER: The total word count across all sections MUST be approximately ${wordCount} words!`;
     try {
         const result = await sendStateRequest(s, systemPrompt, userPrompt);
         return (result || '').trim() || null;
