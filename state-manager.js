@@ -475,6 +475,8 @@ export function getSettings() {
         onboardingGenre: "fantasy",
         onboardingLevel: 1,
         onboardingCustomInstructions: "",
+        /** Last Character Creator form values, saved when Generate Character is pressed. */
+        characterCreatorDraft: null,
         barColors: {},
         modulePageSizes: {},
         customTheme: null,

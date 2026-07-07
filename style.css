@@ -2316,6 +2316,12 @@ textarea.rt-cr-input {
     cursor: wait;
 }
 
+.rt-cr-reset-btn:hover {
+    opacity: 1 !important;
+    border-color: rgba(255, 120, 120, 0.55) !important;
+    color: #ffb4b4 !important;
+}
+
 
 .rt-rng-toggle-overlay {
     background: rgba(255, 255, 255, 0.05);

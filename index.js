@@ -7,7 +7,10 @@ import { renderSubFieldByRule, tryRenderMarker, renderCustomBlockLine, stripMemo
 import { unregisterLogQuestTool, checkQuestDeadlines, renderQuestsAsPlainText } from './quests.js';
 import { initializeDebugViewer, toggleDebugViewer } from './debug-viewer.js';
 import { runRouterPass, rollbackRouterPass, reapplyRouterPass, getLorebookManifest, deleteLorebookEntry, updateLorebookEntry, disableManagedEntries, isRouterRunning, stopRouterPass } from './router.js';
-import { getRequestHeaders } from '../../../../script.js';
+import { getRequestHeaders, default_user_avatar } from '../../../../script.js';
+import { initPersona, setUserAvatar, getUserAvatars, setPersonaDescription, user_avatar, persona_description_positions } from '../../../personas.js';
+import { findPersona } from '../../../utils.js';
+import { power_user } from '../../../power-user.js';
 import { fileToDataUrl, scaleImageTo512Square, applyPortraitData, generatePortraitPrompt, generateNpcPortraitPrompt, showPortraitPromptPopup, generatePortraitDirect, autoGeneratePartyPortraits, removeAllPortraits, checkAndTriggerAutoGenerations, autoGenerateEnemyPortraits, forceCheckAutoGenerations, resetAutoGenerationTracking } from './portraits.js';
 
 export const RENDERING_TAGS_LIBRARY = [
@@ -2622,6 +2625,120 @@ const _CR_CLASS_CONSTANTS = [
     ['✨ AI decides','__story__'],
 ];
 
+/** @returns {Record<string, string|number|boolean>} */
+function collectCharacterCreatorDraft(panel) {
+    const classSelect = /** @type {HTMLSelectElement|null} */ (panel.querySelector('#rt-cr-class'));
+    const wordsSelect = /** @type {HTMLSelectElement|null} */ (panel.querySelector('#rt-cr-persona-words'));
+    const wordsCustom = /** @type {HTMLInputElement|null} */ (panel.querySelector('#rt-cr-persona-words-custom'));
+    return {
+        name: /** @type {HTMLInputElement} */ (panel.querySelector('#rt-cr-name'))?.value ?? '',
+        gender: /** @type {HTMLInputElement} */ (panel.querySelector('#rt-cr-gender'))?.value ?? '',
+        age: /** @type {HTMLInputElement} */ (panel.querySelector('#rt-cr-age'))?.value ?? '',
+        orientation: /** @type {HTMLInputElement} */ (panel.querySelector('#rt-cr-orientation'))?.value ?? '',
+        species: /** @type {HTMLInputElement} */ (panel.querySelector('#rt-cr-species'))?.value ?? '',
+        ethnicity: /** @type {HTMLInputElement} */ (panel.querySelector('#rt-cr-ethnicity'))?.value ?? '',
+        genre: /** @type {HTMLSelectElement} */ (panel.querySelector('#rt-cr-genre'))?.value ?? '',
+        level: /** @type {HTMLSelectElement} */ (panel.querySelector('#rt-cr-level'))?.value ?? '1',
+        class: classSelect?.value ?? '__story__',
+        classOther: /** @type {HTMLInputElement} */ (panel.querySelector('#rt-cr-class-other'))?.value ?? '',
+        traits: /** @type {HTMLTextAreaElement} */ (panel.querySelector('#rt-cr-traits'))?.value ?? '',
+        abilities: /** @type {HTMLTextAreaElement} */ (panel.querySelector('#rt-cr-abilities'))?.value ?? '',
+        background: /** @type {HTMLInputElement} */ (panel.querySelector('#rt-cr-background'))?.value ?? '',
+        appearance: /** @type {HTMLInputElement} */ (panel.querySelector('#rt-cr-appearance'))?.value ?? '',
+        additional: /** @type {HTMLTextAreaElement} */ (panel.querySelector('#rt-cr-additional'))?.value ?? '',
+        personaEnabled: !!/** @type {HTMLInputElement} */ (panel.querySelector('#rt-cr-persona-cb'))?.checked,
+        personaWords: wordsSelect?.value ?? '150',
+        personaWordsCustom: wordsCustom?.value ?? '',
+    };
+}
+
+/**
+ * @param {HTMLElement} panel
+ * @param {(genre: string) => void} populateClasses
+ */
+function applyCharacterCreatorDraft(panel, draft, populateClasses) {
+    if (!draft) return;
+    const setVal = (sel, val) => { const el = panel.querySelector(sel); if (el) el.value = val ?? ''; };
+    setVal('#rt-cr-name', draft.name);
+    setVal('#rt-cr-gender', draft.gender);
+    setVal('#rt-cr-age', draft.age);
+    setVal('#rt-cr-orientation', draft.orientation);
+    setVal('#rt-cr-species', draft.species);
+    setVal('#rt-cr-ethnicity', draft.ethnicity);
+    setVal('#rt-cr-genre', draft.genre ?? '');
+    setVal('#rt-cr-level', String(draft.level ?? 1));
+    populateClasses(draft.genre ?? '');
+    const classSelect = /** @type {HTMLSelectElement|null} */ (panel.querySelector('#rt-cr-class'));
+    const classOther = /** @type {HTMLInputElement|null} */ (panel.querySelector('#rt-cr-class-other'));
+    if (classSelect) {
+        const classVal = draft.class ?? '__story__';
+        if ([...classSelect.options].some(o => o.value === classVal)) {
+            classSelect.value = classVal;
+        } else {
+            classSelect.value = '__story__';
+        }
+    }
+    if (classOther) {
+        classOther.value = draft.classOther ?? '';
+        classOther.style.display = classSelect?.value === '__other__' ? 'block' : 'none';
+    }
+    setVal('#rt-cr-traits', draft.traits);
+    setVal('#rt-cr-abilities', draft.abilities);
+    setVal('#rt-cr-background', draft.background);
+    setVal('#rt-cr-appearance', draft.appearance);
+    setVal('#rt-cr-additional', draft.additional);
+    const personaCb = /** @type {HTMLInputElement|null} */ (panel.querySelector('#rt-cr-persona-cb'));
+    if (personaCb) personaCb.checked = !!draft.personaEnabled;
+    const wordsSelect = /** @type {HTMLSelectElement|null} */ (panel.querySelector('#rt-cr-persona-words'));
+    const wordsCustom = /** @type {HTMLInputElement|null} */ (panel.querySelector('#rt-cr-persona-words-custom'));
+    if (wordsSelect) wordsSelect.value = draft.personaWords ?? '150';
+    if (wordsCustom) {
+        wordsCustom.value = draft.personaWordsCustom ?? '';
+        wordsCustom.style.display = wordsSelect?.value === 'other' ? 'inline-block' : 'none';
+    }
+}
+
+/** @param {HTMLElement} panel */
+function saveCharacterCreatorDraft(panel) {
+    getSettings().characterCreatorDraft = collectCharacterCreatorDraft(panel);
+    saveSettings();
+}
+
+/**
+ * @param {HTMLElement} panel
+ * @param {(genre: string) => void} populateClasses
+ */
+function resetCharacterCreatorFields(panel, populateClasses) {
+    const s = getSettings();
+    getSettings().characterCreatorDraft = null;
+    const setVal = (sel, val) => { const el = panel.querySelector(sel); if (el) el.value = val; };
+    setVal('#rt-cr-name', '');
+    setVal('#rt-cr-gender', '');
+    setVal('#rt-cr-age', '');
+    setVal('#rt-cr-orientation', '');
+    setVal('#rt-cr-species', '');
+    setVal('#rt-cr-ethnicity', '');
+    setVal('#rt-cr-genre', '');
+    setVal('#rt-cr-level', String(s.onboardingLevel || 1));
+    populateClasses('');
+    const classSelect = /** @type {HTMLSelectElement|null} */ (panel.querySelector('#rt-cr-class'));
+    if (classSelect) classSelect.value = '__story__';
+    const classOther = /** @type {HTMLInputElement|null} */ (panel.querySelector('#rt-cr-class-other'));
+    if (classOther) { classOther.value = ''; classOther.style.display = 'none'; }
+    setVal('#rt-cr-traits', '');
+    setVal('#rt-cr-abilities', '');
+    setVal('#rt-cr-background', '');
+    setVal('#rt-cr-appearance', '');
+    setVal('#rt-cr-additional', '');
+    const personaCb = /** @type {HTMLInputElement|null} */ (panel.querySelector('#rt-cr-persona-cb'));
+    if (personaCb) personaCb.checked = false;
+    const wordsSelect = /** @type {HTMLSelectElement|null} */ (panel.querySelector('#rt-cr-persona-words'));
+    const wordsCustom = /** @type {HTMLInputElement|null} */ (panel.querySelector('#rt-cr-persona-words-custom'));
+    if (wordsSelect) wordsSelect.value = '150';
+    if (wordsCustom) { wordsCustom.value = ''; wordsCustom.style.display = 'none'; }
+    saveSettings();
+}
+
 /**
  * Shows the inline Character Roll panel inside the .rt-empty onboarding area.
  * @param {HTMLElement} el - the .rt-empty element
@@ -2643,9 +2760,27 @@ function showCharacterRollPanel(el) {
     const classSelect = /** @type {HTMLSelectElement|null} */ (panel.querySelector('#rt-cr-class'));
     const classOther  = /** @type {HTMLInputElement|null}  */ (panel.querySelector('#rt-cr-class-other'));
 
-    // Default genre to '' (None — AI decides); do NOT carry over onboardingGenre here
-    if (genreSelect) genreSelect.value = '';
-    if (levelSelect) levelSelect.value = String(s.onboardingLevel || 1);
+    function populateClasses(genre) {
+        if (!classSelect) return;
+        // Empty genre (None) = only show Story-Fitting + Other; AI decides
+        const genreList = genre ? (_CR_CLASS_LISTS[genre] || _CR_CLASS_LISTS.fantasy) : [];
+        const list = [...genreList, ..._CR_CLASS_CONSTANTS];
+        classSelect.innerHTML = list.map(([label, val]) =>
+            `<option value="${escapeHtml(val)}">${escapeHtml(label)}</option>`
+        ).join('');
+        // Always default to Story-Fitting
+        classSelect.value = '__story__';
+    }
+    populateClasses('');
+
+    const draft = s.characterCreatorDraft;
+    if (draft) {
+        applyCharacterCreatorDraft(panel, draft, populateClasses);
+    } else {
+        // Default genre to '' (None — AI decides); do NOT carry over onboardingGenre here
+        if (genreSelect) genreSelect.value = '';
+        if (levelSelect) levelSelect.value = String(s.onboardingLevel || 1);
+    }
 
     const nameInput = /** @type {HTMLInputElement|null} */ (panel.querySelector('#rt-cr-name'));
     const randomNameBtn = panel.querySelector('#rt-cr-random-name');
@@ -2672,19 +2807,6 @@ function showCharacterRollPanel(el) {
             nameInput.dispatchEvent(new Event('input', { bubbles: true }));
         });
     }
-
-    function populateClasses(genre) {
-        if (!classSelect) return;
-        // Empty genre (None) = only show Story-Fitting + Other; AI decides
-        const genreList = genre ? (_CR_CLASS_LISTS[genre] || _CR_CLASS_LISTS.fantasy) : [];
-        const list = [...genreList, ..._CR_CLASS_CONSTANTS];
-        classSelect.innerHTML = list.map(([label, val]) =>
-            `<option value="${escapeHtml(val)}">${escapeHtml(label)}</option>`
-        ).join('');
-        // Always default to Story-Fitting
-        classSelect.value = '__story__';
-    }
-    populateClasses('');
 
     if (genreSelect && !genreSelect._crBound) {
         genreSelect._crBound = true;
@@ -2720,6 +2842,12 @@ function showCharacterRollPanel(el) {
                 g.style.display = g.classList.contains(`rt-${genre}-buttons`) ? 'flex' : 'none';
             });
         });
+    }
+
+    const resetBtn = panel.querySelector('#rt-cr-reset-btn');
+    if (resetBtn && !resetBtn._crBound) {
+        resetBtn._crBound = true;
+        resetBtn.addEventListener('click', () => resetCharacterCreatorFields(panel, populateClasses));
     }
 
     const genBtn = panel.querySelector('#rt-cr-generate-btn');
@@ -2763,6 +2891,8 @@ function extractCharNameFromMemo(memo) {
  * and optionally triggers persona creation.
  */
 async function handleCharRollGenerate(el, panel) {
+
+    saveCharacterCreatorDraft(panel);
 
     const s = getSettings();
     const nameVal        = /** @type {HTMLInputElement}   */ (panel.querySelector('#rt-cr-name'))?.value.trim()        || '';
@@ -2945,6 +3075,73 @@ Rules:
 }
 
 /**
+ * Uploads a default avatar image for a newly created persona.
+ * @param {string} url
+ * @param {string} avatarId
+ */
+async function uploadDefaultPersonaAvatar(url, avatarId) {
+    const fetchResult = await fetch(url);
+    const blob = await fetchResult.blob();
+    const file = new File([blob], 'avatar.png', { type: 'image/png' });
+    const formData = new FormData();
+    formData.append('avatar', file);
+    formData.append('overwrite_name', avatarId);
+
+    const response = await fetch('/api/avatars/upload', {
+        method: 'POST',
+        headers: getRequestHeaders({ omitContentType: true }),
+        cache: 'no-cache',
+        body: formData,
+    });
+    if (!response.ok) {
+        throw new Error(`Failed to upload persona avatar: ${response.statusText}`);
+    }
+    const data = await response.json();
+    await getUserAvatars(true, data?.path || avatarId);
+}
+
+/**
+ * Creates or updates a real SillyTavern persona and selects it.
+ * @param {string} name
+ * @param {string} description
+ * @returns {Promise<string>} avatar id
+ */
+async function injectAsSillyTavernPersona(name, description) {
+    const trimmedName = name.trim() || 'My Character';
+    const existing = findPersona({ name: trimmedName, preferCurrentPersona: false, quiet: true });
+
+    let avatarId;
+    if (existing) {
+        avatarId = existing.avatar;
+        if (!power_user.persona_descriptions[avatarId]) {
+            power_user.persona_descriptions[avatarId] = {
+                description: '',
+                position: persona_description_positions.IN_PROMPT,
+                depth: 4,
+                role: 0,
+                lorebook: '',
+                connections: [],
+                title: '',
+            };
+        }
+        power_user.persona_descriptions[avatarId].description = description;
+        if (user_avatar === avatarId) {
+            power_user.persona_description = description;
+        }
+    } else {
+        avatarId = `${Date.now()}-${trimmedName.replace(/[^a-zA-Z0-9]/g, '')}.png`;
+        await initPersona(avatarId, trimmedName, description, '');
+        await uploadDefaultPersonaAvatar(default_user_avatar, avatarId);
+    }
+
+    await setUserAvatar(avatarId);
+    setPersonaDescription();
+    SillyTavern.getContext().saveSettingsDebounced();
+    await getUserAvatars(true, avatarId);
+    return avatarId;
+}
+
+/**
  * Shows the persona confirm overlay — Accept to create ST persona, Regenerate for a new bio.
  */
 function showPersonaConfirmOverlay(bioText, charName, wordCount, extraHints = '') {
@@ -2966,7 +3163,7 @@ function showPersonaConfirmOverlay(bioText, charName, wordCount, extraHints = ''
         <small style="opacity:0.6;line-height:1.3;">Edit the bio below, then Accept to auto-create in SillyTavern, or copy it to paste manually.</small>
         <textarea id="rt-pco-bio" style="flex:1;min-height:180px;max-height:300px;resize:vertical;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:4px;padding:8px;color:inherit;font-size:0.88em;line-height:1.6;">${escapeHtml(bioText)}</textarea>
         <div style="display:flex;flex-direction:column;gap:12px;">
-            <button id="rt-pco-add-pc" title="Recommended: Links this persona exclusively to the current chat as a Player Character. It will automatically load whenever you open this chat." style="width:100%;padding:12px;background:rgba(0,180,255,0.25);border:2px solid #00b4ff;border-radius:6px;color:inherit;cursor:pointer;font-weight:bold;font-size:1.1em;box-shadow:0 4px 12px rgba(0,180,255,0.15);transition:all 0.2s ease;">👤 Add as Player Character</button>
+            <button id="rt-pco-add-pc" title="Recommended: Adds this character as the Player entry in the Lorebook Agent for this chat. It will automatically load whenever you open this chat." style="width:100%;padding:12px;background:rgba(0,180,255,0.25);border:2px solid #00b4ff;border-radius:6px;color:inherit;cursor:pointer;font-weight:bold;font-size:1.1em;box-shadow:0 4px 12px rgba(0,180,255,0.15);transition:all 0.2s ease;">👤 Add as Player into Lorebook Agent</button>
             
             <div style="display:flex;gap:8px;">
                 <button id="rt-pco-regen" style="flex:1;padding:8px;background:rgba(120,80,220,0.18);border:1px solid rgba(120,80,220,0.6);border-radius:4px;color:inherit;cursor:pointer;">🔄 Regenerate</button>
@@ -2974,7 +3171,7 @@ function showPersonaConfirmOverlay(bioText, charName, wordCount, extraHints = ''
             </div>
 
             <div style="text-align:center;margin-top:4px;">
-                <button id="rt-pco-accept" title="Not Recommended: Overwrites your current active global SillyTavern persona with this text. This will affect other chats using the same persona." style="background:none;border:none;color:var(--SmartThemeEmColor, rgba(255,255,255,0.5));text-decoration:underline;cursor:pointer;font-size:0.85em;padding:4px;">Inject as Current Persona (Native SillyTavern logic)</button>
+                <button id="rt-pco-accept" title="Creates a new SillyTavern persona (or updates an existing one with the same name), selects it, and optionally locks it to this chat." style="background:none;border:none;color:var(--SmartThemeEmColor, rgba(255,255,255,0.5));text-decoration:underline;cursor:pointer;font-size:0.85em;padding:4px;">Inject as Current Persona (Native SillyTavern logic)</button>
             </div>
         </div>`;
 
@@ -3006,81 +3203,16 @@ function showPersonaConfirmOverlay(bioText, charName, wordCount, extraHints = ''
         acceptBtn.disabled = true;
         acceptBtn.textContent = '⏳ Creating...';
 
-        let personaWritten = false;
-
         try {
-            // Step 1: Use /persona to create or select the persona in ST.
-            // This is the authoritative way — ST shows its own "Persona Changed" toast.
-            if (typeof ctx.executeSlashCommandsWithOptions === 'function') {
-                await ctx.executeSlashCommandsWithOptions(`/persona ${safeName}`).catch(() => {});
-                // Wait for ST to process the switch and update power_user.persona
-                await new Promise(r => setTimeout(r, 700));
-            }
+            await injectAsSillyTavernPersona(safeName, finalBio);
 
-            // Step 2: Now that /persona has run, power_user.persona points to the
-            // correct (newly created or selected) persona. Write the bio there.
-            try {
-                const pu = /** @type {any} */ (window.power_user ?? globalThis.power_user);
-                if (pu && typeof pu === 'object' && pu.personas) {
-                    const currentId = pu.persona;
-                    if (currentId !== undefined && currentId !== null && currentId !== '') {
-                        const slot = pu.personas[currentId];
-                        if (typeof slot === 'string') {
-                            // Older ST: personas[name] = descriptionString
-                            pu.personas[currentId] = finalBio;
-                        } else if (slot && typeof slot === 'object') {
-                            // Newer ST: personas[uuid] = { name, description, avatar }
-                            slot.description = finalBio;
-                        } else {
-                            // Slot doesn't exist yet — create it
-                            pu.personas[currentId] = { name: safeName, description: finalBio, avatar: 'none' };
-                        }
-                        // Also update the live persona_description field if ST uses it
-                        if ('persona_description' in pu) pu.persona_description = finalBio;
-                        personaWritten = true;
-                    }
-                }
-            } catch (_) {}
-
-            // Step 3: DOM textarea fallback (works if User Settings panel is open)
-            if (!personaWritten) {
-                try {
-                    const pdEl = /** @type {HTMLTextAreaElement|null} */ (
-                        document.querySelector('#persona_description, textarea[name="persona_description"]')
-                    );
-                    if (pdEl) {
-                        pdEl.value = finalBio;
-                        ['input', 'change', 'blur'].forEach(ev =>
-                            pdEl.dispatchEvent(new Event(ev, { bubbles: true }))
-                        );
-                        personaWritten = true;
-                    }
-                } catch (_) {}
-            }
-
-            // Step 4: Save settings so the description persists across reloads
-            try {
-                if (typeof ctx.saveSettingsDebounced === 'function') ctx.saveSettingsDebounced();
-                else if (typeof window.saveSettingsDebounced === 'function') window.saveSettingsDebounced();
-            } catch (_) {}
-
-            // Step 5: Attempt persona-lock (silently ignore if command doesn't exist)
             try {
                 if (typeof ctx.executeSlashCommandsWithOptions === 'function') {
                     await ctx.executeSlashCommandsWithOptions('/persona-lock').catch(() => {});
                 }
             } catch (_) {}
 
-            if (personaWritten) {
-                toastr['success'](`Persona "${safeName}" created with bio. Check User Settings → Personas to confirm.`, 'Character Creator');
-            } else {
-                // /persona ran (persona exists in ST) but we couldn't write the description
-                try { await navigator.clipboard.writeText(finalBio); } catch (_) {}
-                toastr['warning'](
-                    `Persona "${safeName}" selected in ST but bio could not be auto-saved. Bio copied to clipboard — paste it into the persona description manually.`,
-                    'Character Creator', { timeOut: 8000 }
-                );
-            }
+            toastr['success'](`Persona "${safeName}" saved and selected. Check User Settings → Personas to confirm.`, 'Character Creator');
         } catch (e) {
             try { await navigator.clipboard.writeText(finalBio); } catch (_) {}
             toastr['warning'](
@@ -3091,7 +3223,7 @@ function showPersonaConfirmOverlay(bioText, charName, wordCount, extraHints = ''
         overlay.remove();
      });
  
-     // ── Add as Player Character ──────────────────────────────────────────────
+     // ── Add as Player into Lorebook Agent ────────────────────────────────────
      overlay.querySelector('#rt-pco-add-pc').addEventListener('click', async () => {
          const finalBio = /** @type {HTMLTextAreaElement} */ (overlay.querySelector('#rt-pco-bio')).value.trim();
          const safeName = charName.replace(/['"\\]/g, '').trim() || 'My Character';
@@ -3113,7 +3245,7 @@ function showPersonaConfirmOverlay(bioText, charName, wordCount, extraHints = ''
                  await refreshAgentManifestNow();
              }
              
-             toastr['success'](`"${safeName}" added as Player Character.`, 'Character Creator');
+             toastr['success'](`"${safeName}" added as Player in Lorebook Agent.`, 'Character Creator');
          } else {
              toastr['error']('No active chat found to link the Player Character.', 'Character Creator');
          }

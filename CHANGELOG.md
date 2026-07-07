@@ -5,15 +5,17 @@ All notable changes to the **Multihog D&D Framework** will be documented in this
 ## [4.6.0] - 2026-07-07
 
 ### Added
-- **Character Roll System**: Introduced a brand new `🎲 Character Roll` button in the starting screen that streamlines character creation!
-  - Features intuitive inputs for Name, Gender, Orientation, Species, Ethnicity, Genre, Level, and Class.
+- **Character Creator**: Introduced a brand new `🎲 Character Creator` button in the starting screen that streamlines character creation!
+  - Features intuitive inputs for Name, Gender, Age, Orientation, Species, Ethnicity, Genre, Level, and Class.
   - Automatically seeds the initial framework state with rich, personalized stats and background tags.
+  - Remembers your last-used form values when you press **Generate Character**, with a **Reset** button to clear fields.
   - Added a **Create Persona** checkbox that automatically generates a rich background, appearance, habits, and personality for your SillyTavern persona! Features customizable word count targets (ranging from 100 up to 1000+ words).
-- **Player Character (PC) Integration**: The Lorebook Agent and State Tracker have been upgraded to officially track and render the Player Character.
-  - The framework now Seamlessly integrates PC profile cards directly into the UI, ensuring your character's active narrative state is always synced and accessible.
+- **Player in Lorebook Agent**: The Lorebook Agent and State Tracker have been upgraded to officially track and render the player entry.
+  - The framework now seamlessly integrates player profile cards directly into the UI, ensuring your character's active narrative state is always synced and accessible.
 
 ### Fixed
-- **PC & State Persistence**: Fixed a critical bug where the newly created Player Character (and the state memo) would disappear if SillyTavern was refreshed immediately after generation or after the framework automatically updated the memo via swipe/AI generation. The framework now forces a synchronous save when modifying chat state partitions, preventing SillyTavern's debounce timer from losing uncommitted data on page unload.
+- **PC & State Persistence**: Fixed a critical bug where the newly created player entry (and the state memo) would disappear if SillyTavern was refreshed immediately after generation or after the framework automatically updated the memo via swipe/AI generation. The framework now forces a synchronous save when modifying chat state partitions, preventing SillyTavern's debounce timer from losing uncommitted data on page unload.
+- **Persona Injection**: Fixed **Inject as Current Persona** so it creates or updates a real SillyTavern persona (via native APIs) instead of only filling the transient description textarea.
 
 
 ## [4.5.2] - 2026-07-06
