@@ -17,14 +17,14 @@ export const MODULE_NAME = 'rpg_tracker';
 /** @param {number} raw */
 function normalizeNpcRelationshipMax(raw) {
     const n = Number(raw);
-    if (!Number.isFinite(n)) return 100;
+    if (!Number.isFinite(n)) return 150;
     return Math.max(10, Math.min(10000, Math.round(n)));
 }
 
 /** Global default for new chats / chats without a saved per-chat value. */
 export function getNpcRelationshipMaxDefault(settings) {
     const s = settings || getSettings();
-    return normalizeNpcRelationshipMax(s.npcRelationshipMaxDefault ?? 100);
+    return normalizeNpcRelationshipMax(s.npcRelationshipMaxDefault ?? 150);
 }
 
 /** Effective max for the active chat (live `npcRelationshipMax`, else default). */
@@ -33,7 +33,7 @@ export function getNpcRelationshipMax(settings) {
     if (settings != null && Object.prototype.hasOwnProperty.call(settings, 'npcRelationshipMax') && settings.npcRelationshipMax != null) {
         return normalizeNpcRelationshipMax(settings.npcRelationshipMax);
     }
-    return normalizeNpcRelationshipMax(s.npcRelationshipMax ?? s.npcRelationshipMaxDefault ?? 100);
+    return normalizeNpcRelationshipMax(s.npcRelationshipMax ?? s.npcRelationshipMaxDefault ?? 150);
 }
 
 /** @param {number} value @param {number} [max] */
@@ -459,8 +459,8 @@ export function getSettings() {
         inventoryWorthMode: "hover",   // 'hover' = worth shown as tooltip only | 'display' = coin badge shown inline
         npcMajorWords: 25,
         npcMinorWords: 15,
-        npcRelationshipMaxDefault: 100,
-        npcRelationshipMax: 100,
+        npcRelationshipMaxDefault: 150,
+        npcRelationshipMax: 150,
         npcPortraits: true,
         npcRelationshipBars: true,
         npcRelationshipToast: true,
@@ -1166,7 +1166,7 @@ Example: [[FAC: Iron Syndicate | ...]]  NOT  [[FAC: Khelt :: Iron Syndicate | ..
     // NPC relationship max: global default + per-chat live value (v4.4.0)
     if (!s.settingsVersion || s.settingsVersion < '4.4.0') {
         if (s.npcRelationshipMaxDefault === undefined) {
-            s.npcRelationshipMaxDefault = s.npcRelationshipMax ?? 100;
+            s.npcRelationshipMaxDefault = s.npcRelationshipMax ?? 150;
         }
         if (s.npcRelationshipMax === undefined) {
             s.npcRelationshipMax = s.npcRelationshipMaxDefault;
