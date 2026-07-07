@@ -1426,6 +1426,15 @@ function onChatChanged(newChatId) {
     s.routerCampaignPrefix = prefix || '';
     syncRouterPrefixDisplays(prefix || '');
 
+    // ── INSTANT UI REFRESH ──
+    if (isActualChange) scheduleAgentManifestRefresh(true);
+
+    // ── INSTANT UI REFRESH ──
+    // Now that _currentChatId AND routerCampaignPrefix are both correct,
+    // fire an immediate manifest refresh. The PC card is already in chatStates
+    // memory so it renders in <1ms. force=true bypasses isAgentPanelVisible().
+
+
     // F5 / same-chat reload: init BOOTSTRAP already activated lorebooks and loadChatState ran.
     if (!isActualChange) {
         updateChatLinkUI();
@@ -1469,7 +1478,7 @@ function onChatChanged(newChatId) {
                     await ctx.executeSlashCommandsWithOptions(`/world state=off silent=true "${newWorldBookName}"`).catch(() => { });
                 }
                 // Re-render folder counts and active dots once the /world transitions complete
-                scheduleAgentManifestRefresh();
+                scheduleAgentManifestRefresh(true);
             })();
         }
     } else if (s.routerEnabled && newChatId) {
@@ -1564,9 +1573,9 @@ function onChatChanged(newChatId) {
         if (typeof renderRouterUI === 'function') {
             renderRouterUI();
         }
-        scheduleAgentManifestRefresh();
     }
 
+    scheduleAgentManifestRefresh();
     updateChatLinkUI();
 
     if (isActualChange) {
@@ -6048,37 +6057,7 @@ function createPanel() {
             if (!list) return;
 
             const gen = ++_manifestRenderGen;
-            list.innerHTML = '<div style="text-align: center; opacity: 0.5; font-size: 0.769em; padding: 10px;">Loading...</div>';
-
-            try {
-                const s = getSettings();
-                const prefix = (s.routerCampaignPrefix || '').trim();
-                // We will check !prefix and return AFTER rendering the Player Character,
-                // so that the PC tab renders even if no lorebooks exist.
-
-                const forceFullRefresh = source === 'manual-button';
-                const manifest = prefix ? await getLorebookManifest(!forceFullRefresh) : [];
-                if (gen !== _manifestRenderGen) return;
-
-                // Group entries by lorebook
-                /** @type {Map<string, typeof manifest>} */
-                const byBook = new Map();
-                for (const item of manifest) {
-                    if (item.book.endsWith('_Skeleton')) continue;
-                    if (!byBook.has(item.book)) byBook.set(item.book, []);
-                    byBook.get(item.book).push(item);
-                }
-
-                // Ensure NPC book is always represented so the user can add NPCs
-                if (prefix) {
-                    const npcBookName = `${prefix}_NPCs`;
-                    if (!byBook.has(npcBookName)) {
-                        byBook.set(npcBookName, []);
-                    }
-                }
-
-                list.innerHTML = '';
-
+            list.innerHTML = '';
                 // Helper: escape HTML to prevent XSS and rendering issues
                 const escapeHtml = (unsafe) => (unsafe || '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 
@@ -6188,6 +6167,13 @@ function createPanel() {
                     return html;
                 };
 
+
+
+            try {
+                const s = getSettings();
+                const prefix = (s.routerCampaignPrefix || '').trim();
+                // We will check !prefix and return AFTER rendering the Player Character,
+                // so that the PC tab renders even if no lorebooks exist.
                 // ── Player Character Rendering ──
                 if (_currentChatId && s.chatStates?.[_currentChatId]?.playerCharacter) {
                     const pc = s.chatStates[_currentChatId].playerCharacter;
@@ -6349,6 +6335,45 @@ function createPanel() {
 
                     list.appendChild(pcDiv);
                 }
+
+                const forceFullRefresh = source === 'manual-button';
+                const loadingDiv = document.createElement('div');
+                loadingDiv.id = 'rt-agent-manifest-loading';
+                loadingDiv.style.cssText = 'text-align: center; opacity: 0.5; font-size: 0.769em; padding: 10px;';
+                loadingDiv.innerHTML = 'Loading...';
+                list.appendChild(loadingDiv);
+
+                // ── DECOUPLED LOREBOOK RENDER ──
+                // Let the browser paint the PC card and "Loading..." immediately.
+                setTimeout(async () => {
+                    try {
+                        if (gen !== _manifestRenderGen) return;
+                        console.time('[RPG Tracker] getLorebookManifest');
+                        const manifest = prefix ? await getLorebookManifest(!forceFullRefresh) : [];
+                        console.timeEnd('[RPG Tracker] getLorebookManifest');
+                        
+                        if (gen !== _manifestRenderGen) return;
+                        const existingLoading = list.querySelector('#rt-agent-manifest-loading');
+                        if (existingLoading) existingLoading.remove();
+
+                // Group entries by lorebook
+                /** @type {Map<string, typeof manifest>} */
+                const byBook = new Map();
+                for (const item of manifest) {
+                    if (item.book.endsWith('_Skeleton')) continue;
+                    if (!byBook.has(item.book)) byBook.set(item.book, []);
+                    byBook.get(item.book).push(item);
+                }
+
+                // Ensure NPC book is always represented so the user can add NPCs
+                if (prefix) {
+                    const npcBookName = `${prefix}_NPCs`;
+                    if (!byBook.has(npcBookName)) {
+                        byBook.set(npcBookName, []);
+                    }
+                }
+
+                // list.innerHTML = ''; // DO NOT CLEAR! This wipes the instantly-rendered PC card!
 
                 if (!prefix) {
                     if (gen !== _manifestRenderGen) return;
@@ -7489,10 +7514,17 @@ function createPanel() {
                     folder.appendChild(folderBody);
                     list.appendChild(folder);
                 }
+                    } catch(e) {
+                        if (gen !== _manifestRenderGen) return;
+                        console.error('[RPG Tracker] getLorebookManifest decoupled failed:', e);
+                        const existingLoading = list.querySelector('#rt-agent-manifest-loading');
+                        if (existingLoading) existingLoading.innerHTML = '<span style="color:#ff5555;">Error loading manifest.</span>';
+                    }
+                }, 10);
             } catch (e) {
                 if (gen !== _manifestRenderGen) return;
                 console.error('[RPG Tracker] refreshManifest failed:', e);
-                list.innerHTML = '<div style="text-align: center; color: #ff5555; font-size: 0.769em; padding: 10px;">Error loading manifest.</div>';
+                list.innerHTML = '<div style="text-align: center; color: #ff5555; font-size: 0.769em; padding: 10px;">Error rendering Player Character.</div>';
             }
         };
 
