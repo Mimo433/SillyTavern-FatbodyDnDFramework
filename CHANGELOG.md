@@ -2,6 +2,11 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [4.6.2] - 2026-07-07
+
+### Fixed
+- **Full NPC Card**: Fixed the NPC detail popup failing to open due to missing `portraitSrc`, `hidePortrait`, and `ctx` bindings in `openNpcDetailPopup`.
+
 ## [4.6.0] - 2026-07-07
 
 ### Added

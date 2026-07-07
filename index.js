@@ -6943,6 +6943,9 @@ function createPanel() {
 
                         // Helper: Open the full NPC popup
                         openNpcDetailPopup = async (item, rel) => {
+                            const ctx = SillyTavern.getContext();
+                            if (!ctx.callGenericPopup) return;
+
                             // Friendship/Affection bars for popup (large version, with editable sliders)
                             const makeBigBar = (val, label, colorPos, colorNeg, icon, type) => {
                                 const relMax = getNpcRelationshipMax(s);
@@ -6974,6 +6977,10 @@ function createPanel() {
                                 ${makeBigBar(rel.friendship, 'Friendship', '#4ade80', '#ef4444', '🤝', 'friendship')}
                                 ${makeBigBar(rel.affection, 'Affection', '#f472b6', '#a855f7', '💗', 'affection')}
                             `;
+
+                            const normLabel = item.label.replace(/\s*\(.*?\)/g, '').trim();
+                            const portraitSrc = s.customPortraits?.[normLabel] || '';
+                            const hidePortrait = s.npcPortraits === false;
 
                             // Full-size portrait (512px stored, display at native res)
                             const portraitEl = portraitSrc
