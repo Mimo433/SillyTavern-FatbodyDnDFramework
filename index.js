@@ -2720,6 +2720,7 @@ async function handleCharRollGenerate(el, panel) {
     const s = getSettings();
     const nameVal        = /** @type {HTMLInputElement}   */ (panel.querySelector('#rt-cr-name'))?.value.trim()        || '';
     const genderVal      = /** @type {HTMLInputElement}   */ (panel.querySelector('#rt-cr-gender'))?.value.trim()      || '';
+    const ageVal         = /** @type {HTMLInputElement}   */ (panel.querySelector('#rt-cr-age'))?.value.trim()         || '';
     const orientationVal = /** @type {HTMLInputElement}   */ (panel.querySelector('#rt-cr-orientation'))?.value.trim() || '';
     const speciesVal     = /** @type {HTMLInputElement}   */ (panel.querySelector('#rt-cr-species'))?.value.trim()     || '';
     const ethnicityVal   = /** @type {HTMLInputElement}   */ (panel.querySelector('#rt-cr-ethnicity'))?.value.trim()   || '';
@@ -2758,10 +2759,11 @@ async function handleCharRollGenerate(el, panel) {
     }
 
     let extraHints = '';
-    if (nameVal || genderVal || orientationVal || speciesVal || ethnicityVal || traitsVal || backgroundVal || appearanceVal || additionalVal) {
+    if (nameVal || genderVal || ageVal || orientationVal || speciesVal || ethnicityVal || traitsVal || backgroundVal || appearanceVal || additionalVal) {
         extraHints = `\n\n--- PLAYER PREFERENCES & HINTS ---\n` +
                      (nameVal ? `Name: ${nameVal}\n` : '') +
                      (genderVal ? `Gender: ${genderVal}\n` : '') +
+                     (ageVal ? `Age: ${ageVal}\n` : '') +
                      (orientationVal ? `Orientation: ${orientationVal}\n` : '') +
                      (speciesVal ? `Species: ${speciesVal}\n` : '') +
                      (ethnicityVal ? `Ethnicity: ${ethnicityVal}\n` : '') +
@@ -2796,6 +2798,7 @@ Design a complete player character that fits naturally into the current scenario
 --- PLAYER PREFERENCES ---
 Name:         ${f(nameVal, '(invent a creative, setting-appropriate name — NEVER use "User", "Unknown", or any placeholder)')}
 Gender:       ${f(genderVal, '(your choice)')}
+Age:          ${f(ageVal, '(your choice)')}
 Orientation:  ${f(orientationVal, '(your choice)')}
 Species:      ${f(speciesVal, '(your choice)')}
 Ethnicity:    ${f(ethnicityVal, '(your choice)')}

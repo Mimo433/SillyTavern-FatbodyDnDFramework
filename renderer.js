@@ -1291,6 +1291,10 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                             <input id="rt-cr-gender" class="text_pole rt-cr-input" type="text" placeholder="e.g. Female, Male, Non-binary…" />
                         </div>
                         <div class="rt-cr-field">
+                            <label class="rt-cr-label">Age</label>
+                            <input id="rt-cr-age" class="text_pole rt-cr-input" type="text" placeholder="e.g. 21, young adult…" />
+                        </div>
+                        <div class="rt-cr-field">
                             <label class="rt-cr-label">Orientation</label>
                             <input id="rt-cr-orientation" class="text_pole rt-cr-input" type="text" placeholder="e.g. Straight, Bisexual, Gay…" />
                         </div>
