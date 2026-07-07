@@ -1289,7 +1289,10 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                     </div>
                     <div class="rt-cr-row">
                         <div class="rt-cr-field">
-                            <label class="rt-cr-label">Name</label>
+                            <label class="rt-cr-label" style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+                                <span>Name</span>
+                                <button id="rt-cr-random-name" class="interactable" style="background:none; border:none; color:var(--rt-accent); cursor:pointer; padding:0; margin:0; font-size:1.1em; line-height:1;" title="Roll a random name">🎲</button>
+                            </label>
                             <input id="rt-cr-name" class="text_pole rt-cr-input" type="text" placeholder="e.g. Lyra Ashford, Kael Vane…" />
                         </div>
                         <div class="rt-cr-field">

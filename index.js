@@ -2647,6 +2647,32 @@ function showCharacterRollPanel(el) {
     if (genreSelect) genreSelect.value = '';
     if (levelSelect) levelSelect.value = String(s.onboardingLevel || 1);
 
+    const nameInput = /** @type {HTMLInputElement|null} */ (panel.querySelector('#rt-cr-name'));
+    const randomNameBtn = panel.querySelector('#rt-cr-random-name');
+    if (randomNameBtn && nameInput && !randomNameBtn._bound) {
+        randomNameBtn._bound = true;
+        randomNameBtn.addEventListener('click', () => {
+            const firsts = [
+                "Aethelgard", "Elysande", "Ilaria", "Lyari", "Mirelia", "Nesta", "Seraphina", "Thalia", "Valerith", "Zephira",
+                "Aelrin", "Calandil", "Elessar", "Faelan", "Galdor", "Ithilior", "Lorien", "Sylas", "Thandor", "Zoran",
+                "Astrid", "Bregna", "Dagmar", "Freja", "Gunnora", "Hilda", "Kira", "Morgath", "Sigrid", "Yrsa",
+                "Bram", "Cormac", "Drogo", "Fenrir", "Garrick", "Haldor", "Kaelen", "Ragnar", "Thorgar", "Wulfric",
+                "Belial", "Carmilla", "Drusilla", "Lilith", "Malakor", "Morrigan", "Nox", "Sariel", "Vespera", "Xanthia",
+                "Alastor", "Caspian", "Darius", "Kaelen", "Malakai", "Nekros", "Soren", "Valerius", "Vane", "Zarek",
+                "Astraea", "Celestia", "Elora", "Isra", "Lunaria", "Nova", "Selene", "Solana", "Talia", "Vega",
+                "Aero", "Caelum", "Hyperion", "Orion", "Phobos", "Rigel", "Sirius", "Titan", "Zephyr", "Zion"
+            ];
+            const lasts = [
+                "Blackwood", "Crownguard", "Ironclad", "Kingsley", "Silverglade", "Stormborn", "Thorne", "Valerius", "Winterborne", "Zephyr",
+                "Barker", "Clay", "Fletcher", "Miller", "Potter", "Smith", "Tanner", "Weaver", "Wood", "Wright"
+            ];
+            const first = firsts[Math.floor(Math.random() * firsts.length)];
+            const last = lasts[Math.floor(Math.random() * lasts.length)];
+            nameInput.value = `${first} ${last}`;
+            nameInput.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+    }
+
     function populateClasses(genre) {
         if (!classSelect) return;
         // Empty genre (None) = only show Story-Fitting + Other; AI decides
