@@ -2757,6 +2757,19 @@ async function handleCharRollGenerate(el, panel) {
         classLine = `Class: (invent a class fitting the setting and era — do NOT use fantasy D&D class names in non-fantasy contexts)`;
     }
 
+    let extraHints = '';
+    if (nameVal || genderVal || orientationVal || speciesVal || ethnicityVal || traitsVal || backgroundVal || appearanceVal || additionalVal) {
+        extraHints = `\n\n--- PLAYER PREFERENCES & HINTS ---\n` +
+                     (nameVal ? `Name: ${nameVal}\n` : '') +
+                     (genderVal ? `Gender: ${genderVal}\n` : '') +
+                     (orientationVal ? `Orientation: ${orientationVal}\n` : '') +
+                     (speciesVal ? `Species: ${speciesVal}\n` : '') +
+                     (ethnicityVal ? `Ethnicity: ${ethnicityVal}\n` : '') +
+                     (traitsVal ? `Traits: ${traitsVal}\n` : '') +
+                     (appearanceVal ? `Appearance Hints: ${appearanceVal}\n` : '') +
+                     (backgroundVal ? `Background Hints: ${backgroundVal}\n` : '') +
+                     (additionalVal ? `Additional: ${additionalVal}\n` : '');
+    }
     const isCalendar = !!s.useDdMmYyFormat;
     const startDateVal = isCalendar
         ? (s.initialDate && s.initialDate !== 'Day 1' ? s.initialDate : '01/01/2026')
@@ -2826,35 +2839,12 @@ ${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}${settingHint}`;
 /**
  * Sends a focused request to generate a SillyTavern persona bio from the current memo.
  */
-async function generatePersonaBio(charName, wordCount) {
+async function generatePersonaBio(charName, wordCount, extraHints = '') {
     const s = getSettings();
     const rawMemo = s.currentMemo || '';
     const cleanMemo = rawMemo.replace(/<\/?memo>/gi, '').replace(/<[^>]+>/g, ' ').trim();
-    
-    // Grab user preferences from the DOM to inject into the prompt
-    const nameVal        = document.querySelector('#rt-cr-name')?.value.trim()        || '';
-    const genderVal      = document.querySelector('#rt-cr-gender')?.value.trim()      || '';
-    const orientationVal = document.querySelector('#rt-cr-orientation')?.value.trim() || '';
-    const speciesVal     = document.querySelector('#rt-cr-species')?.value.trim()     || '';
-    const ethnicityVal   = document.querySelector('#rt-cr-ethnicity')?.value.trim()   || '';
-    const traitsVal      = document.querySelector('#rt-cr-traits')?.value.trim()       || '';
-    const backgroundVal  = document.querySelector('#rt-cr-background')?.value.trim()  || '';
-    const appearanceVal  = document.querySelector('#rt-cr-appearance')?.value.trim()  || '';
 
-    let extraHints = '';
-    if (nameVal || genderVal || orientationVal || speciesVal || ethnicityVal || traitsVal || backgroundVal || appearanceVal) {
-        extraHints = `\n\n--- PLAYER PREFERENCES & HINTS ---\n` +
-                     (nameVal ? `Name: ${nameVal}\n` : '') +
-                     (genderVal ? `Gender: ${genderVal}\n` : '') +
-                     (orientationVal ? `Orientation: ${orientationVal}\n` : '') +
-                     (speciesVal ? `Species: ${speciesVal}\n` : '') +
-                     (ethnicityVal ? `Ethnicity: ${ethnicityVal}\n` : '') +
-                     (traitsVal ? `Traits: ${traitsVal}\n` : '') +
-                     (appearanceVal ? `Appearance Hints: ${appearanceVal}\n` : '') +
-                     (backgroundVal ? `Background Hints: ${backgroundVal}\n` : '');
-    }
-
-    const systemPrompt = `You are a persona writer for a roleplay system. Based on the character state card provided, write a persona description for ${charName || 'this character'} in third person.
+    const systemPrompt = `You are a persona writer for a roleplay system. Based on the character state card provided, write a persona description for ${charName || 'this character'} in third person.${extraHints}
 
 You MUST use this exact section format — each section on its own line with the label followed by a colon:
 
@@ -2876,7 +2866,7 @@ Rules:
 - Write in third person (he/she/they).
 - Do not include a preamble, title, or closing statement. Output ONLY the four sections.
 - CRITICAL: You MUST faithfully and explicitly incorporate ALL provided traits, background hints, species, gender, and appearance hints from the character card and the PLAYER PREFERENCES. Do not ignore user-provided details.`;
-    const userPrompt = `CHARACTER CARD:\n${cleanMemo.substring(0, 3000)}${extraHints}\n\nWrite the persona description for ${charName || 'this character'}.\nIMPORTANT REMINDER: The total word count across all sections MUST be approximately ${wordCount} words!`;
+    const userPrompt = `CHARACTER CARD:\n${cleanMemo.substring(0, 3000)}\n\nWrite the persona description for ${charName || 'this character'}.\nIMPORTANT REMINDER: The total word count across all sections MUST be approximately ${wordCount} words!`;
     try {
         const result = await sendStateRequest(s, systemPrompt, userPrompt);
         return (result || '').trim() || null;
@@ -2889,7 +2879,7 @@ Rules:
 /**
  * Shows the persona confirm overlay — Accept to create ST persona, Regenerate for a new bio.
  */
-function showPersonaConfirmOverlay(bioText, charName, wordCount) {
+function showPersonaConfirmOverlay(bioText, charName, wordCount, extraHints = '') {
     const existing = document.getElementById('rt-persona-confirm-overlay');
     if (existing) existing.remove();
 
@@ -3067,7 +3057,7 @@ function showPersonaConfirmOverlay(bioText, charName, wordCount) {
         const regenBtn = /** @type {HTMLButtonElement} */ (overlay.querySelector('#rt-pco-regen'));
         regenBtn.disabled = true;
         regenBtn.textContent = '⏳ Regenerating...';
-        const newBio = await generatePersonaBio(charName, wordCount);
+        const newBio = await generatePersonaBio(charName, wordCount, extraHints);
         if (newBio) {
             /** @type {HTMLTextAreaElement} */ (overlay.querySelector('#rt-pco-bio')).value = newBio;
         } else {
