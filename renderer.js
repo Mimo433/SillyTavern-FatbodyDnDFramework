@@ -880,11 +880,17 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                     // header (without an HP bar). This decouples portrait rendering from the
                     // strict "Name: X/Y HP" format requirement.
                     if (!hpMatch && (tag === 'CHARACTER' || tag === 'PARTY') && lastEntityIdx === -1) {
-                        // Extract name: if the line is "Name: something", strip the colon part for the name
-                        // Otherwise use the entire line as the display header.
+                        let entityLabel = line.trim();
+                        let restOfHeader = '';
                         const plainNameColonMatch = line.match(/^(.+?):\s*(.*)/);
-                        const entityLabel = plainNameColonMatch ? plainNameColonMatch[1].trim() : line.trim();
-                        const restOfHeader = plainNameColonMatch ? plainNameColonMatch[2].trim() : '';
+                        if (plainNameColonMatch) {
+                            if (plainNameColonMatch[1].trim().toLowerCase() === 'name') {
+                                entityLabel = plainNameColonMatch[2].trim();
+                            } else {
+                                entityLabel = plainNameColonMatch[1].trim();
+                                restOfHeader = plainNameColonMatch[2].trim();
+                            }
+                        }
 
                         currentEntity = entityLabel;
                         lastEntityIdx = results.length;
