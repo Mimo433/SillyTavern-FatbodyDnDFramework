@@ -2831,8 +2831,8 @@ ${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}${settingHint}`;
         const s2 = getSettings();
         const extractedName = extractCharNameFromMemo(s2.currentMemo);
         const charName = extractedName || nameVal || 'My Character';
-        const bio = await generatePersonaBio(charName, wordCount);
-        if (bio) showPersonaConfirmOverlay(bio, charName, wordCount);
+        const bio = await generatePersonaBio(charName, wordCount, extraHints);
+        if (bio) showPersonaConfirmOverlay(bio, charName, wordCount, extraHints);
     }
 }
 
