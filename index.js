@@ -13,6 +13,7 @@ import { loadPanelGeometry, loadDeltaHeight, makeDraggable, makeResizableTR, mak
 import { applyCustomTheme, openThemeWizard, refreshSavedThemesList, handleRecolor, undoThemeChange } from './theme-manager.js';
 import { showCharacterRollPanel } from './character-creator.js';
 import { handleCategorySettings, openCustomFieldEditor, openPromptEditor, refreshOrderList, exportModules, importModulesFromJson } from './ui-editors.js';
+import { applyCustomSysprompts, replaceGsSlotMarkers, openGameSystemWizard, openManageGameSystems, openUnlockSectionsMenu, openCustomSyspromptLibrary, resetSyspromptLibrary, runAiSectionBuilder, runManualSectionBuilder, syncAllNarratorTogglesForUnlockState } from './game-systems.js';
 
 export const RENDERING_TAGS_LIBRARY = [
     'Health: ((BAR)) 50/100',
@@ -50,7 +51,7 @@ export const RENDERING_TAGS_LIBRARY = [
 ];
 
 // Capture the folder name dynamically from the module URL so it works regardless of what the user names the folder
-const FOLDER_NAME = (function () {
+export const FOLDER_NAME = (function () {
     try {
         const urlObj = new URL(import.meta.url);
         const parts = urlObj.pathname.split('/');
@@ -1136,6 +1137,15 @@ function loadChatState(chatId) {
     s.worldOpenaiKey = saved.worldOpenaiKey || "";
     s.worldOpenaiModel = saved.worldOpenaiModel || "";
 
+    s.gameSystemWizardConnectionSource = saved.gameSystemWizardConnectionSource ?? "default";
+    s.gameSystemWizardConnectionProfileId = saved.gameSystemWizardConnectionProfileId || "";
+    s.gameSystemWizardCompletionPresetId = saved.gameSystemWizardCompletionPresetId || "";
+    s.gameSystemWizardOllamaUrl = saved.gameSystemWizardOllamaUrl || "http://localhost:11434";
+    s.gameSystemWizardOllamaModel = saved.gameSystemWizardOllamaModel || "";
+    s.gameSystemWizardOpenaiUrl = saved.gameSystemWizardOpenaiUrl || "";
+    s.gameSystemWizardOpenaiKey = saved.gameSystemWizardOpenaiKey || "";
+    s.gameSystemWizardOpenaiModel = saved.gameSystemWizardOpenaiModel || "";
+
     applyChatTimeFormatSettings(saved);
     applyChatNpcRelMaxSettings(saved);
 
@@ -1191,6 +1201,16 @@ function loadChatState(chatId) {
     $('#rpg_world_openai_model').val(s.worldOpenaiModel || '');
     $('#rpg_world_openai_model_manual').val(s.worldOpenaiModel || '');
 
+    $('#rpg_gs_wizard_connection_source').val(s.gameSystemWizardConnectionSource || 'default');
+    $('#rpg_gs_wizard_connection_profile').val(s.gameSystemWizardConnectionProfileId || '');
+    $('#rpg_gs_wizard_completion_preset').val(s.gameSystemWizardCompletionPresetId || '');
+    $('#rpg_gs_wizard_ollama_url').val(s.gameSystemWizardOllamaUrl || 'http://localhost:11434');
+    $('#rpg_gs_wizard_ollama_model').val(s.gameSystemWizardOllamaModel || '');
+    $('#rpg_gs_wizard_openai_url').val(s.gameSystemWizardOpenaiUrl || '');
+    $('#rpg_gs_wizard_openai_key').val(s.gameSystemWizardOpenaiKey || '');
+    $('#rpg_gs_wizard_openai_model').val(s.gameSystemWizardOpenaiModel || '');
+    $('#rpg_gs_wizard_openai_model_manual').val(s.gameSystemWizardOpenaiModel || '');
+
     // Toggle container visibilities
     $('#rpg_portrait_profile_group').toggle(s.portraitConnectionSource === 'profile');
     $('#rpg_portrait_ollama_group').toggle(s.portraitConnectionSource === 'ollama');
@@ -1198,6 +1218,9 @@ function loadChatState(chatId) {
     $('#rpg_world_profile_group').toggle(s.worldConnectionSource === 'profile');
     $('#rpg_world_ollama_group').toggle(s.worldConnectionSource === 'ollama');
     $('#rpg_world_openai_group').toggle(s.worldConnectionSource === 'openai');
+    $('#rpg_gs_wizard_profile_group').toggle(s.gameSystemWizardConnectionSource === 'profile');
+    $('#rpg_gs_wizard_ollama_group').toggle(s.gameSystemWizardConnectionSource === 'ollama');
+    $('#rpg_gs_wizard_openai_group').toggle(s.gameSystemWizardConnectionSource === 'openai');
 
     const wpPosSelect = $('#rpg_world_progression_injection_position');
     const wpPosition = s.worldProgressionInjectionPosition ?? 4;
@@ -2178,6 +2201,15 @@ function loadProfile(name) {
     s.worldOpenaiKey = p.worldOpenaiKey || "";
     s.worldOpenaiModel = p.worldOpenaiModel || "";
 
+    s.gameSystemWizardConnectionSource = p.gameSystemWizardConnectionSource ?? "default";
+    s.gameSystemWizardConnectionProfileId = p.gameSystemWizardConnectionProfileId || "";
+    s.gameSystemWizardCompletionPresetId = p.gameSystemWizardCompletionPresetId || "";
+    s.gameSystemWizardOllamaUrl = p.gameSystemWizardOllamaUrl || "http://localhost:11434";
+    s.gameSystemWizardOllamaModel = p.gameSystemWizardOllamaModel || "";
+    s.gameSystemWizardOpenaiUrl = p.gameSystemWizardOpenaiUrl || "";
+    s.gameSystemWizardOpenaiKey = p.gameSystemWizardOpenaiKey || "";
+    s.gameSystemWizardOpenaiModel = p.gameSystemWizardOpenaiModel || "";
+
     // Update settings UI inputs if rendered
     $('#rpg_world_progression_randomize_npcs').prop('checked', !!s.worldProgressionRandomizeNPCs);
     $('#rpg_world_progression_random_skeleton_npc_count').val(s.worldProgressionRandomSkeletonNPCCount ?? 2);
@@ -2225,6 +2257,16 @@ function loadProfile(name) {
     $('#rpg_world_openai_model').val(s.worldOpenaiModel || '');
     $('#rpg_world_openai_model_manual').val(s.worldOpenaiModel || '');
 
+    $('#rpg_gs_wizard_connection_source').val(s.gameSystemWizardConnectionSource || 'default');
+    $('#rpg_gs_wizard_connection_profile').val(s.gameSystemWizardConnectionProfileId || '');
+    $('#rpg_gs_wizard_completion_preset').val(s.gameSystemWizardCompletionPresetId || '');
+    $('#rpg_gs_wizard_ollama_url').val(s.gameSystemWizardOllamaUrl || 'http://localhost:11434');
+    $('#rpg_gs_wizard_ollama_model').val(s.gameSystemWizardOllamaModel || '');
+    $('#rpg_gs_wizard_openai_url').val(s.gameSystemWizardOpenaiUrl || '');
+    $('#rpg_gs_wizard_openai_key').val(s.gameSystemWizardOpenaiKey || '');
+    $('#rpg_gs_wizard_openai_model').val(s.gameSystemWizardOpenaiModel || '');
+    $('#rpg_gs_wizard_openai_model_manual').val(s.gameSystemWizardOpenaiModel || '');
+
     // Toggle container visibilities
     $('#rpg_portrait_profile_group').toggle(s.portraitConnectionSource === 'profile');
     $('#rpg_portrait_ollama_group').toggle(s.portraitConnectionSource === 'ollama');
@@ -2232,6 +2274,9 @@ function loadProfile(name) {
     $('#rpg_world_profile_group').toggle(s.worldConnectionSource === 'profile');
     $('#rpg_world_ollama_group').toggle(s.worldConnectionSource === 'ollama');
     $('#rpg_world_openai_group').toggle(s.worldConnectionSource === 'openai');
+    $('#rpg_gs_wizard_profile_group').toggle(s.gameSystemWizardConnectionSource === 'profile');
+    $('#rpg_gs_wizard_ollama_group').toggle(s.gameSystemWizardConnectionSource === 'ollama');
+    $('#rpg_gs_wizard_openai_group').toggle(s.gameSystemWizardConnectionSource === 'openai');
 
     // Toggle container visibilities
     if (s.worldProgressionRandomizeNPCs) $('#rpg_world_progression_random_npc_count_container').show();
@@ -8846,11 +8891,15 @@ const ROW_TYPE_OPTIONS = [
  * @param {string} rawText
  * @returns {string}
  */
-let _autoApplyTimer = null;
-async function autoApplySysprompt(force = false) {
-    const s = getSettings();
-    if (!force && (!s.enabled || s.customSysprompt)) return;
-
+/**
+ * Fetches the raw (unprocessed) base sysprompt text — either sysprompt.txt or
+ * sysprompt_legacy.txt depending on settings — falling back to the bundled
+ * RT_PROMPTS copy if the live file can't be fetched.
+ * @param {Record<string, any>} [settingsOverride]
+ * @returns {Promise<string>}
+ */
+export async function fetchBaseSyspromptRaw(settingsOverride = null) {
+    const s = settingsOverride || getSettings();
     const fileName = s.diceFunctionTool ? 'sysprompt.txt' : 'sysprompt_legacy.txt';
     let content;
     try {
@@ -8861,17 +8910,29 @@ async function autoApplySysprompt(force = false) {
             throw new Error(`Server returned ${response.status}`);
         }
     } catch (err) {
-        console.warn(`[Multihog Framework] autoApplySysprompt: could not fetch ${fileName}, using fallback:`, err);
+        console.warn(`[Multihog Framework] fetchBaseSyspromptRaw: could not fetch ${fileName}, using fallback:`, err);
         content = RT_PROMPTS[fileName];
     }
+    return content || '';
+}
+
+let _autoApplyTimer = null;
+export async function autoApplySysprompt(force = false) {
+    const s = getSettings();
+    if (!force && (!s.enabled || s.customSysprompt)) return;
+
+    const content = await fetchBaseSyspromptRaw(s);
     if (!content) return;
 
-    content = buildSysprompt(content);
+    const built = buildSysprompt(content);
     const mainTextarea = /** @type {HTMLTextAreaElement|null} */ (document.getElementById('main_prompt_quick_edit_textarea'));
     if (mainTextarea) {
-        mainTextarea.value = content;
+        mainTextarea.value = built;
         mainTextarea.dispatchEvent(new Event('blur', { bubbles: true }));
     }
+    // Re-layer any custom/unlocked Game Systems sections so they always survive a full rebuild
+    // triggered by an unrelated settings change (e.g. toggling 24h time).
+    await applyCustomSysprompts();
 }
 
 function scheduleAutoApply() {
@@ -8881,15 +8942,25 @@ function scheduleAutoApply() {
     _autoApplyTimer = setTimeout(() => { _autoApplyTimer = null; autoApplySysprompt(); }, 400);
 }
 
-function buildSysprompt(rawText) {
+export function buildSysprompt(rawText) {
     if (!rawText) return "";
     const s = getSettings();
     const mods = s.syspromptModules || {};
+    const unlockedBaseTags = new Set(
+        (s.customSyspromptLibrary || [])
+            .filter(p => p.origin === 'unlocked_base' && p.baseTag)
+            .map(p => p.baseTag)
+    );
 
     // 1. Tag-based module stripping and Quest mode swap
     let content = rawText
         .replace(/<(\w[\w_-]*)>([\s\S]*?)<\/\1>/g, (match, tag) => {
-            if (mods[tag] === false) return '';
+            if (mods[tag] === false) {
+                // If this tag has been "unlocked" for full customization in Game Systems,
+                // leave a slot marker so applyCustomSysprompts() can reinsert the user's
+                // override at this exact position instead of losing it or appending it elsewhere.
+                return unlockedBaseTags.has(tag) ? `<!--GS_SLOT:${tag}-->` : '';
+            }
             if (tag === 'relationship_tracking') {
                 if (!s.npcRelationshipBars) return '';
                 return `<relationship_tracking>\n${buildRelationshipTrackingSysprompt(getNpcRelationshipMax(s))}\n</relationship_tracking>`;
@@ -10089,6 +10160,126 @@ function tryBindConnectionProfileDropdown(selector, initialProfileId, onProfileI
             saveSettings();
         });
 
+        // ── Game System Wizard Connection Settings UI Bindings ──
+        const gsWizardSourceSelect = $('#rpg_gs_wizard_connection_source');
+        const gsWizardProfileGroup = $('#rpg_gs_wizard_profile_group');
+        const gsWizardProfileSelect = $('#rpg_gs_wizard_connection_profile');
+        const gsWizardOllamaGroup = $('#rpg_gs_wizard_ollama_group');
+        const gsWizardOpenaiGroup = $('#rpg_gs_wizard_openai_group');
+
+        function updateGsWizardConnectionPanels() {
+            const source = gsWizardSourceSelect.val();
+            gsWizardProfileGroup.toggle(source === 'profile');
+            gsWizardOllamaGroup.toggle(source === 'ollama');
+            gsWizardOpenaiGroup.toggle(source === 'openai');
+        }
+
+        gsWizardSourceSelect.val(settings.gameSystemWizardConnectionSource || 'default').on('change', function () {
+            settings.gameSystemWizardConnectionSource = $(this).val();
+            updateGsWizardConnectionPanels();
+            saveSettings();
+        });
+        updateGsWizardConnectionPanels();
+
+        $('#rpg_gs_wizard_ollama_url').val(settings.gameSystemWizardOllamaUrl || 'http://localhost:11434').on('input', function () {
+            settings.gameSystemWizardOllamaUrl = $(this).val();
+            saveSettings();
+        });
+        const gsWizardOllamaModelSelect = $('#rpg_gs_wizard_ollama_model');
+        gsWizardOllamaModelSelect.val(settings.gameSystemWizardOllamaModel).on('change', function () {
+            settings.gameSystemWizardOllamaModel = $(this).val();
+            saveSettings();
+        });
+        $('#rpg_gs_wizard_ollama_refresh').on('click', async function () {
+            const url = $('#rpg_gs_wizard_ollama_url').val();
+            if (!url) return toastr['info']("Please enter an Ollama URL first.");
+            try {
+                toastr['info']("Fetching Ollama models...");
+                const models = await fetchOllamaModels(url);
+                gsWizardOllamaModelSelect.empty().append('<option value="">-- Select Model --</option>');
+                models.forEach(m => {
+                    gsWizardOllamaModelSelect.append($('<option></option>').val(m.name).text(m.name));
+                });
+                gsWizardOllamaModelSelect.val(settings.gameSystemWizardOllamaModel);
+                toastr['success']("Ollama models updated.");
+            } catch (e) {
+                toastr['error']("Failed to fetch Ollama models.");
+            }
+        });
+
+        $('#rpg_gs_wizard_openai_url').val(settings.gameSystemWizardOpenaiUrl).on('input', function () {
+            settings.gameSystemWizardOpenaiUrl = $(this).val();
+            saveSettings();
+        });
+        $('#rpg_gs_wizard_openai_key').val(settings.gameSystemWizardOpenaiKey).on('input', function () {
+            settings.gameSystemWizardOpenaiKey = $(this).val();
+            saveSettings();
+        });
+        const gsWizardOpenaiModelSelect = $('#rpg_gs_wizard_openai_model');
+        const gsWizardOpenaiModelManual = $('#rpg_gs_wizard_openai_model_manual');
+        gsWizardOpenaiModelManual.val(settings.gameSystemWizardOpenaiModel || '');
+        gsWizardOpenaiModelSelect.on('change', function () {
+            const val = $(this).val();
+            if (val) {
+                gsWizardOpenaiModelManual.val('');
+                settings.gameSystemWizardOpenaiModel = String(val);
+            } else {
+                settings.gameSystemWizardOpenaiModel = String(gsWizardOpenaiModelManual.val() || '').trim() || '';
+            }
+            saveSettings();
+        });
+        gsWizardOpenaiModelManual.on('input', function () {
+            const manual = String($(this).val() || '').trim();
+            if (manual) gsWizardOpenaiModelSelect.val('');
+            settings.gameSystemWizardOpenaiModel = manual || String(gsWizardOpenaiModelSelect.val() || '') || '';
+            saveSettings();
+        });
+        $('#rpg_gs_wizard_openai_refresh').on('click', async function () {
+            const url = $('#rpg_gs_wizard_openai_url').val();
+            const key = $('#rpg_gs_wizard_openai_key').val();
+            if (!url) return toastr['info']("Please enter an Endpoint URL first.");
+            try {
+                toastr['info']("Fetching models...");
+                const models = await fetchOpenAIModels(url, key);
+                gsWizardOpenaiModelSelect.empty().append('<option value="">-- Select Model --</option>');
+                models.forEach(m => {
+                    const id = typeof m === 'string' ? m : (m.id || m.name);
+                    if (id) gsWizardOpenaiModelSelect.append($('<option></option>').val(id).text(id));
+                });
+                gsWizardOpenaiModelSelect.val(settings.gameSystemWizardOpenaiModel);
+                toastr['success']("Models updated.");
+            } catch (e) {
+                toastr['warning']("Cannot auto-detect models. Type manually.");
+            }
+        });
+
+        const gsWizardPresetSelect = $('#rpg_gs_wizard_completion_preset');
+        if (!tryBindConnectionProfileDropdown('#rpg_gs_wizard_connection_profile', settings.gameSystemWizardConnectionProfileId, (id) => {
+            settings.gameSystemWizardConnectionProfileId = id;
+            saveSettings();
+        })) {
+            getConnectionProfiles().then(profiles => {
+                gsWizardProfileSelect.empty().append('<option value="">-- No Profile Selected --</option>');
+                profiles.forEach(p => gsWizardProfileSelect.append($('<option></option>').val(p).text(p)));
+                gsWizardProfileSelect.val(settings.gameSystemWizardConnectionProfileId || "");
+            });
+            gsWizardProfileSelect.on('change', function () {
+                settings.gameSystemWizardConnectionProfileId = $(this).val();
+                saveSettings();
+            });
+        }
+
+        if (pm && typeof pm.getAllPresets === 'function') {
+            const presets = pm.getAllPresets();
+            gsWizardPresetSelect.empty().append('<option value="">-- Use Current Settings --</option>');
+            presets.forEach(p => gsWizardPresetSelect.append($('<option></option>').val(p).text(p)));
+            gsWizardPresetSelect.val(settings.gameSystemWizardCompletionPresetId || '');
+        }
+        gsWizardPresetSelect.on('change', function () {
+            settings.gameSystemWizardCompletionPresetId = String($(this).val() || '');
+            saveSettings();
+        });
+
         // Advanced Options
         const sinceLastUserChk = $('#rpg_tracker_lookback_since_last_user');
         const lookbackNumericRow = $('#rpg_tracker_lookback_numeric_row');
@@ -10789,503 +10980,15 @@ RULES:
         });
 
 
-        // ── Custom Sysprompt Library ──
-        async function applyCustomSysprompts() {
-            const settings = getSettings();
-            const mainTextarea = /** @type {HTMLTextAreaElement} */ (document.getElementById('main_prompt_quick_edit_textarea'));
-            if (!mainTextarea) {
-                toastr['warning']('Quick-edit textarea not found. Open the ST prompt editor first.', 'RPG Tracker');
-                return false;
-            }
-
-            const enabledPrompts = (settings.customSyspromptLibrary || []).filter(p => {
-                if (!p.enabled || !p.content) return false;
-                const trimmed = p.content.trim();
-                if (!trimmed) return false;
-                // Skip if content is just empty XML tags (e.g. <custom_section>\n\n</custom_section>)
-                const emptyTagMatch = trimmed.match(/^<(\w+[\w_-]*)>\s*<\/\1>$/);
-                if (emptyTagMatch) return false;
-                return true;
-            });
-
-            const newInjection = enabledPrompts.length > 0
-                ? enabledPrompts.map(p => p.content).join('\n\n')
-                : '';
-
-            let currentContent = mainTextarea.value;
-
-            // Remove the previously-injected block by exact string match (no markers in textarea).
-            // Also clean up any legacy injections that used the old HTML-comment sentinel format.
-            const legacyBlockRegex = /<!-- RT_CUSTOM_LIBRARY_START -->[\s\S]*?<!-- RT_CUSTOM_LIBRARY_END -->\n*/g;
-            currentContent = currentContent.replace(legacyBlockRegex, '');
-
-            const lastInjection = settings._customLibraryLastInjection || '';
-            if (lastInjection) {
-                // Escape for use in a RegExp to do an exact literal removal
-                const escaped = lastInjection.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                currentContent = currentContent.replace(new RegExp(`\\n{0,2}${escaped}\\n{0,2}`, 'g'), '\n\n');
-            }
-
-            if (newInjection) {
-                // Insert raw sections (no markers) — the AI sees clean XML only.
-                if (currentContent.includes('<constraints>')) {
-                    currentContent = currentContent.replace('<constraints>', `${newInjection}\n\n<constraints>`);
-                } else {
-                    currentContent = currentContent.trim() + '\n\n' + newInjection;
-                }
-            }
-
-            // Remember what we injected so next apply can remove it precisely.
-            settings._customLibraryLastInjection = newInjection;
-            saveSettings();
-
-            mainTextarea.value = currentContent.replace(/\n{3,}/g, '\n\n').trim();
-            mainTextarea.dispatchEvent(new Event('blur', { bubbles: true }));
-            return true;
-        }
-
-        // ── Unified Section Editor ──────────────────────────────────────────────
-        /**
-         * Show a unified popup for creating or editing a custom sysprompt section.
-         * @param {object} opts
-         * @param {'ai'|'manual'|'edit'} opts.mode
-         * @param {string} [opts.tag]          - Pre-filled tag name (without angle brackets)
-         * @param {string} [opts.description]  - Pre-filled label/description text
-         * @param {string} [opts.content]      - Pre-filled XML content
-         * @param {function} [opts.onRegenerate] - Async fn(desc) -> string; present in 'ai' mode
-         * @returns {Promise<{tag:string, description:string, content:string, saveMode:string}|null>}
-         */
-        async function showSectionEditor({ mode = 'manual', tag = '', description = '', content = '', onRegenerate = null } = {}) {
-            const { Popup } = SillyTavern.getContext();
-
-            const titleMap = {
-                ai: '✨ Review Generated Section',
-                manual: '📝 Add Section Manually',
-                edit: '✏️ Edit Section',
-            };
-
-            const showSaveOptions = mode !== 'edit';
-            const showRegenerate = mode === 'ai';
-
-            const editorHtml = `
-                <div id="rt-section-editor" style="display:flex; flex-direction:column; gap:10px; width:100%; box-sizing:border-box;">
-                    <div style="display:flex; gap:8px;">
-                        <div style="flex:1;">
-                            <div style="font-size:11px; opacity:0.7; margin-bottom:4px;">Tag Name (snake_case)</div>
-                            <input id="rt-se-tag" type="text" class="text_pole" value="${escapeHtml(tag)}"
-                                placeholder="e.g. reputation_system"
-                                style="width:100%; font-size:12px; font-family:monospace;">
-                        </div>
-                        <div style="flex:2;">
-                            <div style="font-size:11px; opacity:0.7; margin-bottom:4px;">Label / Description</div>
-                            <input id="rt-se-desc" type="text" class="text_pole" value="${escapeHtml(description)}"
-                                placeholder="Brief description of this section"
-                                style="width:100%; font-size:12px;">
-                        </div>
-                    </div>
-                    <div>
-                        <div style="font-size:11px; opacity:0.7; margin-bottom:4px;">XML Content — paste or edit freely (outer XML tag is managed automatically)</div>
-                        <textarea id="rt-se-content" class="text_pole" rows="12"
-                            style="width:100%; font-size:11px; font-family:monospace; resize:vertical; white-space:pre;"
-                            placeholder="  Rules go here...\n  - Rule 1\n  - Rule 2"
-                            >${escapeHtml(content)}</textarea>
-                    </div>
-                    ${showRegenerate ? `<button id="rt-se-regen" class="menu_button interactable" style="background:rgba(180,100,255,0.15); border-color:rgba(180,100,255,0.4); width:100%;"><i class="fa-solid fa-rotate"></i> Regenerate with AI</button>` : ''}
-                    ${showSaveOptions ? `
-                    <div style="padding:10px; border:1px solid rgba(255,255,255,0.1); border-radius:6px; background:rgba(0,0,0,0.2);">
-                        <div style="font-size:11px; font-weight:bold; margin-bottom:6px;">Save Options:</div>
-                        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; margin-bottom:4px;">
-                            <input type="radio" name="rt_se_save_mode" id="rt-se-mode-apply" value="apply" checked style="margin:0;">
-                            <span style="font-size:12px;">Save to Library &amp; Apply to Sysprompt</span>
-                        </label>
-                        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-                            <input type="radio" name="rt_se_save_mode" id="rt-se-mode-library" value="library" style="margin:0;">
-                            <span style="font-size:12px;">Save to Library Only</span>
-                        </label>
-                    </div>` : ''}
-                </div>
-            `;
-
-            let currentTag = tag;
-            let currentDesc = description;
-            let currentContent = content;
-            let currentSaveMode = 'apply';
-
-            // Attach event listeners after DOM is ready
-            setTimeout(() => {
-                const tagEl = document.getElementById('rt-se-tag');
-                const descEl = document.getElementById('rt-se-desc');
-                const contentEl = document.getElementById('rt-se-content');
-
-                if (tagEl) {
-                    tagEl.addEventListener('input', () => { currentTag = tagEl.value; });
-                }
-                if (descEl) {
-                    descEl.addEventListener('input', () => { currentDesc = descEl.value; });
-                }
-                if (contentEl) {
-                    contentEl.addEventListener('input', () => { currentContent = contentEl.value; });
-                }
-
-                // Handle save mode radio buttons
-                const saveModeEls = document.querySelectorAll('input[name="rt_se_save_mode"]');
-                saveModeEls.forEach(el => {
-                    el.addEventListener('change', () => {
-                        const checked = document.querySelector('input[name="rt_se_save_mode"]:checked');
-                        if (checked) currentSaveMode = checked.value;
-                    });
-                });
-
-                // Attach regen handler
-                if (showRegenerate && onRegenerate) {
-                    const regenBtn = document.getElementById('rt-se-regen');
-                    if (regenBtn) {
-                        regenBtn.addEventListener('click', async () => {
-                            const currentDescVal = descEl ? descEl.value.trim() : description;
-                            regenBtn.disabled = true;
-                            regenBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Regenerating...';
-                            try {
-                                const newContent = await onRegenerate(currentDescVal);
-                                if (contentEl) {
-                                    contentEl.value = newContent;
-                                    currentContent = newContent;
-                                }
-                                const extractedTag = newContent.match(/^<(\w+[\w_-]*)/)?.[1];
-                                if (extractedTag && tagEl) {
-                                    if (!tagEl.value.trim()) {
-                                        tagEl.value = extractedTag;
-                                        currentTag = extractedTag;
-                                    }
-                                }
-                                toastr['success']('Section regenerated!', 'AI Section Builder');
-                            } catch (err) {
-                                toastr['error'](`Regeneration failed: ${err.message}`, 'AI Section Builder');
-                            } finally {
-                                regenBtn.disabled = false;
-                                regenBtn.innerHTML = '<i class="fa-solid fa-rotate"></i> Regenerate with AI';
-                            }
-                        });
-                    }
-                }
-            }, 100);
-
-            const confirmed = await Popup.show.confirm(
-                titleMap[mode] || '📝 Section Editor',
-                editorHtml,
-                { okButton: mode === 'edit' ? 'Save Changes' : 'Save Section', cancelButton: 'Cancel' }
-            );
-            if (!confirmed) return null;
-
-            let finalContent = currentContent.trim();
-            if (!finalContent) {
-                toastr['warning']('Section content cannot be empty.', 'Section Builder');
-                return null;
-            }
-            let finalTag = currentTag.trim().replace(/[^\w_-]/g, '');
-
-            // Robust check to see if content is already wrapped in a root XML tag
-            const outerTagRegex = /^<(\w+[\w_-]*)(?:\s+[^>]*)*>([\s\S]*)<\/\1>$/;
-            const tagMatch = finalContent.match(outerTagRegex);
-
-            if (tagMatch) {
-                const contentTag = tagMatch[1];
-                const innerContent = tagMatch[2].trim();
-                
-                // If Tag Name field was empty, adopt the tag from the XML content
-                if (!finalTag) {
-                    finalTag = contentTag;
-                }
-                
-                // Always wrap with finalTag to ensure consistency and prevent mismatch/double-tagging
-                finalContent = `<${finalTag}>\n${innerContent}\n</${finalTag}>`;
-            } else {
-                // Content is not wrapped in XML tags, or has mismatched/multiple sibling tags
-                if (!finalTag) {
-                    finalTag = 'custom_section';
-                }
-                finalContent = `<${finalTag}>\n${finalContent}\n</${finalTag}>`;
-            }
-
-            return {
-                tag: finalTag,
-                description: currentDesc.trim(),
-                content: finalContent,
-                saveMode: currentSaveMode,
-            };
-        }
-
-        // ── Custom Sysprompt Library ──
-        $('#rpg_tracker_btn_sysprompt_library').on('click', async function () {
-            const { Popup } = SillyTavern.getContext();
-            const settings = getSettings();
-
-            if (!settings.customSyspromptLibrary) {
-                settings.customSyspromptLibrary = [];
-            }
-
-            // Function to generate the HTML for the library list
-            const generateListHtml = () => {
-                if (settings.customSyspromptLibrary.length === 0) {
-                    return `<div style="text-align:center; padding:30px; opacity:0.5; font-style:italic;">Library is empty. Use AI Builder or Add Manually to create sections.</div>`;
-                }
-
-                let listHtml = '<div style="display:flex; flex-direction:column; gap:8px;">';
-                settings.customSyspromptLibrary.forEach((item, index) => {
-                    listHtml += `
-                        <div class="rt-library-item" data-index="${index}" style="display:flex; flex-direction:column; border:1px solid rgba(255,255,255,0.1); border-radius:6px; background:rgba(0,0,0,0.2); padding:10px; transition:border-color 0.2s;">
-                            <div style="display:flex; align-items:center; gap:10px;">
-                                <div style="font-size:16px; width:24px; text-align:center; color:var(--rt-accent, #5588ff);"><i class="fa-solid ${item.icon || 'fa-puzzle-piece'}"></i></div>
-                                <div style="flex:1; min-width:0;">
-                                    <div style="font-weight:bold; font-size:13px; color:#ffdd88;">&lt;${escapeHtml(item.tag)}&gt;</div>
-                                    <div style="font-size:11px; opacity:0.7; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(item.description || 'Custom Section')}</div>
-                                </div>
-                                <div style="display:flex; align-items:center; gap:6px;">
-                                    <label class="checkbox_label" style="margin:0; font-size:11px;">
-                                        <input type="checkbox" class="rt-lib-toggle" data-index="${index}" ${item.enabled ? 'checked' : ''}>
-                                        <span>Enable</span>
-                                    </label>
-                                    <button class="rt-lib-edit" data-index="${index}" style="background:none; border:none; color:#88bbff; cursor:pointer; padding:4px;" title="Edit Section"><i class="fa-solid fa-pen-to-square"></i></button>
-                                    <button class="rt-lib-delete" data-index="${index}" style="background:none; border:none; color:#ff5555; cursor:pointer; padding:4px;" title="Delete Section"><i class="fa-solid fa-trash-can"></i></button>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                });
-                listHtml += '</div>';
-                return listHtml;
-            };
-
-            let html = `
-                <div id="rt-library-container" style="display:flex; flex-direction:column; gap:12px; width:100%; box-sizing:border-box; max-height:70vh;">
-                    <div style="display:flex; align-items:center; justify-content:space-between;">
-                        <div style="font-size:11px; opacity:0.8; line-height:1.4;">Manage your custom system prompt sections. Enabling a section injects it into your main prompt when you click Apply.</div>
-                        <button id="rt_lib_btn_add_manual" class="menu_button interactable" style="white-space:nowrap; margin-left:10px; background:rgba(80,180,120,0.15); border-color:rgba(80,180,120,0.4); font-size:11px; padding:4px 8px;">
-                            <i class="fa-solid fa-plus"></i> Add Manually
-                        </button>
-                    </div>
-                    <div id="rt-library-list-wrap" style="overflow-y:auto; padding-right:10px; flex:1;">
-                        ${generateListHtml()}
-                    </div>
-                </div>
-            `;
-
-            // Wait for DOM to attach
-            setTimeout(() => {
-                const container = document.getElementById('rt-library-container');
-                if (!container) return;
-
-                const bindEvents = () => {
-                    const wrap = document.getElementById('rt-library-list-wrap');
-                    if (!wrap) return;
-
-                    // Toggle Checkbox
-                    wrap.querySelectorAll('.rt-lib-toggle').forEach(el => {
-                        el.addEventListener('change', (e) => {
-                            const idx = parseInt(e.target.dataset.index);
-                            settings.customSyspromptLibrary[idx].enabled = e.target.checked;
-                            saveSettings();
-                        });
-                    });
-
-                    // Edit Button
-                    wrap.querySelectorAll('.rt-lib-edit').forEach(el => {
-                        el.addEventListener('click', async (e) => {
-                            const idx = parseInt(e.currentTarget.dataset.index);
-                            const item = settings.customSyspromptLibrary[idx];
-                            const result = await showSectionEditor({
-                                mode: 'edit',
-                                tag: item.tag,
-                                description: item.description || '',
-                                content: item.content,
-                            });
-                            if (!result) return;
-                            settings.customSyspromptLibrary[idx].tag = result.tag;
-                            settings.customSyspromptLibrary[idx].description = result.description;
-                            settings.customSyspromptLibrary[idx].content = result.content;
-                            saveSettings();
-                            wrap.innerHTML = generateListHtml();
-                            bindEvents();
-                        });
-                    });
-
-                    // Delete Button
-                    wrap.querySelectorAll('.rt-lib-delete').forEach(el => {
-                        el.addEventListener('click', async (e) => {
-                            if (!confirm('Delete this custom section permanently?')) return;
-                            const idx = parseInt(e.currentTarget.dataset.index);
-                            settings.customSyspromptLibrary.splice(idx, 1);
-                            saveSettings();
-                            wrap.innerHTML = generateListHtml();
-                            bindEvents();
-                        });
-                    });
-                };
-                bindEvents();
-
-                // Add Manually button inside library
-                const addManualBtn = document.getElementById('rt_lib_btn_add_manual');
-                if (addManualBtn) {
-                    addManualBtn.addEventListener('click', async () => {
-                        const result = await showSectionEditor({ mode: 'manual' });
-                        if (!result) return;
-                        const newItem = {
-                            id: Date.now().toString(),
-                            tag: result.tag,
-                            content: result.content,
-                            enabled: result.saveMode === 'apply',
-                            icon: 'fa-pen-to-square',
-                            description: result.description || 'Custom Section',
-                        };
-                        settings.customSyspromptLibrary.push(newItem);
-                        saveSettings();
-                        const wrap = document.getElementById('rt-library-list-wrap');
-                        if (wrap) { wrap.innerHTML = generateListHtml(); bindEvents(); }
-                        if (result.saveMode === 'apply') {
-                            await applyCustomSysprompts();
-                            toastr['success']('Saved to Library & Applied to Sysprompt! ✅', 'Section Builder');
-                        } else {
-                            toastr['success']('Saved to Library! ✅', 'Section Builder');
-                        }
-                    });
-                }
-            }, 100);
-
-            const approved = await Popup.show.confirm('📚 Custom Sysprompt Library', html, { okButton: 'Apply Enabled Prompts', cancelButton: 'Close' });
-            if (approved) {
-                const success = await applyCustomSysprompts();
-                if (success) {
-                    toastr['success']('Library prompts applied to Sysprompt! \u2705', 'Sysprompt Library');
-                }
-            }
-        });
-
-        $('#rpg_tracker_btn_reset_sysprompt_library').on('click', async function () {
-            if (!confirm('This will disable all custom sections in your Sysprompt Library and restore the D&D system prompt to its clean defaults. Proceed?')) return;
-            const settings = getSettings();
-            if (settings.customSyspromptLibrary) {
-                settings.customSyspromptLibrary.forEach(p => p.enabled = false);
-            }
-            settings._customLibraryLastInjection = '';
-            saveSettings();
-            await autoApplySysprompt();
-            toastr['success']('All library sections disabled & Sysprompt reset to defaults! 🔄', 'Sysprompt Editor');
-        });
-
-        // ── AI Section Builder ──
-        $('#rpg_tracker_btn_ai_add_section').on('click', async function () {
-            const settings = getSettings();
-
-            const buildAiPrompt = (desc) =>
-                `You are a D&D system prompt architect. The user wants a new section added to their existing system prompt.\n\nTheir description: "${desc}"\n\nThe user's current system prompt is provided below for reference so you can seamlessly integrate the new mechanic without duplicating existing rules:\n<current_prompt>\n${document.getElementById('main_prompt_quick_edit_textarea')?.value || settings.systemPromptTemplate || ''}\n</current_prompt>\n\nCreate a new XML-tagged section. Your response MUST:\n1. Start with <tag_name> and end with </tag_name>\n2. Use a unique, descriptive tag name in snake_case (e.g. <reputation_system>, <corruption>, <weather_mechanics>)\n3. Be written as clear DM instructions — telling the AI what rules to follow\n4. Be comprehensive but concise (10-30 lines)\n5. Include specific mechanical rules, not just flavor text\n6. Reference {{user}} for the player character\n\nReturn ONLY the XML section. No explanation, no other text.`;
-
-            const generateSection = async (desc) => {
-                const result = await sendStateRequest(settings, 'You are a D&D system prompt section generator. Return ONLY the XML section.', buildAiPrompt(desc));
-                if (!result) throw new Error('No response from AI');
-                let section = result.trim();
-                const fenceMatch = section.match(/```(?:xml)?\s*([\s\S]*?)```/);
-                if (fenceMatch) section = fenceMatch[1].trim();
-                if (!section.match(/^<\w+[\w_-]*>/)) throw new Error('AI did not return a valid XML section');
-                return section;
-            };
-
-            // Step 1: get description
-            const { Popup } = SillyTavern.getContext();
-            const inputContent = `
-                <div style="display:flex; flex-direction:column; gap:10px; width:100%; box-sizing:border-box;">
-                    <div style="font-size:13px; opacity:0.9; font-weight:bold;">✨ AI Section Builder</div>
-                    <div style="font-size:11px; opacity:0.7; line-height:1.4;">
-                        Describe a new system, mechanic, or rule you want added to your D&amp;D system prompt. The AI will generate a properly formatted XML section ready to be appended.
-                    </div>
-                    <textarea id="rt_ai_section_desc" rows="4" class="text_pole"
-                        style="font-size:12px; resize:vertical; width:100%;"
-                        placeholder="Example: A reputation system where NPCs in different factions track the player's standing."></textarea>
-                </div>
-            `;
-
-            let description = '';
-            setTimeout(() => {
-                const ta = document.getElementById('rt_ai_section_desc');
-                if (ta) ta.addEventListener('input', () => { description = ta.value.trim(); });
-            }, 100);
-
-            const inputResult = await Popup.show.confirm('✨ AI Section Builder', inputContent, { okButton: 'Generate', cancelButton: 'Cancel' });
-            if (!inputResult) return;
-
-            if (!description) {
-                toastr['warning']('Please describe the mechanic/system you want.', 'AI Section Builder');
-                return;
-            }
-
-            // Step 2: generate
-            toastr['info']('Generating section with AI...', 'AI Section Builder', { timeOut: 3000 });
-            try {
-                const section = await generateSection(description);
-                const extractedTag = section.match(/^<(\w+[\w_-]*)/)?.[1] || '';
-
-                // Step 3: show unified editor (ai mode)
-                const result = await showSectionEditor({
-                    mode: 'ai',
-                    tag: extractedTag,
-                    description,
-                    content: section,
-                    onRegenerate: generateSection,
-                });
-                if (!result) {
-                    toastr['info']('Section builder cancelled.', 'AI Section Builder');
-                    return;
-                }
-
-                const newItem = {
-                    id: Date.now().toString(),
-                    tag: result.tag,
-                    content: result.content,
-                    enabled: result.saveMode === 'apply',
-                    icon: 'fa-wand-magic-sparkles',
-                    description: result.description || description,
-                };
-
-                settings.customSyspromptLibrary = settings.customSyspromptLibrary || [];
-                settings.customSyspromptLibrary.push(newItem);
-                saveSettings();
-
-                if (result.saveMode === 'apply') {
-                    const success = await applyCustomSysprompts();
-                    if (success) toastr['success']('Saved to Library & Applied to Sysprompt! \u2705', 'AI Section Builder');
-                } else {
-                    toastr['success']('Saved to Library! \u2705', 'AI Section Builder');
-                }
-            } catch (err) {
-                console.error('[RPG Tracker] AI Section Builder error:', err);
-                toastr['error'](`Failed to generate section: ${err.message}`, 'AI Section Builder');
-            }
-        });
-
-        // ── Manual Section Builder ──
-        $('#rpg_tracker_btn_manual_add_section').on('click', async function () {
-            const settings = getSettings();
-            const result = await showSectionEditor({ mode: 'manual' });
-            if (!result) return;
-
-            const newItem = {
-                id: Date.now().toString(),
-                tag: result.tag,
-                content: result.content,
-                enabled: result.saveMode === 'apply',
-                icon: 'fa-pen-to-square',
-                description: result.description || 'Custom Section',
-            };
-
-            settings.customSyspromptLibrary = settings.customSyspromptLibrary || [];
-            settings.customSyspromptLibrary.push(newItem);
-            saveSettings();
-
-            if (result.saveMode === 'apply') {
-                const success = await applyCustomSysprompts();
-                if (success) toastr['success']('Saved to Library & Applied to Sysprompt! \u2705', 'Section Builder');
-            } else {
-                toastr['success']('Saved to Library! \u2705', 'Section Builder');
-            }
-        });
+        // ── Game Systems (Wizard / Manage / Unlock / Advanced library tools) ──
+        // Heavy logic lives in game-systems.js; these are thin bindings only.
+        $('#rpg_tracker_btn_game_system_wizard').on('click', () => openGameSystemWizard());
+        $('#rpg_tracker_btn_manage_game_systems').on('click', () => openManageGameSystems());
+        $('#rpg_tracker_btn_unlock_sections').on('click', () => openUnlockSectionsMenu());
+        $('#rpg_tracker_btn_sysprompt_library').on('click', () => openCustomSyspromptLibrary());
+        $('#rpg_tracker_btn_reset_sysprompt_library').on('click', () => resetSyspromptLibrary());
+        $('#rpg_tracker_btn_ai_add_section').on('click', () => runAiSectionBuilder());
+        $('#rpg_tracker_btn_manual_add_section').on('click', () => runManualSectionBuilder());
 
         $('#rpg_tracker_btn_reset_and_apply_sysprompt').on('click', async function () {
             if (!confirm('This will:\n\n1. Reset the Core State Model prompt to built-in default\n2. Reset all Stock Module prompts, Active Modules, and Module Order to factory defaults\n3. Reset all Lorebook Agent prompts and World Progression prompts to factory defaults\n4. Fetch the latest sysprompt.txt and write it directly into your Quick Prompt "Main" box\n5. Automatically re-enable any custom sysprompt sections that were already enabled\n\nYour custom modules will NOT be affected. Proceed?')) return;
@@ -11374,7 +11077,11 @@ RULES:
                 toastr['success']('All prompts reset & Main sysprompt applied! \u2705', 'RPG Tracker');
             } else {
                 // 5. Automatically re-apply any custom sysprompt library sections that were already enabled
+                // (unlocked-base overrides are reinserted at their original GS_SLOT position first).
+                content = replaceGsSlotMarkers(content, finalSettings);
+
                 const enabledPrompts = (finalSettings.customSyspromptLibrary || []).filter(p => {
+                    if (p.origin === 'unlocked_base') return false;
                     if (!p.enabled || !p.content) return false;
                     const trimmed = p.content.trim();
                     if (!trimmed) return false;
@@ -11447,6 +11154,8 @@ RULES:
                 $('#rpg_quests_options').toggle(val);
             }
         });
+        // Disable any toggle whose section is currently unlocked for Game Systems customization.
+        syncAllNarratorTogglesForUnlockState();
 
         // Deadlines Toggle
         const deadlinesCb = /** @type {HTMLInputElement} */ (document.getElementById('rpg_quests_deadlines'));
