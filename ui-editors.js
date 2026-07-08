@@ -14,7 +14,8 @@ import {
     syncTimeFormatSettingsUi,
     refreshQuestPrompt,
     syncMemoView,
-    bindRenderedCardEvents
+    bindRenderedCardEvents,
+    _sectionPages
 } from './index.js';
 import { renderMemoAsCards } from './renderer.js';
 
@@ -540,7 +541,6 @@ export function openCustomFieldEditor(index) {
         }
     }
 
-    const previewPages = {};
     const renderPreviewInto = (targetEl) => {
         const renderView = targetEl || document.getElementById('rt_cfe_preview_view');
         if (!renderView) return;
@@ -560,7 +560,7 @@ export function openCustomFieldEditor(index) {
         const savedCustomFields = s.customFields;
         s.customFields = [...savedCustomFields, ghostField];
         try {
-            renderView.innerHTML = renderMemoAsCards(fakeMemo, previewTag, previewPages);
+            renderView.innerHTML = renderMemoAsCards(fakeMemo, previewTag, _sectionPages);
             bindRenderedCardEvents(renderView, fakeMemo, true, () => renderPreviewInto(targetEl));
         } finally {
             s.customFields = savedCustomFields;

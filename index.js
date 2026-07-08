@@ -731,7 +731,7 @@ function syncSegToggle(segEl, activeValue) {
 // ── Renderer / navigation state ──
 let _historyViewIndex = -1;    // -1 = live, 0 = most recent snapshot, higher = older
 let _renderedViewActive = false;
-const _sectionPages = {};
+export const _sectionPages = {};
 
 // ── Lorebook Agent nav state ──
 /** @type {Array<{prePassSnapshot: object, postPassState: object}>} */
