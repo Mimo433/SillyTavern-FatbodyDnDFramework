@@ -2511,7 +2511,7 @@ async function showPortraitSettingsMenu(entityName, onRefresh, npcContent = null
     }
 }
 
-function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRefresh = null) {
+export function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRefresh = null) {
     const refresh = onRefresh || refreshRenderedView;
 
     // Genre tab toggle listener & persistent preference save

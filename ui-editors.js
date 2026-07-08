@@ -13,8 +13,10 @@ import {
     syncNpcPortraitDependentUi,
     syncTimeFormatSettingsUi,
     refreshQuestPrompt,
-    syncMemoView
+    syncMemoView,
+    bindRenderedCardEvents
 } from './index.js';
+import { renderMemoAsCards } from './renderer.js';
 
 export function handleCategorySettings(tag, targetEl) {
     const existing = document.getElementById('rt-cat-settings-popup');
@@ -538,47 +540,49 @@ export function openCustomFieldEditor(index) {
         }
     }
 
-    const { renderCustomBlockLine } = renderImportSafeguard();
-    function renderSafely(line) {
-        if (typeof renderCustomBlockLine === 'function') {
-            return renderCustomBlockLine(line);
+    const previewPages = {};
+    const renderPreviewInto = (targetEl) => {
+        const renderView = targetEl || document.getElementById('rt_cfe_preview_view');
+        if (!renderView) return;
+
+        const testContent = templateEl.value || 'Nothing in testing sandbox';
+        const previewTag = '__PREVIEW__';
+        const fakeMemo = `[${previewTag}]\n${testContent}\n[/${previewTag}]`;
+
+        const ghostField = {
+            tag: previewTag,
+            label: labelEl.value || tagEl.value || 'Preview',
+            icon: iconEl.value || '📄',
+            template: templateEl.value,
+            prompt: '',
+            enabled: true
+        };
+        const savedCustomFields = s.customFields;
+        s.customFields = [...savedCustomFields, ghostField];
+        try {
+            renderView.innerHTML = renderMemoAsCards(fakeMemo, previewTag, previewPages);
+            bindRenderedCardEvents(renderView, fakeMemo, true, () => renderPreviewInto(targetEl));
+        } finally {
+            s.customFields = savedCustomFields;
         }
-        return `<div>${escapeHtml(line)}</div>`;
-    }
-
-    const renderPreview = () => {
-        const view = document.getElementById('rt_cfe_preview_view');
-        if (!view) return;
-        const text = templateEl.value;
-        const tag = (tagEl.value || 'CUSTOM').toUpperCase().replace(/[^A-Z0-9_]/g, '');
-        const icon = iconEl.value || '📄';
-        const label = labelEl.value || tag;
-
-        const inner = text.split('\n').map(line => renderSafely(line)).join('');
-
-        view.innerHTML = `
-                <div class="rpg-tracker-card rt-theme-custom" style="padding:10px; margin:0; border:none; background:transparent;">
-                    <div class="rpg-tracker-card-header interactable" style="user-select:none; font-size:1em; font-weight:bold; letter-spacing:0.03em; border-bottom:1px solid rgba(255,255,255,0.06); padding-bottom:6px; margin-bottom:8px;">
-                        <span>${escapeHtml(icon)} ${escapeHtml(label)}</span>
-                    </div>
-                    <div class="rpg-tracker-card-body flex-container flexFlowColumn gap-0_5" style="font-size:0.9em; line-height:1.6;">
-                        ${inner || '<span style="opacity:0.4; font-style:italic;">Type formatting templates in Sandbox to preview how the custom HUD looks...</span>'}
-                    </div>
-                </div>
-            `;
     };
 
+    const updatePreview = () => renderPreviewInto(null);
+
     let previewTimer;
+    let bgRefreshTimer;
     const schedulePreview = () => {
         clearTimeout(previewTimer);
-        previewTimer = setTimeout(renderPreview, 150);
+        previewTimer = setTimeout(updatePreview, 180);
+        clearTimeout(bgRefreshTimer);
+        bgRefreshTimer = setTimeout(refreshRenderedView, 300);
     };
 
     templateEl.oninput = schedulePreview;
     iconEl.oninput = schedulePreview;
     labelEl.oninput = schedulePreview;
     tagEl.oninput = schedulePreview;
-    renderPreview();
+    updatePreview();
 
     const close = () => {
         if (destroyPreviewDraggable) destroyPreviewDraggable();
@@ -1252,21 +1256,3 @@ export function refreshOrderList() {
     });
 }
 
-function renderImportSafeguard() {
-    let renderCustomBlockLine = null;
-    try {
-        const modules = SillyTavern.getContext();
-        // Fallback checks for ST environment renderer
-    } catch (_) {}
-    
-    // Dynamic import to break any circular dependency on startup
-    import('./renderer.js').then((m) => {
-        renderCustomBlockLine = m.renderCustomBlockLine;
-    }).catch(() => {});
-
-    return {
-        get renderCustomBlockLine() {
-            return renderCustomBlockLine;
-        }
-    };
-}
