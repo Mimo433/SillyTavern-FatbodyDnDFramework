@@ -1114,7 +1114,7 @@ function loadChatState(chatId) {
     s.worldProgressionConsolidateEnabled = saved.worldProgressionConsolidateEnabled ?? false;
     s.worldProgressionConsolidateInterval = saved.worldProgressionConsolidateInterval ?? 7;
 
-    s.portraitGeneratorSource = saved.portraitGeneratorSource ?? "pollinations";
+    s.portraitGeneratorSource = saved.portraitGeneratorSource ?? "native";
     s.portraitSkipPromptDialog = saved.portraitSkipPromptDialog ?? false;
     s.portraitAutoGenerateParty = saved.portraitAutoGenerateParty ?? false;
     s.portraitAutoGenerateEnemies = saved.portraitAutoGenerateEnemies ?? false;
@@ -1171,8 +1171,8 @@ function loadChatState(chatId) {
     $('#rpg_world_progression_auto_exclude_party').prop('checked', !!s.worldProgressionAutoExcludeParty);
 
     // Sync portrait connection settings UI
-    $('#rpg_portrait_generator_source').val(s.portraitGeneratorSource || 'pollinations');
-    $('#rpg_tracker_pollinations_group').toggle((s.portraitGeneratorSource || 'pollinations') === 'pollinations');
+    $('#rpg_portrait_generator_source').val(s.portraitGeneratorSource || 'native');
+    $('#rpg_tracker_pollinations_group').toggle((s.portraitGeneratorSource || 'native') === 'pollinations');
     $('#rpg_tracker_portrait_skip_prompt').prop('checked', !!s.portraitSkipPromptDialog);
     $('#rpg_tracker_portrait_auto_party').prop('checked', !!s.portraitAutoGenerateParty);
     $('#rpg_tracker_portrait_auto_enemies').prop('checked', !!s.portraitAutoGenerateEnemies);
@@ -2178,7 +2178,7 @@ function loadProfile(name) {
     s.worldProgressionExclusionList = p.worldProgressionExclusionList ?? '';
     s.worldProgressionAutoExcludeParty = p.worldProgressionAutoExcludeParty ?? false;
 
-    s.portraitGeneratorSource = p.portraitGeneratorSource ?? "pollinations";
+    s.portraitGeneratorSource = p.portraitGeneratorSource ?? "native";
     s.portraitSkipPromptDialog = p.portraitSkipPromptDialog ?? false;
     s.portraitAutoGenerateParty = p.portraitAutoGenerateParty ?? false;
     s.portraitAutoGenerateEnemies = p.portraitAutoGenerateEnemies ?? false;
@@ -2229,8 +2229,8 @@ function loadProfile(name) {
     $('#rpg_world_progression_auto_exclude_party').prop('checked', !!s.worldProgressionAutoExcludeParty);
 
     // Sync portrait connection settings UI
-    $('#rpg_portrait_generator_source').val(s.portraitGeneratorSource || 'pollinations');
-    $('#rpg_tracker_pollinations_group').toggle((s.portraitGeneratorSource || 'pollinations') === 'pollinations');
+    $('#rpg_portrait_generator_source').val(s.portraitGeneratorSource || 'native');
+    $('#rpg_tracker_pollinations_group').toggle((s.portraitGeneratorSource || 'native') === 'pollinations');
     $('#rpg_tracker_portrait_skip_prompt').prop('checked', !!s.portraitSkipPromptDialog);
     $('#rpg_tracker_portrait_auto_party').prop('checked', !!s.portraitAutoGenerateParty);
     $('#rpg_tracker_portrait_auto_enemies').prop('checked', !!s.portraitAutoGenerateEnemies);
@@ -9538,12 +9538,12 @@ function tryBindConnectionProfileDropdown(selector, initialProfileId, onProfileI
             refreshRenderedView();
         });
 
-        $('#rpg_portrait_generator_source').val(settings.portraitGeneratorSource || 'pollinations').on('change', function () {
+        $('#rpg_portrait_generator_source').val(settings.portraitGeneratorSource || 'native').on('change', function () {
             settings.portraitGeneratorSource = String($(this).val());
             saveSettings();
             $('#rpg_tracker_pollinations_group').toggle(settings.portraitGeneratorSource === 'pollinations');
         });
-        $('#rpg_tracker_pollinations_group').toggle((settings.portraitGeneratorSource || 'pollinations') === 'pollinations');
+        $('#rpg_tracker_pollinations_group').toggle((settings.portraitGeneratorSource || 'native') === 'pollinations');
 
         $('#rpg_tracker_portrait_skip_prompt').prop('checked', !!settings.portraitSkipPromptDialog).on('change', function () {
             settings.portraitSkipPromptDialog = !!$(this).prop('checked');

@@ -449,7 +449,7 @@ export function getSettings() {
         rngEnabled: true,
         diceFunctionTool: true,
         enablePortraits: true,
-        portraitGeneratorSource: "pollinations",
+        portraitGeneratorSource: "native",
         portraitSkipPromptDialog: false,
         portraitAutoGenerateParty: false,
         portraitAutoGenerateEnemies: false,
@@ -1544,7 +1544,7 @@ export function saveChatState(chatId) {
         worldProgressionExclusionList: s.worldProgressionExclusionList || '',
         worldProgressionAutoExcludeParty: s.worldProgressionAutoExcludeParty ?? false,
 
-        portraitGeneratorSource: s.portraitGeneratorSource ?? "pollinations",
+        portraitGeneratorSource: s.portraitGeneratorSource ?? "native",
         portraitSkipPromptDialog: s.portraitSkipPromptDialog ?? false,
         portraitAutoGenerateParty: s.portraitAutoGenerateParty ?? false,
         portraitAutoGenerateEnemies: s.portraitAutoGenerateEnemies ?? false,
@@ -1695,7 +1695,7 @@ export function saveProfile(name) {
         worldProgressionExclusionList: s.worldProgressionExclusionList || '',
         worldProgressionAutoExcludeParty: s.worldProgressionAutoExcludeParty ?? false,
 
-        portraitGeneratorSource: s.portraitGeneratorSource ?? "pollinations",
+        portraitGeneratorSource: s.portraitGeneratorSource ?? "native",
         portraitSkipPromptDialog: s.portraitSkipPromptDialog ?? false,
         portraitAutoGenerateParty: s.portraitAutoGenerateParty ?? false,
         portraitAutoGenerateEnemies: s.portraitAutoGenerateEnemies ?? false,

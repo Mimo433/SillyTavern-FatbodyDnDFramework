@@ -530,11 +530,11 @@ export async function ensurePollinationsKey() {
     const popupContent = `<div style="padding:10px;min-width:300px;">
         <b style="display:block;margin-bottom:8px;">🔑 Pollinations API Key Required</b>
         <div style="font-size:0.85em;opacity:0.75;margin-bottom:10px;line-height:1.5;">
-            <b>Why Pollinations?</b> Pollinations.ai was created to preserve free AI access. It is a <b>non-profit</b> project committed to remaining <b>free forever</b>, with generous hourly rate limits that reset every hour.
+            <b>Why Pollinations?</b> Pollinations.ai offers image generation models (like Flux and ZImage) via API keys linked to a GitHub account. It operates on a pay-as-you-go / quest system.
             <br><br>
-            All you need is a <b>GitHub account</b> to get a permanent API key. Using budget models like ZImage, you can generate approximately <b>10–20 portraits per hour</b> at no cost.
+            All you need is a <b>GitHub account</b> to generate a permanent API key.
             <br><br>
-            Get your free key at:<br>
+            Get your key at:<br>
             <a href="https://enter.pollinations.ai/#keys" target="_blank" style="color:#7ec8e3;font-weight:bold;">🔗 enter.pollinations.ai/#keys</a>
         </div>
         <input id="${inputId}" type="password" class="text_pole" placeholder="Paste your API key here (sk_… or pk_…)" style="width:100%;box-sizing:border-box;"/>
