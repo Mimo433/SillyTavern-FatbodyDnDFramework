@@ -4,7 +4,7 @@
 
 Out of the box, this framework essentially turns SillyTavern into something like AI Dungeon, but with actual mechanics/consequences! This is a mechanical-integrity-first philosophy where your choices matter. I wasn't satisfied with any of the commercial offerings available (AI Realm, AI Dungeon, Friends & Fables, etc.), so I made my own D&D platform inside SillyTavern.
 
-In addition to fantasy, the system works just as well for casual "slice of life" scenarios or modern settings, so you're by no means limited to wizards and goblins. Everything is FULLY customizable and homebrew-friendly, and I mean fully.
+In addition to fantasy, the system works just as well for casual "slice of life" scenarios or modern settings, so you're by no means limited to wizards and goblins. Everything is FULLY customizable and homebrew-friendly, and I mean fully. You can even play it as a dating sim with the relationship component.
 
 **Crucially, the system is input-output, not just some glorified stats collector. Everything in the State Tracker is fed back to the AI. What you see is what the AI also sees.**
 
