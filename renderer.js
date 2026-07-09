@@ -187,6 +187,191 @@ export function getTimeOfDayInfo(str) {
                 }
                 return `<div class="rt-entity-sub-line">${labelHtml} ${escapeHtmlWithColor(value)}</div>`;
             }
+            case 'clock': {
+                const pm = value.match(/(\d+)\s*\/\s*(\d+)/);
+                if (pm) {
+                    const cur = parseInt(pm[1], 10), max = parseInt(pm[2], 10);
+                    const pct = max > 0 ? Math.min(100, (cur / max) * 100) : 0;
+                    const extra = value.replace(pm[0], '').trim();
+                    let barBg = rule.color ? rule.color : 'var(--rt-accent, #00ffaa)';
+                    if (barId) barBg = getBarBackground(barId, barBg, pct);
+                    const recolorData = barId ? ` data-recolor-id="${escapeHtml(barId)}" data-recolor-current="${escapeHtml(barBg)}" title="Click to recolor"` : '';
+                    
+                    return `<div class="rt-entity-sub-line rt-clock-row">${labelHtml}
+                        <div class="rt-clock-icon"${recolorData} style="background: conic-gradient(${barBg} ${pct}%, transparent 0);"></div>
+                        <span class="rt-clock-label">${cur}/${max}${extra ? ' ' + escapeHtml(extra) : ''}</span>
+                    </div>`;
+                }
+                return `<div class="rt-entity-sub-line">${labelHtml} ${escapeHtmlWithColor(value)}</div>`;
+            }
+            case 'stars': {
+                const pm = value.match(/(\d+)\s*\/\s*(\d+)/) || value.match(/(\d+)/);
+                if (pm) {
+                    const cur = parseInt(pm[1], 10);
+                    const max = pm[2] ? parseInt(pm[2], 10) : 5;
+                    const extra = value.replace(pm[0], '').trim();
+                    const filled = Math.min(cur, max);
+                    const empty = Math.max(0, max - filled);
+                    let barBg = rule.color ? rule.color : '#ffd700';
+                    if (barId) barBg = getBarBackground(barId, barBg, (filled/max)*100);
+                    const recolorData = barId ? ` data-recolor-id="${escapeHtml(barId)}" data-recolor-current="${escapeHtml(barBg)}" title="Click to recolor"` : '';
+
+                    const starsHtml = `<span class="rt-stars-icon" style="color:${barBg};"${recolorData}>${'★'.repeat(filled)}${'☆'.repeat(empty)}</span>`;
+                    return `<div class="rt-entity-sub-line rt-stars-row">${labelHtml} ${starsHtml} <span class="rt-stars-label">${extra ? escapeHtml(extra) : ''}</span></div>`;
+                }
+                return `<div class="rt-entity-sub-line">${labelHtml} ${escapeHtmlWithColor(value)}</div>`;
+            }
+            case 'weight': {
+                const pm = value.match(/(\d+)\s*\/\s*(\d+)/);
+                if (pm) {
+                    const cur = parseInt(pm[1], 10), max = parseInt(pm[2], 10);
+                    const pct = max > 0 ? Math.min(100, (cur / max) * 100) : 0;
+                    const extra = value.replace(pm[0], '').trim();
+                    let barBg = rule.color ? rule.color : (pct >= 100 ? '#e74c3c' : pct >= 75 ? '#f1c40f' : '#2ecc71');
+                    if (barId) barBg = getBarBackground(barId, barBg, pct);
+                    const recolorData = barId ? ` data-recolor-id="${escapeHtml(barId)}" data-recolor-current="${escapeHtml(barBg)}" title="Click to recolor"` : '';
+
+                    return `<div class="rt-entity-sub-line rt-weight-row">${labelHtml}
+                        <span class="rt-weight-icon">⚖️</span>
+                        <div class="rt-weight-bar-wrap"${recolorData}>
+                            <div class="rt-weight-bar" style="width:${pct.toFixed(1)}%;background:${barBg};"></div>
+                        </div>
+                        <span class="rt-weight-label">${cur}/${max}${extra ? ' ' + escapeHtml(extra) : ''}</span>
+                    </div>`;
+                }
+                return `<div class="rt-entity-sub-line">${labelHtml} ⚖️ ${escapeHtmlWithColor(value)}</div>`;
+            }
+            case 'weather': {
+                let icon = '🌤️';
+                const lower = value.toLowerCase();
+                if (lower.includes('rain') || lower.includes('storm') || lower.includes('wet')) icon = '🌧️';
+                else if (lower.includes('snow') || lower.includes('cold') || lower.includes('ice') || lower.includes('blizzard')) icon = '❄️';
+                else if (lower.includes('sun') || lower.includes('hot') || lower.includes('clear')) icon = '☀️';
+                else if (lower.includes('cloud') || lower.includes('overcast')) icon = '☁️';
+                else if (lower.includes('wind')) icon = '🌬️';
+                else if (lower.includes('fog')) icon = '🌫️';
+                else if (lower.includes('night') || lower.includes('dark')) icon = '🌙';
+                
+                return `<div class="rt-entity-sub-line">${labelHtml} <span class="rt-weather-badge">${icon} ${escapeHtmlWithColor(value)}</span></div>`;
+            }
+            case 'orbs': {
+                const pm = value.match(/(\d+)\s*\/\s*(\d+)/);
+                if (pm) {
+                    const cur = parseInt(pm[1], 10), max = parseInt(pm[2], 10);
+                    const extra = value.replace(pm[0], '').trim();
+                    let barBg = rule.color ? rule.color : '#3498db';
+                    if (barId) barBg = getBarBackground(barId, barBg, max > 0 ? (cur/max)*100 : 0);
+                    const recolorData = barId ? ` data-recolor-id="${escapeHtml(barId)}" data-recolor-current="${escapeHtml(barBg)}" title="Click to recolor"` : '';
+                    
+                    let orbsHtml = '';
+                    for (let i = 0; i < max; i++) {
+                        const isFilled = i < cur;
+                        orbsHtml += `<div class="rt-orb ${isFilled ? 'filled' : 'empty'}" style="${isFilled ? `background:${barBg};box-shadow:0 0 5px ${barBg};` : ''}"></div>`;
+                    }
+                    
+                    return `<div class="rt-entity-sub-line rt-orbs-row">${labelHtml}
+                        <div class="rt-orbs-container"${recolorData}>${orbsHtml}</div>
+                        <span class="rt-orbs-label">${extra ? escapeHtml(extra) : ''}</span>
+                    </div>`;
+                }
+                return `<div class="rt-entity-sub-line">${labelHtml} ${escapeHtmlWithColor(value)}</div>`;
+            }
+            case 'slots': {
+                const pm = value.match(/(\d+)\s*\/\s*(\d+)/);
+                if (pm) {
+                    const cur = parseInt(pm[1], 10), max = parseInt(pm[2], 10);
+                    const extra = value.replace(pm[0], '').trim();
+                    let barBg = rule.color ? rule.color : '#aaaaaa';
+                    if (barId) barBg = getBarBackground(barId, barBg, max > 0 ? (cur/max)*100 : 0);
+                    const recolorData = barId ? ` data-recolor-id="${escapeHtml(barId)}" data-recolor-current="${escapeHtml(barBg)}" title="Click to recolor"` : '';
+                    
+                    let slotsHtml = '';
+                    for (let i = 0; i < max; i++) {
+                        const isFilled = i < cur;
+                        slotsHtml += `<div class="rt-slot ${isFilled ? 'filled' : 'empty'}" style="${isFilled ? `background:${barBg};` : ''}"></div>`;
+                    }
+                    
+                    return `<div class="rt-entity-sub-line rt-slots-row">${labelHtml}
+                        <div class="rt-slots-container"${recolorData}>${slotsHtml}</div>
+                        <span class="rt-slots-label">${extra ? escapeHtml(extra) : ''}</span>
+                    </div>`;
+                }
+                return `<div class="rt-entity-sub-line">${labelHtml} ${escapeHtmlWithColor(value)}</div>`;
+            }
+            case 'phase': {
+                const pm = value.match(/(\d+)\s*\/\s*(\d+)/);
+                if (pm) {
+                    const cur = parseInt(pm[1], 10), max = parseInt(pm[2], 10);
+                    const extra = value.replace(pm[0], '').trim();
+                    let barBg = rule.color ? rule.color : 'var(--rt-accent, #00ffaa)';
+                    if (barId) barBg = getBarBackground(barId, barBg, max > 0 ? (cur/max)*100 : 0);
+                    const recolorData = barId ? ` data-recolor-id="${escapeHtml(barId)}" data-recolor-current="${escapeHtml(barBg)}" title="Click to recolor"` : '';
+                    
+                    let phaseHtml = '';
+                    for (let i = 0; i < max; i++) {
+                        const isPast = i < cur - 1;
+                        const isCurrent = i === cur - 1;
+                        let stateClass = isPast ? 'past' : (isCurrent ? 'current' : 'future');
+                        phaseHtml += `<div class="rt-phase-node ${stateClass}" style="${isPast || isCurrent ? `background:${barBg};border-color:${barBg};` : ''}${isCurrent ? `box-shadow:0 0 8px ${barBg};` : ''}"></div>`;
+                        if (i < max - 1) {
+                            const isLineFilled = i < cur - 1;
+                            phaseHtml += `<div class="rt-phase-line ${isLineFilled ? 'filled' : 'empty'}" style="${isLineFilled ? `background:${barBg};` : ''}"></div>`;
+                        }
+                    }
+                    
+                    return `<div class="rt-entity-sub-line rt-phase-row">${labelHtml}
+                        <div class="rt-phase-container"${recolorData}>${phaseHtml}</div>
+                        <span class="rt-phase-label">${cur}/${max}${extra ? ' ' + escapeHtml(extra) : ''}</span>
+                    </div>`;
+                }
+                return `<div class="rt-entity-sub-line">${labelHtml} ${escapeHtmlWithColor(value)}</div>`;
+            }
+            case 'gauge': {
+                const pm = value.match(/(\d+)\s*\/\s*(\d+)/);
+                if (pm) {
+                    const cur = parseInt(pm[1], 10), max = parseInt(pm[2], 10);
+                    const pct = max > 0 ? Math.min(100, (cur / max) * 100) : 0;
+                    const extra = value.replace(pm[0], '').trim();
+                    let barBg = rule.color ? rule.color : 'linear-gradient(90deg, #2ecc71, #f1c40f, #e74c3c)';
+                    if (barId) barBg = getBarBackground(barId, barBg, pct);
+                    const recolorData = barId ? ` data-recolor-id="${escapeHtml(barId)}" data-recolor-current="${escapeHtml(barBg)}" title="Click to recolor"` : '';
+                    
+                    const degrees = -90 + (180 * (pct / 100));
+                    
+                    return `<div class="rt-entity-sub-line rt-gauge-row">${labelHtml}
+                        <div class="rt-gauge-wrap"${recolorData}>
+                            <div class="rt-gauge-bg" style="background:${barBg};"></div>
+                            <div class="rt-gauge-needle" style="transform: rotate(${degrees}deg);"></div>
+                        </div>
+                        <span class="rt-gauge-label">${cur}/${max}${extra ? ' ' + escapeHtml(extra) : ''}</span>
+                    </div>`;
+                }
+                return `<div class="rt-entity-sub-line">${labelHtml} ${escapeHtmlWithColor(value)}</div>`;
+            }
+            case 'charge': {
+                const pm = value.match(/(\d+)\s*\/\s*(\d+)/);
+                if (pm) {
+                    const cur = parseInt(pm[1], 10), max = parseInt(pm[2], 10);
+                    const pct = max > 0 ? Math.min(100, (cur / max) * 100) : 0;
+                    const extra = value.replace(pm[0], '').trim();
+                    
+                    const isLow = cur <= 1 && max > 1;
+                    let barBg = rule.color ? rule.color : (isLow ? '#e74c3c' : '#2ecc71');
+                    if (barId) barBg = getBarBackground(barId, barBg, pct);
+                    const recolorData = barId ? ` data-recolor-id="${escapeHtml(barId)}" data-recolor-current="${escapeHtml(barBg)}" title="Click to recolor"` : '';
+                    
+                    const chargeHtml = `<div class="rt-battery-wrap ${isLow && cur === 0 ? 'empty-flash' : ''}"${recolorData} style="border-color:${barBg};">
+                        <div class="rt-battery-fill" style="width:${pct}%;background:${barBg};"></div>
+                        <div class="rt-battery-nub" style="background:${barBg};"></div>
+                    </div>`;
+
+                    return `<div class="rt-entity-sub-line rt-charge-row">${labelHtml}
+                        ${chargeHtml}
+                        <span class="rt-charge-label">${cur}/${max}${extra ? ' ' + escapeHtml(extra) : ''}</span>
+                    </div>`;
+                }
+                return `<div class="rt-entity-sub-line">${labelHtml} ${escapeHtmlWithColor(value)}</div>`;
+            }
             case 'pill_colored': {
                 const pClass = rule.pillClass || '';
                 const pillHtml = splitSmart(value).map(p => {
@@ -299,7 +484,21 @@ export function getTimeOfDayInfo(str) {
         HEART:{ renderType: 'coin', color: '#ff4466', icon: '❤️', example: '3 (Lives/Hearts)' },
         SKULL:{ renderType: 'coin', color: '#aaaaaa', icon: '💀', example: '12 (Kills/Deaths)' },
         SOUL:{ renderType: 'coin', color: '#aa88ff', icon: '👻', example: '42 (Souls)' },
-        ROLL:{ renderType: 'dice_roll', example: '1d20+5 = 18 (Dice roll badge)' }
+        ROLL:{ renderType: 'dice_roll', example: '1d20+5 = 18 (Dice roll badge)' },
+        CLOCK:{ renderType: 'clock', example: '4/8 (Guard Alertness)' },
+        STARS:{ renderType: 'stars', example: '3/5 (Merchant Favor)' },
+        WEIGHT:{ renderType: 'weight', example: '45/50 lbs (Encumbered)' },
+        CAPACITY:{ renderType: 'weight', example: '45/50 lbs (Encumbered)' },
+        WEATHER:{ renderType: 'weather', example: 'Heavy Rain (Poor Visibility)' },
+        ORBS:{ renderType: 'orbs', example: '3/5 (Ki Points)' },
+        AP:{ renderType: 'orbs', example: '3/5 (Ki Points)' },
+        SLOTS:{ renderType: 'slots', example: '4/10 (Backpack)' },
+        PHASE:{ renderType: 'phase', example: '2/4 (Ritual Summoning)' },
+        STEP:{ renderType: 'phase', example: '2/4 (Ritual Summoning)' },
+        GAUGE:{ renderType: 'gauge', example: '75/100 (Party Morale)' },
+        METER:{ renderType: 'gauge', example: '75/100 (Party Morale)' },
+        CHARGE:{ renderType: 'charge', example: '2/5 (Wand of Fireballs)' },
+        BATTERY:{ renderType: 'charge', example: '2/5 (Wand of Fireballs)' }
     };
 
     // Regex that matches the NEXT ((MARKER)) token anywhere in a string.
@@ -361,7 +560,8 @@ export function getTimeOfDayInfo(str) {
         const reconstructedContent = preText ? `${preText} ${content}`.trim() : content.trim();
 
         let barId = null;
-        if (rule.renderType === 'hp_bar' || rule.renderType === 'xp_bar' || rule.renderType === 'progress') {
+        const progressionTypes = ['hp_bar', 'xp_bar', 'progress', 'clock', 'stars', 'weight', 'orbs', 'slots', 'phase', 'gauge', 'charge'];
+        if (progressionTypes.includes(rule.renderType)) {
             const colonIdx = reconstructedContent.indexOf(':');
             const labelText = colonIdx !== -1 ? reconstructedContent.substring(0, colonIdx).trim() : 'Bar';
             // Include rowContext so that identical labels on different multi-marker rows
