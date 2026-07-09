@@ -173,10 +173,14 @@ export function getTimeOfDayInfo(str) {
                     const cur = parseInt(pm[1], 10), max = parseInt(pm[2], 10);
                     const pct = max > 0 ? Math.min(100, (cur / max) * 100) : 0;
                     const extra = value.replace(pm[0], '').trim();
-                    const bgStyle = rule.color ? `background:${rule.color};` : '';
+                    let barBg = rule.color ? rule.color : 'linear-gradient(90deg, #00c88c, #00d4ff)';
+                    if (barId) barBg = getBarBackground(barId, barBg, pct);
+                    
+                    const recolorData = barId ? ` data-recolor-id="${escapeHtml(barId)}" data-recolor-current="${escapeHtml(barBg)}" title="Click to recolor"` : '';
+
                     return `<div class="rt-entity-sub-line rt-progress-row">${labelHtml}
-                        <div class="rt-progress-bar-wrap">
-                            <div class="rt-progress-bar" style="width:${pct.toFixed(1)}%;${bgStyle}"></div>
+                        <div class="rt-progress-bar-wrap"${recolorData}>
+                            <div class="rt-progress-bar" style="width:${pct.toFixed(1)}%;background:${barBg};"></div>
                         </div>
                         <span class="rt-progress-label">${cur}/${max}${extra ? ' ' + escapeHtml(extra) : ''}</span>
                     </div>`;
@@ -357,7 +361,7 @@ export function getTimeOfDayInfo(str) {
         const reconstructedContent = preText ? `${preText} ${content}`.trim() : content.trim();
 
         let barId = null;
-        if (rule.renderType === 'hp_bar' || rule.renderType === 'xp_bar') {
+        if (rule.renderType === 'hp_bar' || rule.renderType === 'xp_bar' || rule.renderType === 'progress') {
             const colonIdx = reconstructedContent.indexOf(':');
             const labelText = colonIdx !== -1 ? reconstructedContent.substring(0, colonIdx).trim() : 'Bar';
             // Include rowContext so that identical labels on different multi-marker rows
