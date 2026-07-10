@@ -2,6 +2,11 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [4.8.7] - 2026-07-10
+
+### Fixed
+- **Dice Tool Forced-Failure on Malformed Formula**: Fixed `RollTheDice` silently returning a `0` result (an automatic FAILURE against any DC) when the LLM supplied a formula the parser couldn't understand — e.g. comma-joined duplicate formulas like `"1d20+1,1d20+1"` instead of a single `"1d20+1"`. The tool now recovers from comma-separated formulas by using the first valid segment, and falls back to rolling a plain `1d20` (flagged in the result) instead of ever returning an empty/zero roll. Also tightened the tool's `formula` parameter description to instruct the LLM to pass exactly one dice expression per call.
+
 ## [4.8.6] - 2026-07-10
 
 ### Fixed

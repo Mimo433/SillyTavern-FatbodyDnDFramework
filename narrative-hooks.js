@@ -174,6 +174,25 @@ function parseAndRoll(formula) {
     };
 }
 
+/**
+ * Some callers (usually an LLM tool call) mangle the formula by joining
+ * multiple die groups with a comma instead of `+` (e.g. "1d20+1,1d20+1"),
+ * often just the same formula repeated. Since the tool only ever returns a
+ * single result, we recover by taking the first comma-separated segment
+ * that parses as a valid formula, rather than failing the whole roll.
+ * Returns the original string unchanged if there's no comma.
+ */
+function sanitizeFormula(value) {
+    if (!value.includes(',')) return value;
+    const parts = value.split(',').map(p => p.trim()).filter(Boolean);
+    for (const part of parts) {
+        if (parseAndRoll(part) || (SillyTavern.libs.droll && SillyTavern.libs.droll.validate(part))) {
+            return part;
+        }
+    }
+    return parts[0] || value;
+}
+
 export async function doDiceRoll(customDiceFormula, quiet = false) {
     const nullValue = { total: '', rolls: [] };
     let value = typeof customDiceFormula === 'string' ? customDiceFormula.trim() : '1d20';
@@ -185,6 +204,8 @@ export async function doDiceRoll(customDiceFormula, quiet = false) {
 
     if (!value) return nullValue;
 
+    value = sanitizeFormula(value);
+
     // Try custom/advanced parser first
     const customResult = parseAndRoll(value);
     if (customResult) {
@@ -192,29 +213,35 @@ export async function doDiceRoll(customDiceFormula, quiet = false) {
             const context = SillyTavern.getContext();
             context.sendSystemMessage('generic', `${context.name1} rolls a ${value}. The result is: ${customResult.total} (${customResult.rolls.join(', ')})`, { isSmallSys: true });
         }
-        return customResult;
+        return { ...customResult, formula: value };
     }
 
     // Fall back to standard droll library
     const droll = SillyTavern.libs.droll;
-    if (!droll) {
+    if (droll) {
+        const isValid = droll.validate(value);
+        if (isValid) {
+            const result = droll.roll(value);
+            if (result) {
+                if (!quiet) {
+                    const context = SillyTavern.getContext();
+                    context.sendSystemMessage('generic', `${context.name1} rolls a ${value}. The result is: ${result.total} (${result.rolls.join(', ')})`, { isSmallSys: true });
+                }
+                return { total: String(result.total), rolls: result.rolls.map(String), formula: value };
+            }
+        }
+    } else {
         toastr['error']('Dice library (droll) not found.');
-        return nullValue;
     }
 
-    const isValid = droll.validate(value);
-    if (isValid) {
-        const result = droll.roll(value);
-        if (!result) return nullValue;
-        if (!quiet) {
-            const context = SillyTavern.getContext();
-            context.sendSystemMessage('generic', `${context.name1} rolls a ${value}. The result is: ${result.total} (${result.rolls.join(', ')})`, { isSmallSys: true });
-        }
-        return { total: String(result.total), rolls: result.rolls.map(String) };
-    } else {
-        toastr['warning']('Invalid dice formula');
-        return nullValue;
+    // Failsafe: never return empty/zero — that would auto-fail any DC check.
+    toastr['warning'](`Invalid dice formula "${value}" — defaulting to 1d20.`);
+    const fallbackRoll = rollDie(20);
+    if (!quiet) {
+        const context = SillyTavern.getContext();
+        context.sendSystemMessage('generic', `${context.name1} tried to roll an invalid formula ("${value}"), defaulting to 1d20. The result is: ${fallbackRoll}`, { isSmallSys: true });
     }
+    return { total: String(fallbackRoll), rolls: [String(fallbackRoll)], formula: '1d20', invalidFormula: value };
 }
 
 // ── Tool & slash command registration ─────────────────────────────────────────
@@ -235,18 +262,20 @@ export function registerDiceFunctionTool() {
         const toolName = getDiceToolName();
         const isLegacy = settings.legacyDiceNaming;
 
+        const formulaDescription = 'A SINGLE dice formula to roll, e.g. "1d20", "2d6+3", "1d20+5". Supports one or more die groups joined by + or - (e.g. "1d20+1d4+2"), and keep/drop modifiers (e.g. "2d20kh1" for advantage, "2d20kl1" for disadvantage). Provide EXACTLY ONE formula string — do NOT separate multiple formulas with commas, and do NOT repeat/duplicate the same formula in one call. If you need more than one roll, call this tool again separately for each roll.';
+
         const rollDiceSchema = isLegacy ? {
             type: 'object',
             properties: {
                 who: { type: 'string', description: 'The name of the persona rolling the dice' },
-                formula: { type: 'string', description: 'A dice formula to roll, e.g. 1d6' },
+                formula: { type: 'string', description: formulaDescription.replace('1d20', '1d6') },
             },
             required: ['who', 'formula'],
         } : {
             type: 'object',
             properties: {
                 who: { type: 'string', description: 'The name of the persona rolling the dice' },
-                formula: { type: 'string', description: 'A dice formula to roll, e.g. 1d20' },
+                formula: { type: 'string', description: formulaDescription },
                 dc: { type: 'number', description: 'The Difficulty Class (DC) for this roll. Anchors the difficulty before the roll is made.' },
             },
             required: ['who', 'formula', 'dc'],
@@ -255,23 +284,25 @@ export function registerDiceFunctionTool() {
         registerFunctionTool({
             name: toolName,
             displayName: isLegacy ? 'Dice Roll' : 'Dice Roll (with DC)',
-            description: 'Rolls the dice using the provided formula and returns the numeric result. Use when it is necessary to roll the dice to determine the outcome of an action or when the user requests it.',
+            description: 'Rolls the dice using the provided formula and returns the numeric result. Use when it is necessary to roll the dice to determine the outcome of an action or when the user requests it. The formula parameter must be a single valid dice expression (e.g. "1d20+3") — never a comma-separated list or multiple repeated formulas.',
             parameters: rollDiceSchema,
             action: async (args) => {
-                const formula = args?.formula || (isLegacy ? '1d6' : '1d20');
-                const roll = await doDiceRoll(formula, true);
+                const requestedFormula = args?.formula || (isLegacy ? '1d6' : '1d20');
+                const roll = await doDiceRoll(requestedFormula, true);
                 const total = parseInt(roll.total) || 0;
+                const formula = roll.formula || requestedFormula;
+                const invalidNote = roll.invalidFormula ? ` (requested formula "${roll.invalidFormula}" was invalid, defaulted to ${formula})` : '';
 
                 if (isLegacy) {
-                    return args.who
+                    return (args.who
                         ? `${args.who} rolls a ${formula}. The result is: ${total}. Individual rolls: ${roll.rolls.join(', ')}`
-                        : `The result of a ${formula} roll is: ${total}. Individual rolls: ${roll.rolls.join(', ')}`;
+                        : `The result of a ${formula} roll is: ${total}. Individual rolls: ${roll.rolls.join(', ')}`) + invalidNote;
                 }
 
                 const dc = Number(args?.dc) || 0;
-                let result = args.who
+                let result = (args.who
                     ? `${args.who} rolls a ${formula} against DC ${dc}. The result is: ${total}. Individual rolls: ${roll.rolls.join(', ')}`
-                    : `The result of a ${formula} roll against DC ${dc} is: ${total}. Individual rolls: ${roll.rolls.join(', ')}`;
+                    : `The result of a ${formula} roll against DC ${dc} is: ${total}. Individual rolls: ${roll.rolls.join(', ')}`) + invalidNote;
 
                 if (dc > 0) {
                     result += ` (Result: ${total >= dc ? 'SUCCESS' : 'FAILURE'})`;

@@ -9084,7 +9084,7 @@ function tryBindConnectionProfileDropdown(selector, initialProfileId, onProfileI
 
         // --- Version Upgrade Prompt Reset Dialog ---
         {
-            let currentVersion = '4.8.6'; // Fallback
+            let currentVersion = '4.8.7'; // Fallback
             try {
                 const manifestUrl = new URL('./manifest.json', import.meta.url);
                 const response = await fetch(manifestUrl);
