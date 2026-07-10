@@ -944,7 +944,7 @@ async function importPcFromCard(charCard, mode, el) {
     if (s.currentMemo) contextLines.push(`CURRENT GAME STATE:\n${s.currentMemo}`);
     if (ctx.chat && Array.isArray(ctx.chat)) {
         const msgs = ctx.chat.filter(m => !m.is_system && m.mes?.trim()).slice(-8);
-        if (msgs.length > 0) contextLines.push(`RECENT CHAT:\n${msgs.map(m => `${m.name || (m.is_user ? 'User' : 'Character')}: ${m.mes}`).join('\n\n')}`);
+        if (msgs.length > 0) contextLines.push(`RECENT CHAT:\n${msgs.map(m => `${m.name || (m.is_user ? 'User' : 'Character')}: ${m.mes}`).join('\n\n').substring(0, 3000)}`);
     }
     try {
         const charData = ctx.characters?.[ctx.characterId];

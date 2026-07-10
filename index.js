@@ -6756,7 +6756,7 @@ RULES:
                 const msgs = ctx.chat.filter(m => !m.is_system && m.mes?.trim()).slice(-10);
                 if (msgs.length > 0) {
                     const msgText = msgs.map(m => `${m.name || (m.is_user ? 'User' : 'Character')}: ${m.mes}`).join('\n\n');
-                    contextParts.push(`RECENT CHAT (for setting context):\n${msgText}`);
+                    contextParts.push(`RECENT CHAT (for setting context):\n${msgText.substring(0, 6000)}`);
                 }
             }
 
@@ -6848,7 +6848,7 @@ Rules:
                 const msgs = ctx.chat.filter(m => !m.is_system && m.mes?.trim()).slice(-8);
                 if (msgs.length > 0) {
                     const msgText = msgs.map(m => `${m.name || (m.is_user ? 'User' : 'Character')}: ${m.mes}`).join('\n\n');
-                    parts.push(`RECENT CHAT (for setting/tone context):\n${msgText}`);
+                    parts.push(`RECENT CHAT (for setting/tone context):\n${msgText.substring(0, 4000)}`);
                 }
             }
             try {
