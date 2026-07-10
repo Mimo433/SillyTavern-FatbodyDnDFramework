@@ -19,6 +19,8 @@ All notable changes to the **Multihog D&D Framework** will be documented in this
   - `((GAUGE))` - Semi-circle speedometers with a rotating needle for tension/morale tracking.
   - `((CHARGE))` - Segmented battery icons that flash red when depleted.
   *Note: All progression-based tags natively support color-wheel recoloring by clicking them in the state tracker!*
+
+### Fixed
 - **Centralized Tag Examples**: Moved all rendering tag example strings directly into the core `MARKER_TYPE_MAP` definition instead of maintaining them in separate UI files. This architectural improvement ensures that whenever a new tag is added to the engine, its AI context and UI preview are automatically defined and synchronized in one place.
 
 ## [4.8.5] - 2026-07-09
