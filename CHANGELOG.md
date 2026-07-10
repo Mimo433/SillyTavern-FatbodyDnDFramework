@@ -2,7 +2,7 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
-## [4.8.6] - 2026-07-10
+## [4.8.8] - 2026-07-10
 
 ### Added
 - **Colored Progress Variants**: Added a full suite of color-coded variants for the `((PROGRESS))` marker (e.g. `((PROGRESSRED))`, `((PROGRESSBLUE))`, `((PROGRESSGREEN))`) to expand dynamic visual tracking options in the library.
