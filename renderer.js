@@ -1512,21 +1512,49 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                     <button class="rt-random-char-btn" data-archetype="persona">🎭 Persona</button>
                     <button class="rt-random-char-btn" data-archetype="custom">⚙️ Custom</button>
                     <button class="rt-random-char-btn rt-char-roll-trigger" data-archetype="char_roll">🎲 Character Creator</button>
+                    <button class="rt-random-char-btn rt-pc-import-trigger" data-archetype="pc_import">📥 Import Card</button>
                 </div>
                 <div class="rt-onboarding-buttons rt-realistic-buttons" style="width: 100%; display: ${onboardingGenre === 'realistic' ? 'flex' : 'none'}; justify-content: center; gap: 4px; margin: 4px 0; flex-shrink: 0; flex-wrap: wrap;">
                     <button class="rt-random-char-btn" data-archetype="persona">🎭 Persona</button>
                     <button class="rt-random-char-btn" data-archetype="custom">⚙️ Custom</button>
                     <button class="rt-random-char-btn rt-char-roll-trigger" data-archetype="char_roll">🎲 Character Creator</button>
+                    <button class="rt-random-char-btn rt-pc-import-trigger" data-archetype="pc_import">📥 Import Card</button>
                 </div>
                 <div class="rt-onboarding-buttons rt-scifi-buttons" style="width: 100%; display: ${onboardingGenre === 'scifi' ? 'flex' : 'none'}; justify-content: center; gap: 4px; margin: 4px 0; flex-shrink: 0; flex-wrap: wrap;">
                     <button class="rt-random-char-btn" data-archetype="persona">🎭 Persona</button>
                     <button class="rt-random-char-btn" data-archetype="custom">⚙️ Custom</button>
                     <button class="rt-random-char-btn rt-char-roll-trigger" data-archetype="char_roll">🎲 Character Creator</button>
+                    <button class="rt-random-char-btn rt-pc-import-trigger" data-archetype="pc_import">📥 Import Card</button>
                 </div>
                 <div class="rt-onboarding-buttons rt-horror-buttons" style="width: 100%; display: ${onboardingGenre === 'horror' ? 'flex' : 'none'}; justify-content: center; gap: 4px; margin: 4px 0; flex-shrink: 0; flex-wrap: wrap;">
                     <button class="rt-random-char-btn" data-archetype="persona">🎭 Persona</button>
                     <button class="rt-random-char-btn" data-archetype="custom">⚙️ Custom</button>
                     <button class="rt-random-char-btn rt-char-roll-trigger" data-archetype="char_roll">🎲 Character Creator</button>
+                    <button class="rt-random-char-btn rt-pc-import-trigger" data-archetype="pc_import">📥 Import Card</button>
+                </div>
+
+                <!-- PC Import Inline Panel (hidden until 📥 is clicked) -->
+                <div id="rt-pc-import-panel" style="display:none; flex-direction:column; gap:7px; width:100%; flex-shrink:0;">
+                    <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+                        <button id="rt-pc-import-back" style="background:none; border:1px solid rgba(255,255,255,0.2); border-radius:4px; color:inherit; font-size:0.8em; padding:2px 8px; cursor:pointer; opacity:0.75;">← Back</button>
+                        <span style="flex:1; font-weight:bold; color:var(--rt-accent); font-size:0.95em;">📥 Import Character Card as PC</span>
+                    </div>
+                    <div style="font-size:10px; color:rgba(255,255,255,0.45); line-height:1.4;"><b>Add as is</b> = AI preserves original writing, fixes only era/world impossibilities · <b>Fit into Story</b> = full adaptation to campaign setting.</div>
+                    <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+                        <label style="font-size:11px; color:rgba(255,255,255,0.6); white-space:nowrap;">Persona Bio Length</label>
+                        <select id="rt-pc-import-wordselect" style="background:rgba(0,0,0,0.3); color:white; border:1px solid rgba(255,255,255,0.15); border-radius:4px; padding:2px 4px; font-size:11px; box-sizing:border-box;">
+                            <option value="same">Same as Card</option>
+                            <option value="150">Short (~150 words)</option>
+                            <option value="300">Medium (~300 words)</option>
+                            <option value="500">Long (~500 words)</option>
+                            <option value="custom">Custom...</option>
+                        </select>
+                        <input id="rt-pc-import-wordcount" type="number" value="150" min="50" max="5000" step="25"
+                            style="display:none; width:60px; background:rgba(0,0,0,0.3); color:white; border:1px solid rgba(255,255,255,0.15); border-radius:4px; padding:3px 6px; font-size:12px; box-sizing:border-box;">
+                        <span style="font-size:10px; color:rgba(255,255,255,0.35);">(Fit into Story only)</span>
+                    </div>
+                    <input id="rt-pc-import-search" type="text" placeholder="Search characters..." style="width:100%; background:rgba(0,0,0,0.3); color:white; border:1px solid rgba(255,255,255,0.15); border-radius:5px; padding:5px 8px; font-size:12px; box-sizing:border-box;">
+                    <div id="rt-pc-import-list" style="display:flex; flex-direction:column; gap:4px; max-height:200px; overflow-y:auto; padding-right:2px;"></div>
                 </div>
 
                 <!-- Character Roll Inline Panel (hidden until 🎲 is clicked) -->
@@ -1535,6 +1563,16 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                         <button id="rt-char-roll-back" style="background:none; border:1px solid rgba(255,255,255,0.2); border-radius:4px; color:inherit; font-size:0.8em; padding:2px 8px; cursor:pointer; opacity:0.75;">← Back</button>
                         <span style="flex:1; font-weight:bold; color:var(--rt-accent); font-size:0.95em;">🎲 Character Creator</span>
                         <button id="rt-cr-reset-btn" class="rt-cr-reset-btn" style="background:none; border:1px solid rgba(255,255,255,0.2); border-radius:4px; color:inherit; font-size:0.8em; padding:2px 8px; cursor:pointer; opacity:0.75;" title="Clear all fields">🗑 Reset</button>
+                    </div>
+                    <!-- Presets Bar -->
+                    <div id="rt-cr-presets-bar" style="display:flex; align-items:center; gap:5px; padding:4px 0 3px; border-bottom:1px solid rgba(255,255,255,0.08);">
+                        <span style="font-size:0.78em; opacity:0.55; white-space:nowrap;">📋 Presets:</span>
+                        <select id="rt-cr-preset-select" class="text_pole" style="flex:1; font-size:11px; height:22px; padding:2px 4px;">
+                            <option value="">— Select preset —</option>
+                        </select>
+                        <button id="rt-cr-preset-load-btn" style="background:rgba(120,80,220,0.2); border:1px solid rgba(120,80,220,0.5); border-radius:4px; color:inherit; font-size:0.75em; padding:2px 8px; cursor:pointer; white-space:nowrap; flex-shrink:0;">Load</button>
+                        <button id="rt-cr-preset-delete-btn" style="background:rgba(220,50,50,0.12); border:1px solid rgba(220,50,50,0.4); border-radius:4px; color:rgba(255,100,100,0.9); font-size:0.75em; padding:2px 8px; cursor:pointer; white-space:nowrap; flex-shrink:0;">Delete</button>
+                        <button id="rt-cr-preset-save-btn" title="Save current fields as a new preset" style="background:none; border:1px solid rgba(120,80,220,0.5); border-radius:4px; color:var(--rt-accent); font-size:0.75em; padding:2px 8px; cursor:pointer; white-space:nowrap; flex-shrink:0;">＋ Save</button>
                     </div>
                     <div class="rt-cr-row">
                         <div class="rt-cr-field">
@@ -1632,7 +1670,7 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                             <option value="1000">1000</option>
                             <option value="other">Other...</option>
                         </select>
-                        <input id="rt-cr-persona-words-custom" type="number" class="text_pole" style="display:none; width:65px; font-size:11px; height:22px; padding:2px 4px; margin-left:4px;" placeholder="e.g. 800" min="50" max="3000" />
+                        <input id="rt-cr-persona-words-custom" type="number" class="text_pole" style="display:none; width:65px; font-size:11px; height:22px; padding:2px 4px; margin-left:4px;" placeholder="e.g. 800" min="50" max="5000" />
                     </div>
                     <button id="rt-cr-generate-btn" style="width:100%; padding:8px 12px; background:rgba(120,80,220,0.2); border:1px solid rgba(120,80,220,0.6); border-radius:5px; color:var(--rt-text,#eee); font-size:0.92em; font-weight:bold; cursor:pointer; letter-spacing:0.03em;">🎲 Generate Character</button>
                 </div>

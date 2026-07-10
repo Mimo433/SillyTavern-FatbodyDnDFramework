@@ -11,7 +11,7 @@ import { getRequestHeaders } from '../../../../script.js';
 import { fileToDataUrl, scaleImageTo512Square, applyPortraitData, generatePortraitPrompt, generateNpcPortraitPrompt, showPortraitPromptPopup, generatePortraitDirect, autoGeneratePartyPortraits, removeAllPortraits, checkAndTriggerAutoGenerations, autoGenerateEnemyPortraits, forceCheckAutoGenerations, resetAutoGenerationTracking } from './portraits.js';
 import { loadPanelGeometry, loadDeltaHeight, makeDraggable, makeResizableTR, makeResizableBR, makeResizableBL, setupResizeObserver, setupDeltaResize } from './ui-geometry.js';
 import { applyCustomTheme, openThemeWizard, refreshSavedThemesList, handleRecolor, undoThemeChange } from './theme-manager.js';
-import { showCharacterRollPanel } from './character-creator.js';
+import { showCharacterRollPanel, showPcImportPanel } from './character-creator.js';
 import { handleCategorySettings, openCustomFieldEditor, openPromptEditor, refreshOrderList, exportModules, importModulesFromJson } from './ui-editors.js';
 import { openGameSystemWizard, openManageGameSystems, openSystemPromptControlRoom, syncAllNarratorTogglesForUnlockState, extractTopLevelSections, normalizeSectionOrder, getSectionRowDescriptor, transformBaseSectionContent, isBlankSectionContent } from './game-systems.js';
 import { openManageGameCartridges } from './game-cartridges.js';
@@ -2611,9 +2611,13 @@ export function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRe
             const level = parseInt(String(levelSelectEl?.value ?? getSettings().onboardingLevel ?? 1), 10) || 1;
             getSettings().onboardingLevel = level;
 
-            // char_roll just opens a UI panel — no need to persist or trigger I/O
+            // char_roll and pc_import just open UI panels — no need to persist or trigger I/O
             if (archetype === 'char_roll') {
                 showCharacterRollPanel(el);
+                return;
+            }
+            if (archetype === 'pc_import') {
+                showPcImportPanel(el);
                 return;
             }
 
@@ -4980,11 +4984,11 @@ function createPanel() {
                     }
 
                     // 2. Parse core sections
-                    const sectionMarkers = /(?=(?:Appearance\/Species|Appearance|Personality|Brief Background|Background|Habits(?:\/|\s*&\s*|\s+and\s+)Behaviors|Habits|(?<!Habits\/)(?<!Habits & )(?<!Habits and )Behaviors|Relationship with\s*\{\{user\}\}|(?<!Friendship\/)(?<!Affection\/)Relationship)\s*:)/gi;
+                    const sectionMarkers = /(?=(?:Appearance\/Species|Appearance|Personality|Brief Background|Background|Habits(?:\/|\s*&\s*|\s+and\s+)Behaviors|Habits|(?<!Habits\/)(?<!Habits & )(?<!Habits and )Behaviors|Strengths|Flaws|Relationship with\s*\{\{user\}\}|(?<!Friendship\/)(?<!Affection\/)Relationship)\s*:)/gi;
                     const normalizedCore = coreContent.replace(sectionMarkers, '\n');
                     const coreLines = normalizedCore.split('\n');
                     let currentSection = 'General';
-                    const sectionPattern = /^(Appearance\/Species|Appearance|Personality|Brief Background|Background|Habits(?:\/|\s*&\s*|\s+and\s+)Behaviors|Habits|Behaviors|Relationship with\s*\{\{user\}\}|Relationship)\s*:/i;
+                    const sectionPattern = /^(Appearance\/Species|Appearance|Personality|Brief Background|Background|Habits(?:\/|\s*&\s*|\s+and\s+)Behaviors|Habits|Behaviors|Strengths|Flaws|Relationship with\s*\{\{user\}\}|Relationship)\s*:/i;
 
                     for (const line of coreLines) {
                         const trimmed = line.trim();
@@ -5027,6 +5031,7 @@ function createPanel() {
                     'General': '📋', 'Appearance/Species': '👁️', 'Appearance': '👁️', 'Personality': '🧠',
                     'Brief Background': '📜', 'Habits/Behaviors': '🔄', 'Habits': '🔄',
                     'Behaviors': '🔄', 'Relationship': '❤️',
+                    'Strengths': '⚡', 'Flaws': '⚠️',
                 };
 
                 const renderSectionsHtml = (rawContent) => {
@@ -5041,6 +5046,8 @@ function createPanel() {
                                                  name === 'Personality' ? '#8b5cf6' :
                                                  name === 'Brief Background' ? '#3b82f6' :
                                                  name.includes('Habit') || name.includes('Behavior') ? '#10b981' :
+                                                 name === 'Strengths' ? '#22c55e' :
+                                                 name === 'Flaws' ? '#ef4444' :
                                                  'var(--SmartThemeEmColor, var(--SmartThemeBodyColorTextMuted, rgba(128,128,128,0.5)))';
                             html += `<div style="margin-bottom:18px;">
                                 <div style="font-size:14px;font-weight:bold;color:${sectionColor};text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;display:flex;align-items:center;gap:7px;">
@@ -5323,7 +5330,7 @@ function createPanel() {
                     const folderBody = document.createElement('div');
                     folderBody.style.cssText = `display:${isOpen ? 'flex' : 'none'}; flex-direction:column; ${useNpcCardView ? 'padding:4px 0;' : 'border-left:1px solid rgba(255,255,255,0.07); margin-left:10px; padding-left:6px;'} gap:${useNpcCardView ? '4' : '1'}px; padding-top:3px; padding-bottom:3px;`;
 
-                    folderHdr.addEventListener('click', () => {
+                        folderHdr.addEventListener('click', () => {
                         const opening = folderBody.style.display === 'none';
                         folderBody.style.display = opening ? 'flex' : 'none';
                         folderHdr.querySelector('.rt-mf-icon').textContent = opening ? '▼' : '▶';
@@ -5378,15 +5385,32 @@ function createPanel() {
                                     </div>
                                     <div style="font-size:10px;color:rgba(255,255,255,0.35);margin-bottom:14px;">Shows Friendship/Affection tracking bars on NPC cards and popups. Also adds relationship fields to the AI instruction.</div>
 
-                                     <div style="margin-bottom:6px;display:flex;align-items:center;gap:10px;">
-                                         <label style="font-size:12px;color:rgba(255,255,255,0.7);flex:1;">Show Relationship Toast Notifications</label>
-                                         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-                                             <input type="checkbox" id="rt-npc-rel-toast" ${curS.npcRelationshipToast !== false ? 'checked' : ''}
-                                                 style="width:16px;height:16px;accent-color:#d4a940;cursor:pointer;">
-                                             <span style="font-size:11px;color:rgba(255,255,255,0.5);">${curS.npcRelationshipToast !== false ? 'Enabled' : 'Disabled'}</span>
-                                         </label>
-                                     </div>
+                                    <div style="margin-bottom:6px;display:flex;align-items:center;gap:10px;">
+                                        <label style="font-size:12px;color:rgba(255,255,255,0.7);flex:1;">Show Relationship Toast Notifications</label>
+                                        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                                            <input type="checkbox" id="rt-npc-rel-toast" ${curS.npcRelationshipToast !== false ? 'checked' : ''}
+                                                style="width:16px;height:16px;accent-color:#d4a940;cursor:pointer;">
+                                            <span style="font-size:11px;color:rgba(255,255,255,0.5);">${curS.npcRelationshipToast !== false ? 'Enabled' : 'Disabled'}</span>
+                                        </label>
+                                    </div>
                                     <div style="font-size:10px;color:rgba(255,255,255,0.35);margin-bottom:14px;">Emits a toast notification in the bottom-right corner when friendship or affection values change.</div>
+
+                                    <div style="margin-bottom:14px;">
+                                        <label style="font-size:12px;color:rgba(255,255,255,0.7);display:block;margin-bottom:4px;">"Add as is" Import Mode</label>
+                                        <div style="display:flex;flex-direction:column;gap:5px;">
+                                            <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;" title="Wraps the card's raw content in [CORE][/CORE] tags exactly as written. No AI involvement.">
+                                                <input type="radio" name="rt-npc-add-as-is-mode" value="literal" ${(curS.npcAddAsIsMode ?? 'ai_review') === 'literal' ? 'checked' : ''}
+                                                    style="margin-top:3px;accent-color:#d4a940;cursor:pointer;">
+                                                <span style="font-size:11px;color:rgba(255,255,255,0.75);"><b>Literal</b> — wraps the card verbatim in [CORE][/CORE]. No AI.</span>
+                                            </label>
+                                            <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;" title="Sends the card to AI for a minimal logical review. Only corrects world/era conflicts. Original writing is preserved as completely as possible.">
+                                                <input type="radio" name="rt-npc-add-as-is-mode" value="ai_review" ${(curS.npcAddAsIsMode ?? 'ai_review') === 'ai_review' ? 'checked' : ''}
+                                                    style="margin-top:3px;accent-color:#d4a940;cursor:pointer;">
+                                                <span style="font-size:11px;color:rgba(255,255,255,0.75);"><b>AI Review</b> — minimal fix pass for era/world conflicts only. Original writing preserved.</span>
+                                            </label>
+                                        </div>
+                                        <div style="font-size:10px;color:rgba(255,255,255,0.35);margin-top:4px;">Controls what happens when you click "+ Add as is" on a character card.</div>
+                                    </div>
 
                                     <div style="margin-bottom:14px;">
                                         <label style="font-size:12px;color:rgba(255,255,255,0.7);display:block;margin-bottom:4px;">Relationship Max — this chat (± range)</label>
@@ -5410,6 +5434,7 @@ function createPanel() {
                                 let newIgnoreLimits = curS.ignoreNpcImportLimits ?? false;
                                 let newRelToast = curS.npcRelationshipToast !== false;
                                 let newNpcPortraits = curS.npcPortraits !== false;
+                                let newAddAsIsMode = curS.npcAddAsIsMode ?? 'ai_review';
                                 // Track word count values via closure — updated by input events,
                                 // read at save time. Initialized to current saved values so
                                 // leaving them unchanged correctly preserves the user's setting.
@@ -5470,6 +5495,12 @@ function createPanel() {
                                             if (portraitsEl.nextElementSibling) portraitsEl.nextElementSibling.textContent = newNpcPortraits ? 'Enabled' : 'Disabled';
                                         });
                                     }
+                                    // Wire up the add-as-is mode radio buttons
+                                    document.querySelectorAll('input[name="rt-npc-add-as-is-mode"]').forEach(radio => {
+                                        radio.addEventListener('change', () => {
+                                            if (radio.checked) newAddAsIsMode = radio.value;
+                                        });
+                                    });
                                 }, 0);
 
                                 const result = await ctx.callGenericPopup(popupHtml, ctx.POPUP_TYPE?.CONFIRM ?? 3, '', {
@@ -5485,6 +5516,7 @@ function createPanel() {
                                     updS.ignoreNpcImportLimits = newIgnoreLimits;
                                     updS.npcMajorWords = finalMajor;
                                     updS.npcMinorWords = finalMinor;
+                                    updS.npcAddAsIsMode = newAddAsIsMode;
                                     setNpcRelationshipMaxForCurrentChat(finalRelMax);
                                     updS.npcRelationshipBars = newRel;
                                     updS.npcRelationshipToast = newRelToast;
@@ -5499,6 +5531,8 @@ function createPanel() {
                                     const onbRel = document.getElementById('rt_onboarding_mod_npc_rel_bars');
                                     if (onbRel) onbRel.checked = newRel;
                                     $('#rpg_tracker_ignore_npc_limits').prop('checked', newIgnoreLimits);
+                                    // Sync Add as Is mode to main settings panel radios
+                                    $(`input[name="rpg_npc_add_as_is_mode_main"][value="${newAddAsIsMode}"]`).prop('checked', true);
 
                                     // Rebuild the NPC instruction from settings
                                     if (updS.routerModules?.npc) {
@@ -6497,10 +6531,15 @@ function createPanel() {
                     content = adaptedContent;
                 }
             } else {
-                // Direct add: use name, description, personality (NOT scenario/first_mes)
+                // Literal add: take the card's description field verbatim — the card
+                // already has its content figured out. Wrap it in [CORE][/CORE] as-is.
                 const parts = ['[CORE]'];
-                if (charCard.description) parts.push(charCard.description.substring(0, 1500));
-                if (charCard.personality) parts.push(`Personality: ${charCard.personality.substring(0, 500)}`);
+                if (charCard.description) parts.push(charCard.description.substring(0, 3000));
+                // Append personality only if it exists as a separate field AND doesn't
+                // look like it's already included in the description.
+                if (charCard.personality && !charCard.description?.includes(charCard.personality.substring(0, 40))) {
+                    parts.push(charCard.personality.substring(0, 1000));
+                }
                 parts.push('[/CORE]');
                 content = parts.join('\n');
             }
@@ -6631,6 +6670,71 @@ function createPanel() {
          * @param {object} charCard
          * @returns {Promise<string|null>}
          */
+        /**
+         * Applies a minimal AI review to a character card — fixes only logical world/era
+         * impossibilities. Preserves original writing as completely as possible.
+         * Returns an [[NPC: ...]] string on success, or null on failure.
+         * @param {object} charCard
+         */
+        const minimalReviewNpcWithAI = async (charCard) => {
+            const s = getSettings();
+            const ctx = SillyTavern.getContext();
+            const name = charCard.name || 'Unnamed';
+
+            const contextParts = [];
+            contextParts.push(`CHARACTER CARD:\nName: ${name}\nDescription: ${(charCard.description || '').substring(0, 3000)}\nPersonality: ${(charCard.personality || '').substring(0, 1000)}`);
+            if (s.currentMemo) contextParts.push(`CURRENT GAME STATE:\n${s.currentMemo.substring(0, 2000)}`);
+            if (ctx.chat && Array.isArray(ctx.chat)) {
+                const msgs = ctx.chat.filter(m => !m.is_system && m.mes?.trim()).slice(-8);
+                if (msgs.length > 0) {
+                    contextParts.push(`RECENT CHAT (for setting context):\n${msgs.map(m => `${m.name || (m.is_user ? 'User' : 'Character')}: ${m.mes}`).join('\n\n').substring(0, 4000)}`);
+                }
+            }
+            try {
+                const charData = ctx.characters?.[ctx.characterId];
+                if (charData?.description) contextParts.push(`NARRATOR/WORLD CARD:\n${charData.description.substring(0, 1500)}`);
+            } catch (_) {}
+
+            const systemPrompt = `${s.routerSystemPromptTemplate || ''}
+
+---
+
+You are an NPC Minimal Review Agent. Your ONLY job is to fix logical impossibilities caused by world or era mismatches (e.g. a character has a smartphone in a medieval fantasy setting, or uses modern slang in a historical world).
+
+RULES:
+- Preserve the original character card writing as faithfully as possible.
+- Do NOT restructure, rewrite, or expand the content.
+- Do NOT change the character's personality, motivations, backstory, or relationships unless they are logically impossible in this setting.
+- ONLY change specific terminology, equipment names, or references that are a hard logical impossibility.
+- If the card fits fine or has only minor style mismatches, output it almost entirely unchanged.
+- Wrap the full content in a [CORE] and [/CORE] block.
+- Your output MUST be strictly formatted as:
+  [[NPC: Name | Description | keywords]]
+- Output ONLY this single [[NPC: ...]] tag. No preamble or explanation.
+- Do NOT use the "|\'" character inside the Description; use newlines to separate internal sections.`;
+
+            const userPrompt = contextParts.join('\n\n---\n\n');
+            const aiSettings = {
+                connectionSource: s.routerConnectionSource ?? 'default',
+                connectionProfileId: s.routerConnectionProfileId || '',
+                completionPresetId: s.routerCompletionPresetId || '',
+                ollamaUrl: s.routerOllamaUrl || 'http://localhost:11434',
+                ollamaModel: s.routerOllamaModel || '',
+                openaiUrl: s.routerOpenaiUrl || '',
+                openaiKey: s.routerOpenaiKey || '',
+                openaiModel: s.routerOpenaiModel || '',
+                maxTokens: s.routerMaxTokens || 0,
+                debugMode: s.debugMode,
+            };
+            try {
+                const result = await sendStateRequest(aiSettings, systemPrompt, userPrompt);
+                return (result || '').trim() || null;
+            } catch (err) {
+                toastr['error'](`AI review failed: ${String(err.message || err).substring(0, 120)}`, 'NPC Import');
+                return null;
+            }
+        };
+
         const adaptNpcWithAI = async (charCard) => {
             const s = getSettings();
             const ctx = SillyTavern.getContext();
@@ -6681,6 +6785,8 @@ function createPanel() {
                 }
             } catch (_) {}
 
+            const npcInstruction = buildNpcInstruction(s.npcMajorWords || 25, s.npcMinorWords || 15, !!s.ignoreNpcImportLimits);
+
             const systemPrompt = `${s.routerSystemPromptTemplate || ''}
 
 ---
@@ -6688,12 +6794,12 @@ function createPanel() {
 You are an NPC Adaptation Agent. Given a character card from a different source and the current RPG campaign context, adapt the character to fit naturally into the ongoing story.
 
 <npc_instructions>
-${s.routerModules?.npc?.instruction || ''}
+${npcInstruction}
 </npc_instructions>
 
 Rules:
 - If the character is from a different era/genre (e.g., modern character in a medieval fantasy), translate their skills, equipment, backstory, and background to fit the current world setting.
-- Preserve the character's core personality, motivations, and distinguishing traits.
+- Preserve the character's core personality, motivations, and distinguishing traits.${s.ignoreNpcImportLimits ? `\n- MATCH LENGTH: Aim to make your output approximately the same length/word count as the original character card.` : ''}
 - Write a concise NPC lorebook entry following the exact <npc_instructions> provided above.
 - Your output MUST be strictly formatted as a lorebook entry tag. It MUST look EXACTLY like this:
   [[NPC: Name | Description | keywords]]
@@ -7131,15 +7237,27 @@ Rules:
                         const directBtn = document.createElement('button');
                         directBtn.className = 'rt-charpicker-add-btn direct';
                         directBtn.textContent = '+ Add as is';
+                        directBtn.title = getSettings().npcAddAsIsMode === 'ai_review'
+                            ? 'AI Review mode: sends card to AI for a minimal logical review before adding (era/world conflicts only).'
+                            : 'Literal mode: wraps the card content in [CORE][/CORE] exactly as written. No AI involved.';
                         directBtn.addEventListener('click', async () => {
+                            const mode = getSettings().npcAddAsIsMode ?? 'ai_review';
                             directBtn.disabled = true;
-                            directBtn.textContent = '⏳ Adding...';
+                            directBtn.textContent = mode === 'ai_review' ? '⏳ Reviewing...' : '⏳ Adding...';
                             try {
-                                const ok = await createNpcFromCharCard(char, bookName);
-                                if (ok) {
-                                    toastr['success'](`Added "${char.name}" as NPC.`, 'NPC Creator');
-                                    overlay.remove();
-                                    await refreshManifest();
+                                if (mode === 'ai_review') {
+                                    // Minimal AI review pass — fix only world/era impossibilities
+                                    const reviewed = await minimalReviewNpcWithAI(char);
+                                    if (!reviewed) { directBtn.disabled = false; directBtn.textContent = '+ Add as is'; return; }
+                                    await showNpcPreviewAndAdd(reviewed, char.name, 'NPC Creator', char.avatar);
+                                } else {
+                                    // Literal — wrap verbatim, no AI
+                                    const ok = await createNpcFromCharCard(char, bookName);
+                                    if (ok) {
+                                        toastr['success'](`Added "${char.name}" as NPC.`, 'NPC Creator');
+                                        overlay.remove();
+                                        await refreshManifest();
+                                    }
                                 }
                             } catch (err) {
                                 toastr['error'](`Failed: ${String(err.message || err).substring(0, 100)}`, 'NPC Creator');
@@ -11649,6 +11767,20 @@ RULES:
             if (typeof globalThis._rpgRenderAgentModules === 'function') {
                 globalThis._rpgRenderAgentModules();
             }
+        });
+
+        // "Add as is" Import Mode — main settings panel radios
+        // Set initial checked state from saved setting
+        const _currentAddAsIsMode = settings.npcAddAsIsMode ?? 'ai_review';
+        $(`input[name="rpg_npc_add_as_is_mode_main"][value="${_currentAddAsIsMode}"]`).prop('checked', true);
+        // On change: save to settings and mirror to the quick-popup radios (if open)
+        $('input[name="rpg_npc_add_as_is_mode_main"]').on('change', function () {
+            if (!$(this).prop('checked')) return;
+            const newMode = $(this).val();
+            settings.npcAddAsIsMode = newMode;
+            saveSettings();
+            // Sync quick-popup radios (name="rt-npc-add-as-is-mode") if they exist in the DOM
+            $(`input[name="rt-npc-add-as-is-mode"][value="${newMode}"]`).prop('checked', true);
         });
 
         // New Entry Settings Bindings

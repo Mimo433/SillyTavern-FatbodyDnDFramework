@@ -2,6 +2,24 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [4.9.0] - 2026-07-10
+
+### Added
+- **Character Creator Presets**: The Character Creator now features a persistent Presets system. You can save your currently entered fields (Species, Traits, Class, etc.) as a named preset, then instantly load them later via a dropdown menu to skip repetitive typing for common character archetypes.
+- **NPC Strengths & Flaws Sections**: Two new sections — `Strengths` and `Flaws` — are now part of every NPC `[CORE]` block. The AI is instructed to keep them concise (sharp phrases over prose) and use asymmetric counts to reflect character nature (e.g. a villain gets more flaws; a kindly mentor gets more strengths). Both sections are parsed and rendered in the full NPC card UI with distinct icons (⚡ and ⚠️) and colors (green / red).
+- **Dual-Mode "Add as is" NPC Import**: The "Add as is" button on character card import now supports two configurable modes, selectable in ⚙️ NPC Settings:
+  - **Literal** — Wraps the card's raw description verbatim in `[CORE][/CORE]` tags. No AI is involved. The card's existing writing is treated as canonical.
+  - **AI Review** — Sends the card to the AI for a *minimal* fix pass that resolves only hard logical impossibilities (e.g. a smartphone in a medieval setting, modern slang in a historical world). Original prose is preserved as faithfully as possible.
+- **📥 Import Card — PC Import Flow**: A new `📥 Import Card` button is now available alongside the existing archetype buttons on the State Tracker startup screen. Clicking it opens an inline character picker with search/filter and per-card action buttons:
+  - **📋 Add as is** — Performs a minimal AI review (era/world conflict fixes only) then generates a persona bio from the card.
+  - **🤖 Fit into Story** — Fully adapts the character to the current campaign setting before generating a state memo and persona bio.
+  - Both modes: (1) send a `sendDirectPrompt` to generate the tracker state memo blocks directly in the chat, then (2) generate a persona bio via the router AI and surface it in the existing Persona Confirm overlay for review and one-click lorebook registration.
+
+### Changed
+- **`buildNpcInstruction` / `router.js` field lists**: All NPC-related field enumerations, tool schemas, update instructions, and legacy wrap patterns now include `Strengths` and `Flaws`.
+- **NPC section parser / renderer**: `parseNpcSections` and `renderSectionsHtml` now recognize and visually distinguish `Strengths` (green, ⚡) and `Flaws` (red, ⚠️) from the rest of the Core Identity sections.
+- **Literal add verbatim limit**: Raised the character card description slice from 1,500 to 3,000 characters for literal adds to avoid silently truncating long cards. Personality is only appended when it is not already embedded in the description.
+
 ## [4.8.9] - 2026-07-10
 
 ### Added

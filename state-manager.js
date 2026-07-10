@@ -329,7 +329,7 @@ Under no circumstances should you create an NPC entry for the player character, 
 Always use the exact macro string \`{{user}}\` when referring to the player character in EVENT, QUEST, or NPC relationship descriptions; do NOT write the plain word "user" or "player" or their actual character name in entry contents.
 
 <CORE_FORMAT — NPC only>
-IMPORTANT: The Description field inside the [[ ]] tags MUST start directly with the [CORE] tag. Do NOT prepend any timestamps, dates, or other text before the [CORE] tag under any circumstances (e.g. do NOT write "[4:47 PM, ${useDdMmYy ? '01/01/2026' : 'Day 1'}] [CORE]" or "[${useDdMmYy ? 'DD/MM/YYYY' : 'Day X'}, HH:MM] [CORE]"). The very first character of the Description MUST be the "[" of the "[CORE]" tag. Wrap the identity sections (Appearance/Species, Personality, Brief Background, Habits/Behaviors) inside a single \`[CORE]\` and \`[/CORE]\` tag block.
+IMPORTANT: The Description field inside the [[ ]] tags MUST start directly with the [CORE] tag. Do NOT prepend any timestamps, dates, or other text before the [CORE] tag under any circumstances (e.g. do NOT write "[4:47 PM, ${useDdMmYy ? '01/01/2026' : 'Day 1'}] [CORE]" or "[${useDdMmYy ? 'DD/MM/YYYY' : 'Day X'}, HH:MM] [CORE]"). The very first character of the Description MUST be the "[" of the "[CORE]" tag. Wrap the identity sections (Appearance/Species, Personality, Brief Background, Habits/Behaviors, Strengths, Flaws) inside a single \`[CORE]\` and \`[/CORE]\` tag block.
 
 CRITICAL — [CORE] is permanent identity, still true after this arc ends. Extrapolate enduring traits from behavior; never recap this turn, voyage, or crisis.
 BANNED in [CORE]: momentary actions/states; plot progress ("increasingly…", "first to notice…", "this voyage"); roles defined by ongoing events ("crewman on X who became unhinged by Y"). Scene facts go in timestamped lines after [/CORE] only.
@@ -339,14 +339,17 @@ Appearance/Species: Species, build, age, features, usual attire — not current 
 Personality: Stable temperament and drives — not today's mood, fear, or stress.
 Brief Background: Standing role, origin, history — not their part in the current plot.
 Habits/Behaviors: Recurring mannerisms and patterns — not one scene's behavior.
+Strengths: [Concise bullet phrases formatted in bullet points of their most notable strengths, skills, or virtues. Sharp and specific — no vague generalities. A kind character may have more strengths than flaws.]
+Flaws: [Concise bullet phrases formatted in bullet points of their most notable weaknesses, bad habits, or moral failings. Be honest and specific. A troubled character may have more flaws than strengths.]
+(Note: The split between strengths and flaws does not need to be even. It is perfectly fine to have an uneven split—like having more strengths than flaws, or more flaws than strengths—so long as it authentically reflects the character. However, it can be evenly split if it makes sense.)
 [/CORE]
 
 After the [/CORE] block, append timestamped narrative updates as usual ([${useDdMmYy ? 'DD/MM/YYYY' : 'Day X'}, HH:MM] ...).
 </CORE_FORMAT>
 ## CORE IDENTITY UPDATES
-If any field inside the permanent [CORE] block changes, is updated, or new information is revealed (Appearance/Species, Personality, Brief Background, Habits/Behaviors), output:
+If any field inside the permanent [CORE] block changes, is updated, or new information is revealed (Appearance/Species, Personality, Brief Background, Habits/Behaviors, Strengths, Flaws), output:
   [[UPDATE_CORE: Book::UID | FieldName | New field text]]
-Use the exact FieldName (e.g. Personality, Brief Background, Appearance/Species, Habits/Behaviors). Do NOT log core updates as normal event/update entries.`;
+Use the exact FieldName (e.g. Personality, Brief Background, Appearance/Species, Habits/Behaviors, Strengths, Flaws). Do NOT log core updates as normal event/update entries.`;
 
     let enableRelBars = false;
     try {
@@ -502,6 +505,7 @@ function buildDefaultSettings() {
         npcRelationshipLog: {},      // { [fullId]: [{timestamp,field,delta,newValue,source}] } — capped 50/NPC
         experimentalNpcImport: true,
         ignoreNpcImportLimits: false,
+        npcAddAsIsMode: 'ai_review',   // 'literal' = wrap card verbatim in [CORE]; 'ai_review' = minimal world/era fix before adding
         use24hTime: false,
         useDdMmYyFormat: false,
         initialDate: "Day 1",

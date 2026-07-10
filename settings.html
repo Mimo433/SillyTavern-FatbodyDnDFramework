@@ -574,7 +574,22 @@
                                         <span>Ignore Character Limits When Importing Character Cards</span>
                                         <i class="fa-solid fa-circle-question interactable" style="font-size: 0.85em; opacity: 0.7; margin-left: 4px;" title="Omits the &lt;CORE LENGTH TARGETS&gt; section from the NPC prompt."></i>
                                     </label>
-                                </div>
+
+                                    <div style="margin-top: 6px;">
+                                        <label style="font-size: 11px; opacity: 0.7; display: block; margin-bottom: 4px;">"Add as is" Import Mode</label>
+                                        <div class="flex-container flexFlowColumn gap-1" style="padding-left: 5px;">
+                                            <label class="checkbox_label" title="Wraps the card's raw content in [CORE][/CORE] tags exactly as written. No AI involvement.">
+                                                <input type="radio" name="rpg_npc_add_as_is_mode_main" id="rpg_npc_add_as_is_literal" value="literal" />
+                                                <span style="font-size: 11px;"><b>Literal</b> — wraps the card verbatim in [CORE][/CORE]. No AI.</span>
+                                            </label>
+                                            <label class="checkbox_label" title="Sends the card to AI for a minimal logical review. Only corrects world/era conflicts. Original writing is preserved as completely as possible.">
+                                                <input type="radio" name="rpg_npc_add_as_is_mode_main" id="rpg_npc_add_as_is_ai_review" value="ai_review" />
+                                                <span style="font-size: 11px;"><b>AI Review</b> — minimal fix pass for era/world conflicts only. Original writing preserved.</span>
+                                            </label>
+                                        </div>
+                                        <div style="font-size: 10px; opacity: 0.5; margin-top: 3px;">Controls what happens when you click "+ Add as is" on a character card.</div>
+                                    </div>
+
                             </div>
                         </div>
 
