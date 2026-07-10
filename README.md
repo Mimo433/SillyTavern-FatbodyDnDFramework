@@ -11,12 +11,13 @@ In addition to fantasy, the system works just as well for casual "slice of life"
 ---
 
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/cde8b1b9-dc31-4089-97dd-ebd16facd3af" width="80%" alt="A basic character sheet" />
+  <img src="https://github.com/user-attachments/assets/9137cee6-530e-428a-8034-ba142e60aae9" width="80%" alt="A basic character sheet" />
   <br>
   <em>A basic character sheet</em>
 </p>
 
 ---
+
 
 ### The Core Components:
 
