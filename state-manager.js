@@ -17,7 +17,8 @@ export const DEFAULT_NPC_SECTIONS = [
     { id: 'sec_background', name: 'Brief Background', description: 'Standing role, origin, history — not their part in the current plot.', icon: '📜', color: '#3b82f6' },
     { id: 'sec_habits', name: 'Habits/Behaviors', description: 'Recurring mannerisms and patterns — not one scene\'s behavior.', icon: '🔄', color: '#10b981' },
     { id: 'sec_strengths', name: 'Strengths', description: '[Concise bullet phrases formatted in bullet points of their most notable strengths, skills, or virtues. Sharp and specific — no vague generalities. A kind character may have more strengths than flaws.]', icon: '⚡', color: '#22c55e' },
-    { id: 'sec_flaws', name: 'Flaws', description: '[Concise bullet phrases formatted in bullet points of their most notable weaknesses, bad habits, or moral failings. Be honest and specific. A troubled character may have more flaws than strengths.]\n(Note: The split between strengths and flaws does not need to be even. It is perfectly fine to have an uneven split—like having more strengths than flaws, or more flaws than strengths—so long as it authentically reflects the character. However, it can be evenly split if it makes sense.)', icon: '⚠️', color: '#ef4444' }
+    { id: 'sec_flaws', name: 'Flaws', description: '[Concise bullet phrases formatted in bullet points of their most notable weaknesses, bad habits, or moral failings. Be honest and specific. A troubled character may have more flaws than strengths.]\n(Note: The split between strengths and flaws does not need to be even. It is perfectly fine to have an uneven split—like having more strengths than flaws, or more flaws than strengths—so long as it authentically reflects the character. However, it can be evenly split if it makes sense.)', icon: '⚠️', color: '#ef4444' },
+    { id: 'sec_combat_profile', name: 'Combat Profile', description: '[HIDDEN UNTIL SET — only written when a [COMBAT] block for this NPC is visible in the narrative. Copy the full stat block verbatim: HP, AC, saves, weapons, abilities, and any other declared stats. Never fabricate or summarize.]', icon: '🤺', color: '#38bdf8', hiddenUntilSet: true }
 ];
 
 export const DEFAULT_PC_SECTIONS = [
@@ -404,14 +405,19 @@ Expand/extrapolate thematically if you can't otherwise meet the specified length
 </CORE_LENGTH TARGETS>`;
     }
 
+
     instruction += `\n\n<COMBAT_GRANULARITY>
 Do NOT record per-round combat updates (e.g., creature HP changes, turn-by-turn action lists, temporary conditions mid-fight). For long combats, limit updates to the initiation of combat (e.g., when they became hostile and attacked {{user}}), a high-level progress update every ~5 rounds (to capture major shifts or stalemates), and the final resolved outcome once it concludes.
 </COMBAT_GRANULARITY>
 
 <COMBAT_PROFILE_PERSISTENCE>
-An NPC entry does not require combat stats to exist — appearance, personality, and background alone are sufficient. Never fabricate a combat profile just to fill out an NPC entry.
-The FIRST time a recorded NPC (one who already has, or now qualifies for, an entry per the significance rule above) enters combat and the GM declares their [COMBAT] stats, patch those exact stats into that NPC's existing [CORE] block — or seed them into a newly-created entry if this is their first appearance. This profile is now canonical for that individual: on any later encounter, defer to it rather than re-deriving fresh stats.
-PLACEMENT (overrides the general append-only-chronicle update rule for this specific content): the combat profile is IDENTITY data, not a chronicle event. It must be written/patched as its own labeled line inside [CORE] — e.g. a final \`Combat Profile: HP X/X | AC X | BAB +X | ...\` line immediately before the closing [/CORE] tag — never as a \`[Day X, time]\`-prefixed timestamped delta, and never appended after [/CORE] alongside the entry's chronicle history. When patching an existing entry that already has [CORE] content, edit only that Combat Profile line in place; do not touch or rewrite the rest of [CORE] or any chronicle entries below it.
+TRIGGER — Combat Profile is a HIDDEN field. Write it ONLY when a [COMBAT] block for this specific NPC is literally present in the current narrative text. Do NOT write it because combat was narrated in prose, because a fight happened, or because you can infer stats from context. If there is no [COMBAT] block for this NPC visible right now, leave Combat Profile absent entirely.
+
+CONTENT — When a [COMBAT] block IS present, transcribe it completely and verbatim into \`Combat Profile:\` inside [CORE]. Include every declared stat: HP, AC, attack bonus, damage, saves, weapons, abilities, special traits — everything the [COMBAT] block lists. Do NOT condense, summarize, or hand-pick a subset. The goal is a faithful copy, not an interpretation.
+
+UPDATE — If a Combat Profile already exists in [CORE] and a new [COMBAT] block for the same NPC appears with updated stats, patch the Combat Profile line in place with the new values. Do not touch any other [CORE] field.
+
+PLACEMENT — Combat Profile is IDENTITY data, not a chronicle event. It belongs as its own labeled line inside [CORE] (e.g. immediately before the closing [/CORE] tag) — never as a timestamped delta line, and never appended after [/CORE].
 </COMBAT_PROFILE_PERSISTENCE>`;
     return instruction;
 }
