@@ -100,7 +100,7 @@ MANDATORY FORMAT FOR EVERY ITEM:
 - Every item MUST have a thematic emoji prefix before the rarity tag
 - Gear with combat stats MUST include them in parentheses before the worth: e.g. (1d8+1 Slashing) or (AC +2)
 - Every item MUST have an estimated worth at the end: (~X currency) where currency fits the world setting (GP, SP, CP, Dollars, Caps, etc.)
-- Bare currency (e.g. "💰 1,200 GP") goes under Other Items — no rarity tag needed
+- Bare currency (e.g. "💰 1,200 GP" or "💵 $500") goes under Other Items — no rarity tag needed. Use "💵" for modern/paper currency (like Dollars) and "💰" for gold/coins.
 
 EQUIPPED ITEMS: Tag any actively worn or held item with [E] immediately after the rarity tag.
 - An item in 'Gear:' without [E] is carried but NOT currently worn or held.

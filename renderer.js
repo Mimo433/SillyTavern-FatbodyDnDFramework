@@ -781,9 +781,12 @@ export function getTimeOfDayInfo(str) {
     const splitSmart = (text) => {
         const res = [];
         let cur = '', depth = 0;
-        for (const c of text) {
+        for (let i = 0; i < text.length; i++) {
+            const c = text[i];
             if (c === '(') depth++; else if (c === ')') depth--;
-            if (c === ',' && depth === 0) { res.push(cur.trim()); cur = ''; }
+            // Do not split on comma if it is between two digits (thousands separator)
+            const isDigitSeparator = c === ',' && i > 0 && i < text.length - 1 && /\d/.test(text[i - 1]) && /\d/.test(text[i + 1]);
+            if (c === ',' && depth === 0 && !isDigitSeparator) { res.push(cur.trim()); cur = ''; }
             else cur += c;
         }
         if (cur.trim()) res.push(cur.trim());
@@ -1502,7 +1505,8 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                     if (line.trim().match(/^[-*]\s+/)) {
                         pendingBullets.push(line.trim().replace(/^[-*]\s*/, ''));
                     } else {
-                        line.split(/,(?![^(]*\))/).map(i => i.trim()).filter(Boolean)
+                        // Split on commas except when they are between digits (thousands separators) or inside parentheses
+                        line.split(/(?<!\d),(?![^(]*\))|,(?!\d)(?![^(]*\))/).map(i => i.trim()).filter(Boolean)
                             .forEach(i => pendingBullets.push(i));
                     }
                 }
