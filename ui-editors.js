@@ -1367,6 +1367,8 @@ function openSectionEditor(targetType) {
             if (!presetName || !presetName.trim()) return;
             const nameTrimmed = presetName.trim();
             s[presetsKey][nameTrimmed] = JSON.parse(JSON.stringify(workingSections));
+            // Force top-level reassignment so SillyTavern's shallow proxy detects the change
+            s[presetsKey] = { ...s[presetsKey] };
             saveSettings();
             render();
             document.getElementById('rt_sec_se_preset_select').value = nameTrimmed;
@@ -1378,6 +1380,8 @@ function openSectionEditor(targetType) {
             if (!presetName || !s[presetsKey][presetName]) return;
             if (confirm(`Delete preset "${presetName}"?`)) {
                 delete s[presetsKey][presetName];
+                // Force top-level reassignment so SillyTavern's shallow proxy detects the change
+                s[presetsKey] = { ...s[presetsKey] };
                 saveSettings();
                 render();
                 toastr['info'](`Deleted preset: ${presetName}`);

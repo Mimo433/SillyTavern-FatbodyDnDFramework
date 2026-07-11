@@ -1522,9 +1522,10 @@ function getSettingsInternal(extensionSettings) {
     }
     // ── MIGRATION: Auto-fix legacy corrupted PC Core Section colors ────────────────
     if (s.pcCoreSections && Array.isArray(s.pcCoreSections) && s.pcCoreSections.length === 6) {
-        const namesMatch = s.pcCoreSections.every((sec, idx) => sec.name === DEFAULT_PC_SECTIONS[idx].name);
+        // We check by ID rather than name, because the legacy version might have had "Appearance" instead of "Appearance/Species"
+        const idsMatch = s.pcCoreSections.every((sec, idx) => sec.id === DEFAULT_PC_SECTIONS[idx].id);
         const colorsMatch = s.pcCoreSections.every((sec, idx) => sec.color === DEFAULT_PC_SECTIONS[idx].color);
-        if (namesMatch && !colorsMatch) {
+        if (idsMatch && !colorsMatch) {
             s.pcCoreSections.forEach((sec, idx) => {
                 sec.color = DEFAULT_PC_SECTIONS[idx].color;
             });
