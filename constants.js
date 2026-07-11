@@ -84,10 +84,10 @@ Status: Healthy
 [/PARTY]`,
   'benched party': `Members temporarily separated from {{user}} while reunion remains plausible. Code moves their full [PARTY] stat sheet automatically — never output stat blocks here.
 
-Output [BENCHED PARTY] only when a bench or unbench occurs this turn; otherwise omit entirely. Do NOT also output [PARTY] on a bench/unbench turn — code handles roster moves. If other [PARTY] members had real changes (HP, gear, status, etc.), output [PARTY] for those changes only; still do not list the benched/unbenched member there.
+Output [BENCHED PARTY] only when a bench or unbench occurs this turn; otherwise omit entirely. Always close the block: \`[/BENCHED PARTY]\`. Do NOT also output [PARTY] on a bench/unbench turn — code handles roster moves. If other [PARTY] members had real changes (HP, gear, status, etc.), output [PARTY] for those changes only; still do not list the benched/unbenched member there.
 
 One command per line inside the block:
-- [BENCH] Name — reason   — member separates (hospitalized, scouting ahead, captured, sent on extended task, stranded, etc.). Name must match their [PARTY] entry. Reason required; derive from narrative.
+- [BENCH] Name — reason   — member separates. Name may be first name only (e.g. Robin) or full header (Robin (Class)). Reason required; derive from narrative.
 - [UNBENCH] Name          — member reunites with {{user}} on-screen.
 
 Infer benching/reunion from the narrative — no GM annotation exists for either. Bias toward under-triggering on bench: brief scene absence is NOT a bench. Wrong bench is worse than a missed one (missed benches self-heal on a later turn).
@@ -124,7 +124,7 @@ MANDATORY FORMAT FOR EVERY ITEM:
 - Every item MUST have a thematic emoji prefix before the rarity tag
 - Gear with combat stats MUST include them in parentheses before the worth: e.g. (1d8+1 Slashing) or (AC +2)
 - Every item MUST have an estimated worth at the end: (~X currency) where currency fits the world setting (GP, SP, CP, Dollars, Caps, etc.)
-- Bare currency (e.g. "💰 1,200 GP" or "💵 $500") goes under Other Items — no rarity tag needed. Use "💵" for modern/paper currency (like Dollars) and "💰" for gold/coins.
+- Bare currency (e.g. "💰 1,200 GP") goes under Other Items — no rarity tag needed
 
 EQUIPPED ITEMS: Tag any actively worn or held item with [E] immediately after the rarity tag.
 - An item in 'Gear:' without [E] is carried but NOT currently worn or held.
@@ -454,8 +454,7 @@ The active context contains recent "World Progression" reports detailing backgro
 </world_progression>
 
 <party_join_leave>
-When a character joins/leaves, explicitly state (Name joins/leaves the party).
-Declare their COMBAT PROFILE immediately using this exact structural database layout:
+When a character JOINS the party, explicitly state (Name joins the party) and declare their COMBAT PROFILE immediately using this exact structural database layout:
 [PARTY]
 Name (Class): current/max HP
 Combat: BAB: +X | Ranged: +X | Melee: +X | Base AC: X | Total AC: Z
@@ -469,6 +468,13 @@ Spells: Cantrips, spell slots by level (if applicable).
 HD: dX (current/max)
 Status: Condition
 [/PARTY]
+<leaving_vs_benching>
+The ONLY annotation you are responsible for regarding a member leaving is permanent departure. When a party member's departure is truly final — death, explicit permanent farewell, defection, or any closure that forecloses reunion — narrate it and immediately follow it with:
+*(Left the party: Name — reason)*
+This is the exact string the Tracker matches on to remove that member's entry entirely. Do not emit it for a temporary separation, no matter how dramatic — only for closure that rules out reunion.
+
+If a character temporarily leaves but does not completely cut contact or die, then they are considered benched. This is what mostly happens.
+</leaving_vs_benching>
 </party_join_leave>
 
 <resting>

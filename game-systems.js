@@ -317,6 +317,18 @@ export function transformBaseSectionContent(tag, innerContent, settings) {
         return result;
     }
 
+    if (tag === 'party_join_leave') {
+        let content = innerContent.trim();
+        if (mods.party_bench === false) {
+            content = content.replace(/\s*<leaving_vs_benching>[\s\S]*?<\/leaving_vs_benching>/i, '').trim();
+        }
+        return `<party_join_leave>\n${content}\n</party_join_leave>`;
+    }
+
+    if (tag === 'party_bench') {
+        return '';
+    }
+
     if (tag === 'end_of_output_footer') {
         let footerContent = `<end_of_output_footer>\n${innerContent.trim()}\n</end_of_output_footer>`;
         if (settings.use24hTime) {

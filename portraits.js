@@ -46,7 +46,9 @@ export function applyPortraitData(entityName, src) {
     } else {
         delete s.customPortraits[normName];
     }
-    saveSettings();
+    // Portrait sets are infrequent, deliberate actions (not rapid keystrokes like the memo
+    // textarea) — force an immediate flush instead of risking the 2s debounce window.
+    saveSettings(true);
 }
 
 // ── Pollinations.ai model list (image-only, sorted cheapest → most expensive) ──
@@ -879,7 +881,7 @@ export async function autoGenerateEnemyPortraits(refresh) {
 export function removeAllPortraits(refresh) {
     const s = getSettings();
     s.customPortraits = {};
-    saveSettings();
+    saveSettings(true);
     toastr['success']('All custom portraits removed.', 'RPG Tracker');
     if (typeof refresh === 'function') refresh();
 }

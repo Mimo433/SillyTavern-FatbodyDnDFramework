@@ -415,7 +415,7 @@ TRIGGER — Combat Profile is a HIDDEN field. Write it ONLY when a \`## ACTIVE C
 
 CONTENT — When a [COMBAT] block IS present, transcribe it completely and verbatim into \`Combat Profile:\` inside [CORE]. Include every declared stat: HP, AC, attack bonus, damage, saves, weapons, abilities, special traits — everything the [COMBAT] block lists. Do NOT condense, summarize, or hand-pick a subset. The goal is a faithful copy, not an interpretation.
 
-UPDATE — If a Combat Profile already exists in [CORE] and a new [COMBAT] block for the same NPC appears with updated stats, patch the Combat Profile line in place with the new values. Do not touch any other [CORE] field.
+UPDATE — If a Combat Profile already exists in [CORE] and a new [COMBAT] block for the same NPC appears with updated stats, patch the Combat Profile line in place with the new values. Do not touch any other [CORE] field. For an EXISTING lorebook NPC, use [[UPDATE_CORE: NPC Name | Combat Profile | ...]] (basic mode) or commit core (agent mode) — do NOT re-emit a full [[NPC:...]] record or embed a new [CORE] block in a chronicle update.
 
 PLACEMENT — Combat Profile is IDENTITY data, not a chronicle event. It belongs as its own labeled line inside [CORE] (e.g. immediately before the closing [/CORE] tag) — never as a timestamped delta line, and never appended after [/CORE].
 </COMBAT_PROFILE_PERSISTENCE>`;

@@ -18,6 +18,17 @@ import { parseQuestsFromMemo, extractCurrentTimeStr, cleanMessageContent, format
 import { runRouterPass, saveSceneToLorebook, scanAssistantOutputForKeywords, parseInWorldMinutes, runWorldProgressionPass, updateLorebookEntry, getLorebookManifest } from './router.js';
 import { logTransaction } from './debug-viewer.js';
 
+/** Resolve ST macros (e.g. {{user}}) in lore text at injection time — storage keeps macros verbatim. */
+function substituteLoreMacros(content) {
+    if (!content) return '';
+    try {
+        const substituteParams = SillyTavern.getContext()?.substituteParams;
+        return typeof substituteParams === 'function' ? substituteParams(content) : content;
+    } catch (_) {
+        return content;
+    }
+}
+
 // ── Dice naming helpers ────────────────────────────────────────────────────────
 
 export function getDiceToolName() {
@@ -407,13 +418,13 @@ function extractTextContent(msg) {
  * Automatically prepends any active NPC relationship status values if relationship bars are enabled.
  */
 function buildInjectedEntryText(id, entry, settings) {
-    let content = entry.content || '';
+    let content = substituteLoreMacros(entry.content || '');
     const rel = settings.npcRelationshipValues?.[id];
     if (rel && settings.npcRelationshipBars) {
         const relMax = getNpcRelationshipMax(settings);
         const friendship = rel.friendship ?? 0;
         const affection = rel.affection ?? 0;
-        content = `Relationship with {{user}}: Friendship: ${friendship}/${relMax}, Affection: ${affection}/${relMax}\n${content}`;
+        content = substituteLoreMacros(`Relationship with {{user}}: Friendship: ${friendship}/${relMax}, Affection: ${affection}/${relMax}\n${content}`);
     }
 const label = entry.key?.[0] || entry.comment || id.split('::')[1];
     return `### [${label}]\n${content}\n\n`;
@@ -481,7 +492,7 @@ async function buildNpcRelationsBlock(settings) {
     }
     
     const relMax = getNpcRelationshipMax(settings);
-    const header = `Current relationship standings between the protagonist and present NPCs. Both axes range from -${relMax} to +${relMax}. Let the tier descriptions below each NPC guide how they behave toward {{user}} this turn.`;
+    const header = substituteLoreMacros(`Current relationship standings between the protagonist and present NPCs. Both axes range from -${relMax} to +${relMax}. Let the tier descriptions below each NPC guide how they behave toward {{user}} this turn.`);
 
     return `[NPC_RELATIONS]\n${header}\n\n${lines.join('\n\n')}\n[/NPC_RELATIONS]\n\n`;
 }
@@ -797,7 +808,7 @@ export function installInterceptor() {
                             if (!bookCache[bookName]) bookCache[bookName] = await ctx.loadWorldInfo(bookName);
                             const entry = bookCache[bookName]?.entries?.[uid];
                             if (entry?.content) {
-                                worldBlock += `### [${entry.key?.[0] || entry.comment || 'World Report'}]\n${entry.content}\n\n`;
+                                worldBlock += `### [${entry.key?.[0] || entry.comment || 'World Report'}]\n${substituteLoreMacros(entry.content)}\n\n`;
                             }
                         }
                         if (worldBlock) {

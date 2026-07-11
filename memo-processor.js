@@ -306,7 +306,18 @@ export function mergeMemo(currentMemo, aiOutput) {
     const tagPattern = /\[([^\]\/][^\]]*)\]([\s\S]*?)\[\/\1\]/gi;
     const matches = [...aiOutput.matchAll(tagPattern)];
 
+    const hasBenchWork = benchCommands.benches.length > 0 || benchCommands.unbenches.length > 0;
+
     if (matches.length === 0) {
+        if (hasBenchWork) {
+            if (settings.debugMode) {
+                console.log('[RPG Tracker] mergeMemo: no closed [TAG] blocks but [BENCH]/[UNBENCH] found — applying bench splice');
+            }
+            return hydratePartyRelocationStats(
+                currentMemo,
+                applyBenchCommands(currentMemo, currentMemo, benchCommands),
+            );
+        }
         console.warn("[RPG Tracker] No valid [TAG]...[/TAG] blocks found in model output — treating as no-change. Output was:", aiOutput);
         return currentMemo;
     }

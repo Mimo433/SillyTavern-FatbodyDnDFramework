@@ -40,6 +40,66 @@ function isSkeletonEntryId(entryId) {
     return isSkeletonBookName(entryId.split('::')[0]);
 }
 
+/** Extract canonical [COMBAT] block from the current memo, if present. */
+function extractActiveCombatBlock(memo) {
+    const match = memo?.match(/\[COMBAT\]([\s\S]*?)\[\/COMBAT\]/i);
+    return match ? `[COMBAT]${match[1].trim()}[/COMBAT]` : null;
+}
+
+/** Router guidance when ACTIVE COMBAT STATE is injected this turn. */
+function buildCombatProfileRouterGuidance(hasCombat, mode = 'basic') {
+    if (!hasCombat) return '';
+    if (mode === 'agent') {
+        return `
+## COMBAT PROFILE (ACTIVE COMBAT STATE provided this turn)
+- **Existing NPCs** (listed in ACTIVE MEMORY with an ID): use \`commit({"core": [{"id": "Book::UID or NPC Name", "field": "Combat Profile", "content": "verbatim stats from [COMBAT]"}]})\`. Do NOT re-record the full NPC via \`record\` or embed a new \`[CORE]\` block in \`update\`.
+- **Brand-new combatants** with no lorebook entry yet: include \`Combat Profile:\` inside \`[CORE]\` in a \`record\` item.
+- Copy stats verbatim from ## ACTIVE COMBAT STATE only — never infer from GM prose.`;
+    }
+    return `
+## COMBAT PROFILE (ACTIVE COMBAT STATE provided this turn)
+- **Existing NPCs** (in ACTIVE MEMORY or ARCHIVE): output \`[[UPDATE_CORE: NPC Name | Combat Profile | verbatim stats from [COMBAT]]]\` — NOT a full \`[[NPC:...]]\` re-record.
+- **Brand-new combatants** with no existing entry: include \`Combat Profile:\` inside \`[CORE]\` in a new \`[[NPC:...]]\` record.
+- Copy stats verbatim from ## ACTIVE COMBAT STATE only — never infer from GM prose.
+- Example: \`[[UPDATE_CORE: Marcus Thorne | Combat Profile | HP: 12, AC: 11, Fort +1, Ref +0, Will +4, weapons: ...]]\``;
+}
+
+/**
+ * Resolve Book::UID or plain NPC label to a full lore entry id.
+ * @returns {Promise<string|null>}
+ */
+async function resolveLoreEntryId(id, allBooks, newlyCreatedMap = {}) {
+    if (!id || typeof id !== 'string') return null;
+    if (id.includes('::')) return id;
+
+    const cleanId = id.toLowerCase().trim();
+    if (newlyCreatedMap[cleanId]) return newlyCreatedMap[cleanId];
+
+    const prefix = getLivePrefix();
+    const npcBookName = prefix ? `${prefix}_NPCs` : 'NPCs';
+    let npcBook = null;
+    try {
+        npcBook = await SillyTavern.getContext().loadWorldInfo(npcBookName);
+    } catch (_) {}
+
+    if (npcBook?.entries) {
+        for (const [uid, entry] of Object.entries(npcBook.entries)) {
+            const label = (entry.comment || '').replace(/^\[.*?\]\s*/i, '').toLowerCase().trim();
+            if (label === cleanId) return `${npcBookName}::${uid}`;
+        }
+    }
+
+    for (const [bookName, bookData] of Object.entries(allBooks || {})) {
+        if (!bookData?.entries) continue;
+        for (const [uid, entry] of Object.entries(bookData.entries)) {
+            const label = (entry.comment || '').replace(/^\[.*?\]\s*/i, '').toLowerCase().trim();
+            if (label === cleanId) return `${bookName}::${uid}`;
+        }
+    }
+
+    return null;
+}
+
 /** Remove any skeleton IDs that leaked into Lorebook Agent active pools. @returns {boolean} */
 function stripSkeletonFromRouterPools() {
     const settings = getSettings();
@@ -442,6 +502,13 @@ export async function runRouterPass(narrativeOutput, manualPrompt = null, custom
               `before this pass ends. Eliminate the narratively least relevant entries first. ` +
               `Justify each deactivation.`
             : '';
+
+        const activeCombatBlock = extractActiveCombatBlock(settings.currentMemo);
+        const activeCombatSection = activeCombatBlock
+            ? `## ACTIVE COMBAT STATE (canonical mechanical stats — use this as the source for NPC Combat Profiles, not the GM prose)\n${activeCombatBlock}\n\n`
+            : '';
+        const combatProfileGuidanceBasic = buildCombatProfileRouterGuidance(!!activeCombatBlock, 'basic');
+        const combatProfileGuidanceAgent = buildCombatProfileRouterGuidance(!!activeCombatBlock, 'agent');
 
         const sysTemplate = adjustPromptTimestamps(settings.routerSystemPromptTemplate || 'You are the Lorebook Agent. Maintain narrative consistency and manage lorebooks.', settings);
         const basePrompt = sysTemplate
@@ -908,9 +975,17 @@ ${relSection}
 
 ## NPC CORE UPDATES (NPC only)
 If any field inside the permanent [CORE] block changes, is updated, or new information is revealed (${sectionNamesList}), output:
-  [[UPDATE_CORE: Book::UID | FieldName | New field text]]
+  [[UPDATE_CORE: Book::UID or NPC Name | FieldName | New field text]]
 Use the exact FieldName (e.g. ${sectionNamesList}). Do NOT log core updates as normal event/update entries.
 
+## DO NOT RE-RECORD EXISTING ENTITIES
+Before outputting [[NPC:...]], [[LOC:...]], [[FAC:...]], etc. for anyone or anything, check ACTIVE MEMORY and ARCHIVE INDEX for a matching name (they may be listed under a different label — check keywords too).
+- If the entity ALREADY EXISTS (in ACTIVE MEMORY, in NEWLY ACTIVATED, or in the ARCHIVE INDEX): do NOT output a new [[NPC:...]]/[[LOC:...]]/[[FAC:...]] tag with a fresh [CORE] block for them, even if you don't currently see their full content. Instead:
+  - To change/add a [CORE] field: use [[UPDATE_CORE: Name | FieldName | new text]].
+  - To append a chronicle/timeline note: use the module's normal update format (e.g. re-use the [[EVENT:...]] name to accumulate, or update the existing entry) — never a second [CORE] block.
+  - To bring an archived entry into full view first: use [[ACTIVATE: Name]].
+- Only use a fresh [[NPC:...]]/[[LOC:...]]/[[FAC:...]] record for entities that are BRAND NEW and have never appeared in ACTIVE MEMORY or ARCHIVE INDEX before.
+${combatProfileGuidanceBasic}
 ## RULES
 1. Only record persistent or significant entities/events.
 2. Use ACTIVATE to bring an existing entry into the current scene context.
@@ -934,9 +1009,7 @@ A squat iron building managing mining contracts; soot-stained walls and a clangi
 
             const questMatchB = settings.currentMemo?.match(/\[QUESTS\]([\s\S]*?)\[\/QUESTS\]/i);
             const questBlockB = questMatchB ? `[QUESTS]${questMatchB[1].trim()}[/QUESTS]` : 'None';
-            const combatMatchB = settings.currentMemo?.match(/\[COMBAT\]([\s\S]*?)\[\/COMBAT\]/i);
-            const combatBlockB = combatMatchB ? `[COMBAT]${combatMatchB[1].trim()}[/COMBAT]` : null;
-            const basicUserPrompt = `## BUDGET STATUS\n${budgetLine}${overflowInstruction}\n\n## NEWLY ACTIVATED THIS TURN\n${newlyTriggeredFull.join('\n\n') || 'None.'}\n\n## ACTIVE MEMORY (Lore)\n${activeEntriesFull.join('\n\n') || 'None.'}\n\n## ARCHIVE INDEX\n${keyringText || 'Empty.'}\n\n## CURRENT LOCATION\n${currentHierarchy || 'Unknown'}\n\n## ACTIVE QUESTS\n${questBlockB}\n\n${combatBlockB ? `## ACTIVE COMBAT STATE (canonical mechanical stats — use this as the source for NPC Combat Profiles, not the GM prose)\n${combatBlockB}\n\n` : ''}## NARRATIVE\n${recentChatString}\n\n${manualPrompt ? `## INSTRUCTION\n${manualPrompt}\n\n` : ''}`;
+            const basicUserPrompt = `## BUDGET STATUS\n${budgetLine}${overflowInstruction}\n\n## NEWLY ACTIVATED THIS TURN\n${newlyTriggeredFull.join('\n\n') || 'None.'}\n\n## ACTIVE MEMORY (Lore)\n${activeEntriesFull.join('\n\n') || 'None.'}\n\n## ARCHIVE INDEX\n${keyringText || 'Empty.'}\n\n## CURRENT LOCATION\n${currentHierarchy || 'Unknown'}\n\n## ACTIVE QUESTS\n${questBlockB}\n\n${activeCombatSection}## NARRATIVE\n${recentChatString}\n\n${manualPrompt ? `## INSTRUCTION\n${manualPrompt}\n\n` : ''}`;
 
             broadcastStep('thought', 'Thinking...');
             const basicResp = await sendStateRequest(routerSettings, finalBasicSystemPrompt, basicUserPrompt, _routerSignal);
@@ -973,7 +1046,7 @@ A squat iron building managing mining contracts; soot-stained walls and a clangi
             const commitProperties = {
                 record: {
                     type: 'array',
-                    description: 'New entries to create. Recording an entry with an existing label automatically updates it.',
+                    description: 'Creates a BRAND-NEW entry only. Never use this for a name that already appears in ACTIVE MEMORY, NEWLY ACTIVATED THIS TURN, or the ARCHIVE INDEX — that would duplicate their [CORE] block. For an existing entity, use "core" (identity/Combat Profile fields) or "update" (chronicle text) instead.',
                     items: {
                         type: 'object',
                         properties: {
@@ -1080,7 +1153,7 @@ A squat iron building managing mining contracts; soot-stained walls and a clangi
                 items: {
                     type: 'object',
                     properties: {
-                        id:      { type: 'string', description: 'Book::UID of the NPC entry.' },
+                        id:      { type: 'string', description: 'Book::UID or plain NPC name (from ACTIVE MEMORY).' },
                         field:   { type: 'string', enum: coreSections.map(s => s.name), description: 'The exact field inside [CORE] to update.' },
                         content: { type: 'string', description: 'New field content text.' }
                     },
@@ -1153,6 +1226,14 @@ Maximum Active Entities: **${settings.routerMaxActivations || 8}**.
 - Entries whose keywords appeared in the latest narrator output may already appear under **NEWLY ACTIVATED THIS TURN** with full content — you do not need to activate those again.
 - Always use exact Book::UID format (e.g. "Eldoria_NPCs::0") for activate/update/deactivate/delete_ids.
 
+## DO NOT RE-RECORD EXISTING ENTITIES
+Before using \`record\` for anyone or anything, check ACTIVE MEMORY, NEWLY ACTIVATED THIS TURN, and the ARCHIVE INDEX for a matching name (check keywords too, they may be listed under a different label).
+- If the entity ALREADY EXISTS anywhere in that context — even if you only see its label in the ARCHIVE INDEX with no full content — do NOT call \`record\` for it. Instead:
+  - To change/add a [CORE] field (identity, appearance, or Combat Profile): use \`commit({"core": [{"id": "Book::UID or Name", "field": "...", "content": "..."}]})\`.
+  - To append new chronicle text: use \`commit({"update": [{"id": "Book::UID or Name", "content": "..."}]})\`.
+  - To see its full content first: use \`read_entry\` or \`grep_lore\`, or \`activate\` it.
+- Only use \`record\` for entities that are BRAND NEW and have never appeared in ACTIVE MEMORY, NEWLY ACTIVATED, or the ARCHIVE INDEX before.
+
 ## WORLD SKELETON (OFF-LIMITS)
 World Skeleton lorebooks (names ending in _Skeleton) are hidden seed data for World Progression only. They are NOT in your archive, tools cannot access them, and you must NEVER activate, read, update, or commit changes to Skeleton entries.
 
@@ -1172,7 +1253,7 @@ Include the entity name/title itself (without timestamps like "[Day 1]") as a ke
 - CRITICAL: Do NOT blindly copy the formatting or sections of other characters found in ACTIVE MEMORY. You MUST strictly use ONLY the sections instructed below for NPCs and ignore any other sections.
 
 ## FIELD INSTRUCTIONS
-${Object.values(settings.routerModules || {}).filter(m => m.enabled).map(m => `- ${m.tag}: ${m.instruction}`).join('\n')}${(settings.routerCustomTags || []).length ? '\n\n### CUSTOM CATEGORIES\n' + (settings.routerCustomTags || []).map(m => `- ${m.tag.toUpperCase()}: ${m.instruction}`).join('\n') : ''}`;
+${Object.values(settings.routerModules || {}).filter(m => m.enabled).map(m => `- ${m.tag}: ${m.instruction}`).join('\n')}${(settings.routerCustomTags || []).length ? '\n\n### CUSTOM CATEGORIES\n' + (settings.routerCustomTags || []).map(m => `- ${m.tag.toUpperCase()}: ${m.instruction}`).join('\n') : ''}${combatProfileGuidanceAgent}`;
 
             const commitActionSchema = settings.npcRelationshipBars
                 ? `commit({"record": [...], "update": [...], "rename": [...], "activate": [...], "deactivate": [...], "delete_ids": [...], "rel": [...], "core": [...]}) — write all changes and finish`
@@ -1214,7 +1295,7 @@ Available actions:
 commit record items: {"label": "Name only (NO tag prefix)", "keys": ["kw1","kw2"], "content": "...", "category": "NPC|LOC|FAC|QUEST|EVENT"}
 commit update items: {"id": "Book::UID", "content": "new text to append"}
 commit rename items: {"id": "Book::UID", "label": "New Name (optional)", "keys": ["kw1","kw2"] (optional, max 6)}${commitRelDescription}
-commit core items: {"id": "Book::UID", "field": "${coreSections.map(s => s.name).join('|')}", "content": "new field content"} — surgically updates a field inside [CORE] on NPC entries only
+commit core items: {"id": "Book::UID or NPC Name", "field": "${coreSections.map(s => s.name).join('|')}", "content": "new field content"} — surgically updates a field inside [CORE] on NPC entries only (prefer over re-recording the full NPC)
 
 ## EXAMPLE
 Thought: I see a new faction called Iron Syndicate. I will record it.
@@ -1223,9 +1304,7 @@ ${adjustedSharedContext}`;
 
             const questMatchA = settings.currentMemo?.match(/\[QUESTS\]([\s\S]*?)\[\/QUESTS\]/i);
             const questBlockA = questMatchA ? `[QUESTS]${questMatchA[1].trim()}[/QUESTS]` : 'None';
-            const combatMatchA = settings.currentMemo?.match(/\[COMBAT\]([\s\S]*?)\[\/COMBAT\]/i);
-            const combatBlockA = combatMatchA ? `[COMBAT]${combatMatchA[1].trim()}[/COMBAT]` : null;
-            const contextMessage = `## BUDGET STATUS\n${budgetLine}${overflowInstruction}\n\n## NEWLY ACTIVATED THIS TURN\n${newlyTriggeredFull.join('\n\n') || 'None.'}\n\n## ACTIVE MEMORY (Lore)\n${activeEntriesFull.join('\n\n') || 'None yet.'}\n\n## ARCHIVE INDEX\n${keyringText || 'Empty.'}\n\n## CURRENT LOCATION\n${currentHierarchy || 'Unknown'}\n\n## ACTIVE QUESTS\n${questBlockA}\n\n${combatBlockA ? `## ACTIVE COMBAT STATE (canonical mechanical stats — use this as the source for NPC Combat Profiles, not the GM prose)\n${combatBlockA}\n\n` : ''}## NARRATIVE\n${recentChatString}${manualPrompt ? `\n\n## INSTRUCTION\n${manualPrompt}` : ''}`;
+            const contextMessage = `## BUDGET STATUS\n${budgetLine}${overflowInstruction}\n\n## NEWLY ACTIVATED THIS TURN\n${newlyTriggeredFull.join('\n\n') || 'None.'}\n\n## ACTIVE MEMORY (Lore)\n${activeEntriesFull.join('\n\n') || 'None yet.'}\n\n## ARCHIVE INDEX\n${keyringText || 'Empty.'}\n\n## CURRENT LOCATION\n${currentHierarchy || 'Unknown'}\n\n## ACTIVE QUESTS\n${questBlockA}\n\n${activeCombatSection}## NARRATIVE\n${recentChatString}${manualPrompt ? `\n\n## INSTRUCTION\n${manualPrompt}` : ''}`;
 
             /** @type {Array<{role:string, content:string|null, tool_calls?:any[], tool_call_id?:string}>} */
             const messages = [
@@ -1751,7 +1830,22 @@ async function applyAction(action, allBooks = {}, currentTime = '', breadcrumb =
                     bookData.entries[existingUid].disable = true;
                 } else {
                     // Append delta to existing chronicle (dedup path)
-                    const existing = (bookData.entries[existingUid].content || '').replace(/^\[ID:[^\]]+\]\n?/i, '').trimEnd();
+                    let existing = (bookData.entries[existingUid].content || '').replace(/^\[ID:[^\]]+\]\n?/i, '').trimEnd();
+
+                    // Safety net: the model sometimes re-records an entity that already has a
+                    // [CORE] block instead of using UPDATE_CORE/commit core. Blindly appending
+                    // would leave two [CORE]...[/CORE] blocks in the same entry. If the new
+                    // delta ALSO contains a full [CORE] block, replace the old one in place
+                    // (last write wins) rather than duplicating it, and only append whatever
+                    // chronicle text (if any) remains outside that block.
+                    const newCoreMatch = delta.match(/\[CORE\][\s\S]*?\[\/CORE\]/i);
+                    const existingHasCore = /\[CORE\][\s\S]*?\[\/CORE\]/i.test(existing);
+                    if (newCoreMatch && existingHasCore) {
+                        existing = existing.replace(/\[CORE\][\s\S]*?\[\/CORE\]/i, newCoreMatch[0]);
+                        delta = delta.replace(newCoreMatch[0], '').trim();
+                        if (settings.debugMode) console.warn(`[RPG Tracker] Record targeted existing entry "${rec.label}" with a full [CORE] block — replaced in place instead of duplicating (agent should have used UPDATE_CORE/commit core).`);
+                    }
+
                     // Ensure each [Day X,...] or [DD/MM/YY,...] timestamp begins on its own line
                     delta = delta.replace(/(.)\s+(\[(?:Day\s+\d+|\d{1,2}\/\d{1,2}\/\d+))/gi, '$1\n$2');
                     delta = deduplicateContent(existing, delta);
@@ -1992,14 +2086,19 @@ async function applyAction(action, allBooks = {}, currentTime = '', breadcrumb =
             errors.push(`Invalid core update item: ${JSON.stringify(item)}`);
             continue;
         }
-        if (isSkeletonEntryId(id)) {
-            errors.push(`Cannot update core on World Skeleton entry: ${id}`);
+        const resolvedId = await resolveLoreEntryId(id, allBooks, newlyCreatedMap);
+        if (!resolvedId) {
+            errors.push(`Could not resolve core update target "${id}" to a Book::UID`);
             continue;
         }
-        const [bookName, uid] = id.split('::');
+        if (isSkeletonEntryId(resolvedId)) {
+            errors.push(`Cannot update core on World Skeleton entry: ${resolvedId}`);
+            continue;
+        }
+        const [bookName, uid] = resolvedId.split('::');
         const book = await ctx.loadWorldInfo(bookName);
         if (!book?.entries?.[uid]) {
-            errors.push(`Core update target not found: ${id}`);
+            errors.push(`Core update target not found: ${resolvedId}`);
             continue;
         }
         const entryContent = book.entries[uid].content || '';
@@ -2024,6 +2123,8 @@ async function applyAction(action, allBooks = {}, currentTime = '', breadcrumb =
             fieldPatterns = ['Brief Background', 'Background'];
         } else if (normField.includes('habit') || normField.includes('behavior')) {
             fieldPatterns = ['Habits/Behaviors', 'Habits', 'Behaviors'];
+        } else if (normField.includes('combat')) {
+            fieldPatterns = ['Combat Profile'];
         } else {
             fieldPatterns = [field];
         }
@@ -2052,12 +2153,12 @@ async function applyAction(action, allBooks = {}, currentTime = '', breadcrumb =
         const fieldMatch = coreBody.match(targetFieldRegex);
         
         if (!fieldMatch) {
-            // Lazily append the field to the end of the [CORE] block
-            const fieldName = field.trim();
+            // Lazily append the field to the end of the [CORE] block (e.g. first-time Combat Profile)
+            const fieldName = fieldPatterns[0] || field.trim();
             const replacement = `${fieldName}: ${newContent.trim()}\n`;
             let newCoreBody = coreBody.trimEnd();
             newCoreBody = newCoreBody ? `${newCoreBody}\n${replacement}` : replacement;
-            
+
             book.entries[uid].content = entryContent.replace(coreMatch[0], `[CORE]\n${newCoreBody}[/CORE]`);
             await ctx.saveWorldInfo(bookName, book);
             changed = true;
@@ -3277,7 +3378,7 @@ ${rawDump}`;
     // physically with {{user}} right now and any off-screen activity for them risks
     // contradicting the live scene. [BENCHED PARTY] members are the opposite: eligible for
     // simulation, with their benching note captured as flavor for their designation entry.
-    // See <party_bench> in sysprompt.txt / DEFAULT_STOCK_PROMPTS['benched party'] for the
+    // See <leaving_vs_benching> in sysprompt.txt / DEFAULT_STOCK_PROMPTS['benched party'] for the
     // inference contract that keeps these two blocks in sync with the narrative.
     function extractPartyRoster(memo, tagName) {
         const roster = [];
