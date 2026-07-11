@@ -5,6 +5,7 @@ All notable changes to the **Multihog D&D Framework** will be documented in this
 ## [4.9.0] - 2026-07-10
 
 ### Added
+- **Expanded Relationship Tiers**: Completely overhauled the Friendship and Affection systems, expanding them from 7 to 11 highly-symmetrical tiers. The "Neutral" zone has been significantly tightened to allow characters to visibly shift into "Curious" or "Warming" much earlier, eliminating previous massive dead zones in relationship progression. All `{{user}}` macro strings have also been cleanly removed from behavioral hints to prevent token/interpolation bugs.
 - **NPC Section Editor & PC Section Editor**: Brand new, fully interactive editors for customizing how Character details are tracked! You are no longer stuck with the default sections. You can now easily **add new sections**, **edit existing ones**, **delete them**, and fully reorder them to fit your campaign's unique needs.
   - **Preset Support**: Save your favorite section layouts as presets and load them anytime with a single click. No need to rebuild your sections from scratch for different types of campaigns!
   - **Visual Customization**: Every section now supports choosing a custom color and assigning an emoji. These will be beautifully rendered inside the popup character cards and tracker UI, making your character details pop out perfectly.
