@@ -1,9 +1,10 @@
-import { getSettings, saveChatState } from './state-manager.js';
+import { getSettings, saveChatState, DEFAULT_PC_SECTIONS } from './state-manager.js';
 import { sendStateRequest } from './llm-client.js';
 import { buildOnboardingXpHint } from './constants.js';
 import { escapeHtml } from './memo-processor.js';
 import { getRequestHeaders } from '../../../../script.js';
-import { saveSettings, sendDirectPrompt, refreshAgentManifestNow } from './index.js';
+import { saveSettings, sendDirectPrompt, refreshAgentManifestNow, refreshRenderedView } from './index.js';
+import { openPcSectionEditor } from './ui-editors.js';
 
 const _CR_CLASS_LISTS = {
     fantasy: [
@@ -186,6 +187,12 @@ export function showCharacterRollPanel(el) {
     allBtnGroups.forEach(g => { g.style.display = 'none'; });
     panel.style.display = 'flex';
 
+    const editBtn = panel.querySelector('.rt-edit-pc-sections-btn');
+    if (editBtn && !editBtn._bound) {
+        editBtn._bound = true;
+        editBtn.addEventListener('click', () => openPcSectionEditor());
+    }
+
     const s = getSettings();
     const genreSelect = /** @type {HTMLSelectElement|null} */ (panel.querySelector('#rt-cr-genre'));
     const levelSelect = /** @type {HTMLSelectElement|null} */ (panel.querySelector('#rt-cr-level'));
@@ -287,7 +294,87 @@ export function showCharacterRollPanel(el) {
         genBtn._crBound = true;
         genBtn.addEventListener('click', () => { void handleCharRollGenerate(el, panel); });
     }
+
+    // --- Presets ---
+    const presetSelect  = panel.querySelector('#rt-cr-preset-select');
+    const loadPresetBtn = panel.querySelector('#rt-cr-preset-load-btn');
+    const delPresetBtn  = panel.querySelector('#rt-cr-preset-delete-btn');
+    const savePresetBtn = panel.querySelector('#rt-cr-preset-save-btn');
+
+    function renderPresetPills() {
+        if (!presetSelect) return;
+        const saved = presetSelect.value; // preserve selection if possible
+        presetSelect.innerHTML = '<option value="">— Select preset —</option>';
+        const presets = (getSettings().characterCreatorPresets || []);
+        presets.forEach((preset) => {
+            const opt = document.createElement('option');
+            opt.value = preset.id;
+            opt.textContent = preset.name;
+            presetSelect.appendChild(opt);
+        });
+        // Restore selection if it still exists
+        if (saved && presetSelect.querySelector(`option[value="${saved}"]`)) {
+            presetSelect.value = saved;
+        }
+    }
+
+    renderPresetPills();
+
+    if (loadPresetBtn && !loadPresetBtn._crBound) {
+        loadPresetBtn._crBound = true;
+        loadPresetBtn.addEventListener('click', () => {
+            const id = presetSelect?.value;
+            if (!id) return;
+            const preset = (getSettings().characterCreatorPresets || []).find(p => p.id === id);
+            if (!preset) return;
+            applyCharacterCreatorDraft(panel, preset.data, populateClasses);
+            toastr['success'](`Preset "${preset.name}" loaded.`, 'Character Creator');
+        });
+    }
+
+    if (delPresetBtn && !delPresetBtn._crBound) {
+        delPresetBtn._crBound = true;
+        delPresetBtn.addEventListener('click', () => {
+            const id = presetSelect?.value;
+            if (!id) return;
+            const st = getSettings();
+            const preset = (st.characterCreatorPresets || []).find(p => p.id === id);
+            if (!preset) return;
+            st.characterCreatorPresets = st.characterCreatorPresets.filter(p => p.id !== id);
+            saveSettings();
+            renderPresetPills();
+            toastr['info'](`Preset "${preset.name}" deleted.`, 'Character Creator');
+        });
+    }
+
+    if (savePresetBtn && !savePresetBtn._crBound) {
+        savePresetBtn._crBound = true;
+        savePresetBtn.addEventListener('click', async () => {
+            const { Popup } = SillyTavern.getContext();
+            let presetName = null;
+            if (Popup?.show?.input) {
+                presetName = await Popup.show.input('Character Creator', 'Name this preset:', 'My Preset');
+            } else {
+                presetName = prompt('Name this preset:');
+            }
+            if (!presetName || !presetName.trim()) return;
+            const draft = collectCharacterCreatorDraft(panel);
+            const st = getSettings();
+            if (!st.characterCreatorPresets) st.characterCreatorPresets = [];
+            const newId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+            st.characterCreatorPresets.push({
+                id: newId,
+                name: presetName.trim(),
+                data: draft,
+            });
+            saveSettings();
+            renderPresetPills();
+            if (presetSelect) presetSelect.value = newId;
+            toastr['success'](`Preset "${presetName.trim()}" saved!`, 'Character Creator');
+        });
+    }
 }
+
 
 async function handleCharRollGenerate(el, panel) {
     saveCharacterCreatorDraft(panel);
@@ -421,29 +508,24 @@ export async function generatePersonaBio(charName, wordCount, extraHints = '') {
     const rawMemo = s.currentMemo || '';
     const cleanMemo = rawMemo.replace(/<\/?memo>/gi, '').replace(/<[^>]+>/g, ' ').trim();
 
+    const coreSections = s.pcCoreSections && Array.isArray(s.pcCoreSections) && s.pcCoreSections.length > 0 ? s.pcCoreSections : DEFAULT_PC_SECTIONS;
+    const sectionsTemplate = coreSections.map(sec => `${sec.name}:\n${sec.description}`).join('\n\n');
+
     const systemPrompt = `You are a persona writer for a roleplay system. Based on the character state card provided, write a persona description for ${charName || 'this character'} in third person.${extraHints}
 
 You MUST use this exact section format — each section on its own line with the label followed by a colon:
 
-Appearance/Species:
-[Describe physical features and species: body type, height, hair, eyes, skin tone, distinguishing marks, scars, and natural body language. You MUST explicitly state their Species, Ethnicity, and Gender based on the character card and Player Preferences. You MUST explicitly incorporate any appearance notes provided in the card/preferences. Do NOT describe clothing, armor, or worn gear — those are handled dynamically elsewhere and will change.]
-
-Personality:
-[Describe temperament, how they act around others, and emotional tendencies. You MUST incorporate any traits provided.]
-
-Background:
-[Provide backstory context grounded in the character card. You MUST incorporate any background hints provided. Brief but meaningful.]
-
-Habits & Behaviors:
-[Describe recurring mannerisms, habits, quirks, or behavioral patterns.]
+${sectionsTemplate}
 
 Rules:
 - Use the exact section headers shown above. Do not add extra sections or merge them.
+- CRITICAL: Do NOT blindly copy the formatting or sections of other characters found in ACTIVE MEMORY or the character card. You MUST strictly use ONLY the sections instructed above and ignore any other sections.
 - Total word count across all sections: approximately ${wordCount} words.
 - Write in third person (he/she/they).
 - Keep the prose grounded and natural. Avoid purple prose, excessive em-dashes, or clichés (e.g. "deliberate step", "breath hitched").
-- Do not include a preamble, title, or closing statement. Output ONLY the four sections.
-- CRITICAL: You MUST faithfully and explicitly incorporate ALL provided traits, background hints, species, gender, and appearance hints from the character card and the PLAYER PREFERENCES. Do not ignore user-provided details.`;
+- Do not include a preamble, title, or closing statement. Output ONLY the six sections.
+- CRITICAL: You MUST faithfully and explicitly incorporate ALL provided traits, background hints, species, gender, and appearance hints from the character card and the PLAYER PREFERENCES. Do not ignore user-provided details.
+- CRITICAL: Never output template macro strings such as {{char}}, {{user}}, or any other {{...}} placeholders. Always replace them with the actual character's name or a fitting proper name.`;
 
     const { chat } = SillyTavern.getContext();
     let chatLog = '';
@@ -674,4 +756,395 @@ function extractCharNameFromMemo(memo) {
         if (candidate && !/^(character|unknown|user)$/i.test(candidate)) return candidate;
     }
     return '';
+}
+
+// ── PC Import Panel ──────────────────────────────────────────────────────────
+
+/**
+ * Shows the PC Import inline panel within the onboarding container.
+ * @param {HTMLElement} el — the onboarding container element
+ */
+export function showPcImportPanel(el) {
+    const panel = /** @type {HTMLElement|null} */ (el.querySelector('#rt-pc-import-panel'));
+    if (!panel) return;
+    const configWrap = /** @type {HTMLElement|null} */ (el.querySelector('.rt-onboarding-config-row')?.parentElement);
+    const allBtnGroups = /** @type {NodeListOf<HTMLElement>} */ (el.querySelectorAll('.rt-onboarding-buttons'));
+
+    // Save original display states so back restores only the correct genre group
+    const savedDisplays = Array.from(allBtnGroups).map(g => g.style.display);
+    const savedConfigDisplay = configWrap ? configWrap.style.display : '';
+
+    // Hide config + genre button groups, show the PC import panel
+    if (configWrap) configWrap.style.display = 'none';
+    allBtnGroups.forEach(g => { g.style.display = 'none'; });
+    panel.style.display = 'flex';
+
+    const editBtn = panel.querySelector('.rt-edit-pc-sections-btn');
+    if (editBtn && !editBtn._bound) {
+        editBtn._bound = true;
+        editBtn.addEventListener('click', () => openPcSectionEditor());
+    }
+
+    // Back button — restore exactly what was hidden, not a blank reset
+    const backBtn = panel.querySelector('#rt-pc-import-back');
+    if (backBtn) {
+        backBtn.addEventListener('click', () => {
+            panel.style.display = 'none';
+            if (configWrap) configWrap.style.display = savedConfigDisplay;
+            allBtnGroups.forEach((g, i) => { g.style.display = savedDisplays[i]; });
+        }, { once: true });
+    }
+
+    const listEl = /** @type {HTMLElement|null} */ (panel.querySelector('#rt-pc-import-list'));
+    const searchEl = /** @type {HTMLInputElement|null} */ (panel.querySelector('#rt-pc-import-search'));
+    const wordSelect = /** @type {HTMLSelectElement|null} */ (panel.querySelector('#rt-pc-import-wordselect'));
+    const wordInput = /** @type {HTMLInputElement|null} */ (panel.querySelector('#rt-pc-import-wordcount'));
+    if (!listEl) return;
+
+    if (wordSelect && wordInput) {
+        // Toggle the custom number input based on dropdown selection
+        wordSelect.addEventListener('change', () => {
+            if (wordSelect.value === 'custom') {
+                wordInput.style.display = 'block';
+                wordInput.focus();
+            } else {
+                wordInput.style.display = 'none';
+            }
+        });
+    }
+
+    const ctx = SillyTavern.getContext();
+    const allChars = (ctx.characters || []).filter(c => c.name);
+    let currentFilter = '';
+    let displayCount = 10;
+
+    const renderPcList = () => {
+        listEl.innerHTML = '';
+        const filtered = currentFilter
+            ? allChars.filter(c => c.name.toLowerCase().includes(currentFilter.toLowerCase()))
+            : allChars;
+        if (filtered.length === 0) {
+            listEl.innerHTML = '<div style="color:rgba(255,255,255,0.35);font-size:11px;padding:6px;">No characters found.</div>';
+            return;
+        }
+        const visible = filtered.slice(0, displayCount);
+        for (const char of visible) {
+            const row = document.createElement('div');
+            row.style.cssText = 'display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:5px;padding:5px 7px;';
+
+            // Avatar
+            const avatarEl = document.createElement('div');
+            avatarEl.style.cssText = 'width:32px;height:32px;border-radius:50%;overflow:hidden;flex-shrink:0;background:rgba(255,255,255,0.1);';
+            if (char.avatar && char.avatar !== 'none') {
+                const img = document.createElement('img');
+                img.src = `/characters/${encodeURIComponent(char.avatar)}`;
+                img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+                img.loading = 'lazy';
+                img.onerror = () => { img.replaceWith(Object.assign(document.createElement('div'), { style: 'display:flex;align-items:center;justify-content:center;height:100%;font-size:16px;', textContent: '👤' })); };
+                avatarEl.appendChild(img);
+            } else {
+                avatarEl.style.display = 'flex'; avatarEl.style.alignItems = 'center'; avatarEl.style.justifyContent = 'center';
+                avatarEl.style.fontSize = '16px'; avatarEl.textContent = '👤';
+            }
+
+            // Info
+            const info = document.createElement('div');
+            info.style.cssText = 'flex:1;min-width:0;';
+            const nameEl = document.createElement('div');
+            nameEl.style.cssText = 'font-size:12px;font-weight:bold;color:rgba(255,255,255,0.9);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+            nameEl.textContent = char.name;
+            const descEl = document.createElement('div');
+            descEl.style.cssText = 'font-size:10px;color:rgba(255,255,255,0.4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+            descEl.textContent = (char.description || char.personality || 'No description').substring(0, 80);
+            info.appendChild(nameEl);
+            info.appendChild(descEl);
+
+            // Buttons
+            const btns = document.createElement('div');
+            btns.style.cssText = 'display:flex;flex-direction:column;gap:3px;flex-shrink:0;';
+
+            const fitBtn = document.createElement('button');
+            fitBtn.textContent = '🤖 Fit into Story';
+            fitBtn.title = 'Full AI adaptation: character is rewritten to fit the current campaign setting.';
+            fitBtn.style.cssText = 'font-size:10px;padding:3px 7px;background:rgba(0,180,100,0.2);border:1px solid rgba(0,180,100,0.5);border-radius:4px;color:inherit;cursor:pointer;white-space:nowrap;';
+
+            const addAsIsBtn = document.createElement('button');
+            addAsIsBtn.textContent = '📋 Add as is';
+            addAsIsBtn.title = 'Minimal AI review: only fixes logical world/era impossibilities. Original writing preserved.';
+            addAsIsBtn.style.cssText = 'font-size:10px;padding:3px 7px;background:rgba(120,80,220,0.2);border:1px solid rgba(120,80,220,0.5);border-radius:4px;color:inherit;cursor:pointer;white-space:nowrap;';
+
+            const handleImport = async (mode) => {
+                addAsIsBtn.disabled = true; fitBtn.disabled = true;
+                addAsIsBtn.textContent = '⏳'; fitBtn.textContent = '⏳';
+                try {
+                    await importPcFromCard(char, mode, el);
+                } catch (err) {
+                    toastr['error'](`Import failed: ${String(err.message || err).substring(0, 120)}`, 'PC Import');
+                } finally {
+                    addAsIsBtn.disabled = false; fitBtn.disabled = false;
+                    addAsIsBtn.textContent = '📋 Add as is'; fitBtn.textContent = '🤖 Fit into Story';
+                }
+            };
+            fitBtn.addEventListener('click', () => handleImport('full'));
+            addAsIsBtn.addEventListener('click', () => handleImport('minimal'));
+
+            btns.appendChild(fitBtn);
+            btns.appendChild(addAsIsBtn);
+            row.appendChild(avatarEl);
+            row.appendChild(info);
+            row.appendChild(btns);
+            listEl.appendChild(row);
+        }
+        if (visible.length < filtered.length) {
+            const more = document.createElement('div');
+            more.style.cssText = 'text-align:center;font-size:10px;color:rgba(255,255,255,0.4);cursor:pointer;padding:4px;';
+            more.textContent = `Show more (${visible.length} of ${filtered.length})`;
+            more.addEventListener('click', () => { displayCount += 10; renderPcList(); });
+            listEl.appendChild(more);
+        }
+    };
+
+    if (searchEl) {
+        let searchTimeout = null;
+        searchEl.addEventListener('input', () => {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => { currentFilter = searchEl.value.trim(); displayCount = 10; renderPcList(); }, 200);
+        });
+    }
+    renderPcList();
+}
+
+/**
+ * Imports a character card as a Player Character.
+ * Step 1: Sends a state memo prompt via sendDirectPrompt to populate tracker blocks.
+ * Step 2: Generates a persona bio via generatePcImportBio and shows the confirm overlay.
+ * @param {object} charCard
+ * @param {'minimal'|'full'} mode
+ * @param {HTMLElement} el — onboarding container (for re-enabling buttons on failure)
+ */
+async function importPcFromCard(charCard, mode, el) {
+    const s = getSettings();
+    const ctx = SillyTavern.getContext();
+    const name = charCard.name || 'Unnamed';
+
+    // Read word count synchronously from the DOM before any async operations 
+    // potentially trigger a chat re-render and orphan the element
+    const wordSelectEl = /** @type {HTMLSelectElement|null} */ (el.querySelector('#rt-pc-import-wordselect'));
+    const wordCountEl = /** @type {HTMLInputElement|null} */ (el.querySelector('#rt-pc-import-wordcount'));
+    
+    let wordCountStr = wordSelectEl?.value || 'same'; // Default to first option
+    if (wordCountStr === 'custom') {
+        wordCountStr = String(Math.max(50, Math.min(5000, parseInt(wordCountEl?.value || '150', 10) || 150)));
+    }
+
+    // Gather world context
+    const contextLines = [];
+    contextLines.push(`CHARACTER CARD:\nName: ${name}\nDescription: ${(charCard.description || '')}\nPersonality: ${(charCard.personality || '')}`);
+    if (s.currentMemo) contextLines.push(`CURRENT GAME STATE:\n${s.currentMemo}`);
+    if (ctx.chat && Array.isArray(ctx.chat)) {
+        const msgs = ctx.chat.filter(m => !m.is_system && m.mes?.trim()).slice(-8);
+        if (msgs.length > 0) contextLines.push(`RECENT CHAT:\n${msgs.map(m => `${m.name || (m.is_user ? 'User' : 'Character')}: ${m.mes}`).join('\n\n').substring(0, 3000)}`);
+    }
+    try {
+        const charData = ctx.characters?.[ctx.characterId];
+        if (charData?.description) contextLines.push(`NARRATOR/WORLD CARD:\n${charData.description}`);
+    } catch (_) {}
+    const worldCtx = contextLines.join('\n\n---\n\n');
+
+    // --- Step 1: State Memo ---
+    const memoPromptMinimal = `You are a state tracker assistant. Translate this character card into state tracker format for the player character.
+
+RULES:
+- Preserve ALL values, stats, abilities, and inventory EXACTLY as written in the card.
+- Only adjust specific terminology that would be a hard logical impossibility in the current setting (e.g. "smartphone" in a medieval world).
+- Output [CHARACTER], [INVENTORY], [ABILITIES], [SPELLS] (if the class uses magic), [XP], and [TIME] blocks.
+- Do NOT invent stats or equipment not present on the card.
+- Use the existing system prompt's block format.
+
+${worldCtx}`;
+
+    const memoPromptFull = `You are a state tracker assistant. Adapt this character card to the current campaign setting and translate it into state tracker format for the player character.
+
+RULES:
+- Fit the character's class, gear, backstory, and abilities naturally into the current world.
+- Rename anachronistic equipment or references to setting-appropriate equivalents.
+- Output [CHARACTER], [INVENTORY], [ABILITIES], [SPELLS] (if the class uses magic), [XP], and [TIME] blocks.
+- Use the existing system prompt's block format.
+- CRITICAL: Never output template macro strings such as {{char}}, {{user}}, or any other {{...}} placeholders. Always replace them with the actual character's name or a fitting proper name.
+
+${worldCtx}`;
+
+    const memoPrompt = mode === 'minimal' ? memoPromptMinimal : memoPromptFull;
+
+    toastr['info'](`Importing "${name}" as PC… generating state memo.`, 'PC Import');
+    el.querySelectorAll('.rt-random-char-btn').forEach(b => { /** @type {HTMLButtonElement} */ (b).disabled = true; });
+
+    await sendDirectPrompt(memoPrompt);
+
+    // Sync the card's avatar as the PC portrait globally so both the State Tracker
+    // and Campaign Records immediately reflect the newly imported character's image.
+    if (charCard.avatar && charCard.avatar !== 'none') {
+        if (!s.customPortraits) s.customPortraits = {};
+        const avatarUrl = `/characters/${encodeURIComponent(charCard.avatar)}`;
+        const safeName = name.replace(/['"\\]/g, '').trim() || 'My Character';
+        s.customPortraits['CHARACTER'] = avatarUrl;
+        s.customPortraits['PC'] = avatarUrl;
+        s.customPortraits[safeName] = avatarUrl;
+        
+        // Also map the AI-generated clean name (if any) from the new state memo,
+        // so the State Tracker can match the portrait even if the AI changed the name.
+        const extractedName = extractCharNameFromMemo(s.currentMemo);
+        if (extractedName && extractedName !== safeName) {
+            s.customPortraits[extractedName] = avatarUrl;
+        }
+        
+        const currentChatId = SillyTavern.getContext().chatId;
+        if (currentChatId && typeof saveChatState === 'function') {
+            saveChatState(currentChatId);
+        }
+        
+        // Force an immediate synchronous re-render of the State Tracker 
+        // now that the customPortraits object has the PC avatar.
+        if (typeof refreshRenderedView === 'function') {
+            refreshRenderedView();
+        }
+        document.dispatchEvent(new CustomEvent('rt_lore_agent_updated'));
+    }
+
+    el.querySelectorAll('.rt-random-char-btn').forEach(b => { /** @type {HTMLButtonElement} */ (b).disabled = false; });
+
+    // --- Step 2: Persona Bio ---
+    toastr['info'](`Generating persona bio for "${name}"…`, 'PC Import');
+    
+    const bio = await generatePcImportBio(charCard, mode, wordCountStr);
+    if (bio) {
+        showPersonaConfirmOverlay(bio, name, wordCountStr === 'same' ? 150 : parseInt(wordCountStr, 10), '');
+    } else {
+        toastr['warning']('State memo sent, but persona bio generation failed. You can set up the PC persona manually.', 'PC Import');
+    }
+}
+
+/**
+ * Generates a persona bio from a character card directly (not from the state memo).
+ * @param {object} charCard
+ * @param {'minimal'|'full'} mode
+ * @param {number} wordCount
+ * @returns {Promise<string|null>}
+ */
+async function generatePcImportBio(charCard, mode, wordCount) {
+    const s = getSettings();
+    const ctx = SillyTavern.getContext();
+    const name = charCard.name || 'Unnamed';
+
+    // Build card text — {{char}} replaced with actual name; no artificial size cap
+    const replaceCharMacro = (s) => s.replace(/\{\{char\}\}/gi, name).replace(/\{\{Char\}\}/g, name);
+    const descText = replaceCharMacro((charCard.description || '').trim());
+    const persText = replaceCharMacro((charCard.personality || '').trim());
+    const cardText = [
+        `Name: ${name}`,
+        descText  ? `Description:\n${descText}`  : '',
+        persText  ? `Personality:\n${persText}`  : '',
+    ].filter(Boolean).join('\n\n');
+
+    // World/narrator hint — reference only, never to be copied into the bio
+    let worldHint = '';
+    try {
+        const charData = ctx.characters?.[ctx.characterId];
+        if (charData?.description) worldHint = charData.description.trim();
+    } catch (_) {}
+
+    if (mode === 'minimal') {
+        // Minimal mode: copy the card's writing as faithfully as possible.
+        // The AI's job is like copy-paste with ONLY surgical era/world fixes.
+        // No section format is imposed — preserve the card's own structure and voice.
+        const systemPrompt = `You are a persona transcription assistant. Your ONLY job is to copy the provided character card text into the persona field with the absolute minimum number of changes.
+
+RULES — read carefully:
+- Copy the original text almost verbatim. Think of yourself as a copy-paste tool, not a writer.
+- The ONLY changes you are allowed to make are:
+  a) Hard logical impossibilities caused by a world or era mismatch (e.g. "smartphone" in a medieval world, "spaceship" in a historical setting).
+  b) Replace every literal occurrence of {{char}} or {{Char}} in the text with the character's actual name: ${name}. This is mandatory.
+- Do NOT restructure, reformat, reorder, or expand anything.
+- Do NOT add new sentences, new details, or your own creative additions.
+- If the card fits the setting fine (other than the {{char}} substitution), output it almost completely unchanged.
+- Your output MUST start with exactly this line and nothing before it: \`Personality:\` — then the transcribed card text on the next line. Do NOT add any other section headers beyond this one.
+- No preamble, no commentary, no closing remarks.
+- CRITICAL: The world reference below is provided ONLY so you can spot era/world conflicts. Do NOT copy or include any text from it in your output.`;
+
+        const worldSection = worldHint
+            ? `\n\n--- WORLD REFERENCE (do NOT copy — for conflict-checking only) ---\n${worldHint}\n--- END WORLD REFERENCE ---`
+            : '';
+        const userPrompt = `CARD TO TRANSCRIBE:\n${cardText}${worldSection}\n\nOutput the transcribed persona text now.`;
+
+        const aiSettings = {
+            connectionSource: s.routerConnectionSource ?? 'default',
+            connectionProfileId: s.routerConnectionProfileId || '',
+            completionPresetId: s.routerCompletionPresetId || '',
+            ollamaUrl: s.routerOllamaUrl || 'http://localhost:11434',
+            ollamaModel: s.routerOllamaModel || '',
+            openaiUrl: s.routerOpenaiUrl || '',
+            openaiKey: s.routerOpenaiKey || '',
+            openaiModel: s.routerOpenaiModel || '',
+            maxTokens: s.routerMaxTokens || 0,
+            debugMode: s.debugMode,
+        };
+        try {
+            const result = await sendStateRequest(aiSettings, systemPrompt, userPrompt);
+            return (result || '').trim() || null;
+        } catch (err) {
+            toastr['error'](`Bio generation failed: ${String(err.message || err).substring(0, 120)}`, 'PC Import');
+            return null;
+        }
+    }
+
+    // Full mode: structured section bio adapted to the campaign setting
+    const coreSections = s.pcCoreSections && Array.isArray(s.pcCoreSections) && s.pcCoreSections.length > 0 ? s.pcCoreSections : DEFAULT_PC_SECTIONS;
+    const sectionsTemplate = coreSections.map(sec => `${sec.name}:\n${sec.description}`).join('\n\n');
+
+    const systemPrompt = `You are a persona writer for a roleplay system. Based on the provided character card, write a persona description for ${name} in third person.
+
+Rewrite the bio as if this character were native to the current campaign setting. Actively adapt and integrate their appearance, background, and mannerisms so they feel like a natural part of the world's lore and ongoing story.
+
+You MUST use this exact section format — each section on its own line with the label followed by a colon:
+
+${sectionsTemplate}
+
+Rules:
+- Use the exact section headers shown above. Do not add extra sections or merge them.
+- CRITICAL: Do NOT blindly copy the formatting or sections of other characters found in ACTIVE MEMORY or the original character card. You MUST strictly use ONLY the sections instructed above and ignore any other sections.
+${wordCount === 'same' 
+    ? '- MATCH LENGTH: Aim to make your output approximately the same length/word count as the original character card.'
+    : `- Total word count across all sections: approximately ${wordCount} words.`}
+- Write in third person (he/she/they).
+- Keep prose grounded and natural. Avoid purple prose.
+- Do not include a preamble, title, or closing statement. Output ONLY the six sections.
+- Faithfully incorporate all provided traits, species, gender, and appearance from the card.
+- CRITICAL: The world reference below is for setting context only — do NOT copy text from it.
+- CRITICAL: Never output template macro strings such as {{char}}, {{user}}, or any other {{...}} placeholders. Always replace them with the actual character's name or a fitting proper name.`;
+
+    const worldSection = worldHint
+        ? `\n\n--- WORLD/CAMPAIGN REFERENCE (context only — do NOT copy) ---\n${worldHint}\n--- END WORLD REFERENCE ---`
+        : '';
+    const userPrompt = `CHARACTER CARD:\n${cardText}${worldSection}\n\nWrite the persona description for ${name}.`;
+
+
+    const aiSettings = {
+        connectionSource: s.routerConnectionSource ?? 'default',
+        connectionProfileId: s.routerConnectionProfileId || '',
+        completionPresetId: s.routerCompletionPresetId || '',
+        ollamaUrl: s.routerOllamaUrl || 'http://localhost:11434',
+        ollamaModel: s.routerOllamaModel || '',
+        openaiUrl: s.routerOpenaiUrl || '',
+        openaiKey: s.routerOpenaiKey || '',
+        openaiModel: s.routerOpenaiModel || '',
+        maxTokens: s.routerMaxTokens || 0,
+        debugMode: s.debugMode,
+    };
+    try {
+        const result = await sendStateRequest(aiSettings, systemPrompt, userPrompt);
+        return (result || '').trim() || null;
+    } catch (err) {
+        toastr['error'](`Bio generation failed: ${String(err.message || err).substring(0, 120)}`, 'PC Import');
+        return null;
+    }
 }

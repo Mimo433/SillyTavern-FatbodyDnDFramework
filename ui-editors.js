@@ -1,4 +1,4 @@
-import { getSettings, getNpcRelationshipMaxDefault } from './state-manager.js';
+import { getSettings, getNpcRelationshipMaxDefault, DEFAULT_NPC_SECTIONS, DEFAULT_PC_SECTIONS } from './state-manager.js';
 import { sendStateRequest } from './llm-client.js';
 import { BLOCK_ICONS, BLOCK_ORDER, DEFAULT_STOCK_PROMPTS, PAGE_SIZE, resolveTimePromptKey, resolveTimePromptDisplayTag } from './constants.js';
 import { escapeHtml } from './memo-processor.js';
@@ -15,7 +15,8 @@ import {
     refreshQuestPrompt,
     syncMemoView,
     bindRenderedCardEvents,
-    _sectionPages
+    _sectionPages,
+    rebuildNpcInstructionIfNeeded
 } from './index.js';
 import { renderMemoAsCards, MARKER_TYPE_MAP, getMarkerLibraryKeys } from './renderer.js';
 
@@ -1238,5 +1239,286 @@ export function refreshOrderList() {
         item.appendChild(btnGroup);
         list.appendChild(item);
     });
+}
+
+export function openNpcSectionEditor() {
+    openSectionEditor('npc');
+}
+
+export function openPcSectionEditor() {
+    openSectionEditor('pc');
+}
+
+function openSectionEditor(targetType) {
+    const s = getSettings();
+    const isNPC = targetType === 'npc';
+    const settingsKey = isNPC ? 'npcCoreSections' : 'pcCoreSections';
+    const presetsKey = isNPC ? 'npcSectionPresets' : 'pcSectionPresets';
+    if (!s[presetsKey]) s[presetsKey] = {};
+    const defaultSections = isNPC ? DEFAULT_NPC_SECTIONS : DEFAULT_PC_SECTIONS;
+    const titleText = isNPC ? '🧩 Edit NPC Sections' : '👤 Edit PC Sections';
+    const descriptionText = isNPC 
+        ? 'Customize the <b>[CORE]</b> identity sections for all NPCs. You can edit names, colors, emojis, and the prompt instructions that tell the AI what to track. Drag handles to reorder.'
+        : 'Customize the persona sections for Player Characters. These fields will be used when generating new characters or importing existing cards. Drag handles to reorder.';
+
+    if (!s[settingsKey] || !Array.isArray(s[settingsKey]) || s[settingsKey].length === 0) s[settingsKey] = JSON.parse(JSON.stringify(defaultSections));
+    let workingSections = JSON.parse(JSON.stringify(s[settingsKey]));
+
+    let overlay = document.getElementById('rt_sec_se_overlay');
+    let inner;
+    if (!overlay) {
+        overlay = document.createElement('dialog');
+        overlay.id = 'rt_sec_se_overlay';
+        overlay.style.width = '100vw';
+        overlay.style.height = '100vh';
+        overlay.style.maxWidth = '100vw';
+        overlay.style.maxHeight = '100vh';
+        overlay.style.margin = '0';
+        overlay.style.padding = '0';
+        overlay.style.border = 'none';
+        overlay.style.backgroundColor = 'transparent';
+        
+        inner = document.createElement('div');
+        inner.id = 'rt_sec_se_inner';
+        inner.style.width = '100%';
+        inner.style.height = '100%';
+        inner.style.backgroundColor = 'rgba(0,0,0,0.7)';
+        inner.style.display = 'flex';
+        inner.style.alignItems = 'center';
+        inner.style.justifyContent = 'center';
+        overlay.appendChild(inner);
+        
+        document.body.appendChild(overlay);
+    } else {
+        inner = document.getElementById('rt_sec_se_inner');
+    }
+
+    const renderList = () => {
+        return workingSections.map((sec, idx) => `
+            <div class="sec-section-row" data-idx="${idx}" style="display:flex; flex-direction:column; gap:4px; padding:10px; background:rgba(0,0,0,0.2); border:1px solid rgba(255,255,255,0.05); border-radius:6px; margin-bottom:8px;">
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <div style="cursor:move; opacity:0.5; padding:4px;" class="drag-handle" title="Drag to reorder"><i class="fa-solid fa-grip-vertical"></i></div>
+                    <input type="text" class="text_pole sec-icon" value="${escapeHtml(sec.icon)}" style="width:36px; text-align:right;" title="Icon (emoji)">
+                    <input type="color" class="sec-color" value="${sec.color}" style="width:28px; height:28px; padding:0; border:none; border-radius:4px; cursor:pointer;" title="Color">
+                    <input type="text" class="text_pole sec-name" value="${escapeHtml(sec.name)}" style="flex:1; font-weight:bold;" placeholder="Section Name">
+                    <div class="menu_button interactable sec-delete" style="padding:4px 8px; color:#ff5555;" title="Remove"><i class="fa-solid fa-trash"></i></div>
+                </div>
+                <input type="text" class="text_pole sec-desc" value="${escapeHtml(sec.description)}" style="width:100%; font-size:11px; margin-top:2px;" placeholder="Prompt instruction for this section...">
+            </div>
+        `).join('');
+    };
+
+    const render = () => {
+        inner.innerHTML = `
+            <div class="popup shadowBase" style="min-width: 480px; max-width: 600px; max-height: 85vh; display: flex; flex-direction: column;">
+                <div class="popup-header" style="flex-shrink:0;">
+                    <h3 class="margin0">${titleText}</h3>
+                    <div id="rt_sec_se_close" class="popup-close interactable" title="Close"><i class="fa-solid fa-times"></i></div>
+                </div>
+                <div class="popup-body flex-container flexFlowColumn gap-1" style="padding: 14px; overflow-y:auto; flex:1;">
+                    <div style="font-size:11px; opacity:0.7; margin-bottom:10px; line-height:1.4;">
+                        ${descriptionText}
+                    </div>
+                    
+                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px; padding-bottom:10px; border-bottom: 1px solid rgba(255,255,255,0.08);">
+                        <strong style="font-size:0.85em; opacity:0.8;">Presets</strong>
+                        <select id="rt_sec_se_preset_select" class="text_pole" style="flex:1; font-size:12px; height:24px; padding:2px 4px;">
+                            <option value="">-- Select Preset --</option>
+                            ${Object.keys(s[presetsKey]).map(k => `<option value="${escapeHtml(k)}">${escapeHtml(k)}</option>`).join('')}
+                        </select>
+                        <button id="rt_sec_se_preset_load" class="menu_button interactable" style="padding:2px 8px; font-size:11px;" title="Load selected preset">Load</button>
+                        <button id="rt_sec_se_preset_save" class="menu_button interactable" style="padding:2px 8px; font-size:11px; background:rgba(100,180,255,0.15);" title="Save current sections as a new preset">Save</button>
+                        <button id="rt_sec_se_preset_delete" class="menu_button interactable" style="padding:2px 8px; font-size:11px; color:#ff5555;" title="Delete selected preset">Delete</button>
+                    </div>
+                    
+                    <div id="rt_sec_se_list">
+                        ${renderList()}
+                    </div>
+                    
+                    <button id="rt_sec_se_add" class="menu_button interactable" style="margin-top:8px; border: 1px dashed rgba(255,255,255,0.2); background:transparent;">
+                        <i class="fa-solid fa-plus"></i> Add Custom Section
+                    </button>
+                </div>
+                <div class="popup-footer flex-container gap-1 justifycontentend" style="padding:10px 14px; border-top:1px solid rgba(255,255,255,0.08); flex-shrink:0;">
+                    <button id="rt_sec_se_reset" class="menu_button interactable" style="font-size:12px; margin-right:auto; color:#ffaa00;"><i class="fa-solid fa-arrow-rotate-left"></i> Factory Reset</button>
+                    <button id="rt_sec_se_cancel" class="menu_button interactable" style="font-size:12px;">Cancel</button>
+                    <button id="rt_sec_se_save" class="menu_button interactable" style="font-size:12px; background:rgba(180,100,255,0.15); border-color:rgba(180,100,255,0.4);">Save & Rebuild</button>
+                </div>
+            </div>
+        `;
+        
+        // Bindings
+        document.getElementById('rt_sec_se_close').onclick = close;
+        document.getElementById('rt_sec_se_cancel').onclick = close;
+        
+        document.getElementById('rt_sec_se_preset_load').onclick = () => {
+            const presetName = document.getElementById('rt_sec_se_preset_select').value;
+            if (!presetName || !s[presetsKey][presetName]) return;
+            if (confirm(`Load preset "${presetName}"? This will overwrite your current sections.`)) {
+                workingSections = JSON.parse(JSON.stringify(s[presetsKey][presetName]));
+                render();
+                document.getElementById('rt_sec_se_preset_select').value = presetName;
+                toastr['success'](`Loaded preset: ${presetName}`);
+            }
+        };
+
+        document.getElementById('rt_sec_se_preset_save').onclick = () => {
+            const presetName = prompt("Enter a name for this preset:");
+            if (!presetName || !presetName.trim()) return;
+            const nameTrimmed = presetName.trim();
+            s[presetsKey][nameTrimmed] = JSON.parse(JSON.stringify(workingSections));
+            // Force top-level reassignment so SillyTavern's shallow proxy detects the change
+            s[presetsKey] = { ...s[presetsKey] };
+            saveSettings();
+            render();
+            document.getElementById('rt_sec_se_preset_select').value = nameTrimmed;
+            toastr['success'](`Saved preset: ${nameTrimmed}`);
+        };
+
+        document.getElementById('rt_sec_se_preset_delete').onclick = () => {
+            const presetName = document.getElementById('rt_sec_se_preset_select').value;
+            if (!presetName || !s[presetsKey][presetName]) return;
+            if (confirm(`Delete preset "${presetName}"?`)) {
+                delete s[presetsKey][presetName];
+                // Force top-level reassignment so SillyTavern's shallow proxy detects the change
+                s[presetsKey] = { ...s[presetsKey] };
+                saveSettings();
+                render();
+                toastr['info'](`Deleted preset: ${presetName}`);
+            }
+        };
+        
+        document.getElementById('rt_sec_se_reset').onclick = () => {
+            if (confirm("Reset to default sections? This will overwrite your current sections and save immediately.")) {
+                workingSections = JSON.parse(JSON.stringify(defaultSections));
+                s[settingsKey] = JSON.parse(JSON.stringify(workingSections));
+                saveSettings();
+                rebuildNpcInstructionIfNeeded();
+                refreshRenderedView();
+                render();
+                toastr['success'](`${isNPC ? 'NPC Identity' : 'PC Persona'} sections reset to default!`, isNPC ? 'NPC Settings' : 'PC Settings');
+            }
+        };
+
+        document.getElementById('rt_sec_se_add').onclick = () => {
+            workingSections.push({
+                id: 'custom_' + Date.now(),
+                name: 'New Section',
+                description: 'Description of what goes here.',
+                icon: '📌',
+                color: '#aaaaaa'
+            });
+            render();
+            // Scroll to bottom
+            setTimeout(() => {
+                const list = document.querySelector('.popup-body');
+                if (list) list.scrollTop = list.scrollHeight;
+            }, 50);
+        };
+
+        // Sync inputs back to working array on change
+        document.querySelectorAll('.sec-section-row').forEach(row => {
+            const idx = parseInt(row.getAttribute('data-idx'));
+            row.querySelector('.sec-name').addEventListener('input', e => workingSections[idx].name = e.target.value);
+            row.querySelector('.sec-icon').addEventListener('input', e => workingSections[idx].icon = e.target.value);
+            row.querySelector('.sec-color').addEventListener('input', e => workingSections[idx].color = e.target.value);
+            row.querySelector('.sec-desc').addEventListener('input', e => workingSections[idx].description = e.target.value);
+            row.querySelector('.sec-delete').onclick = () => {
+                if(confirm("Remove this section?")) {
+                    workingSections.splice(idx, 1);
+                    render();
+                }
+            };
+        });
+
+        document.getElementById('rt_sec_se_save').onclick = () => {
+            // Validate
+            for (let sec of workingSections) {
+                if (!sec.name.trim()) {
+                    toastr['warning']('All sections must have a name.', isNPC ? 'NPC Settings' : 'PC Settings');
+                    return;
+                }
+                // Ensure IDs exist for legacy custom ones, or create simple sluggified IDs
+                if (!sec.id) {
+                    sec.id = sec.name.trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
+                }
+            }
+            s[settingsKey] = JSON.parse(JSON.stringify(workingSections));
+            saveSettings();
+            rebuildNpcInstructionIfNeeded(); // Handles NPC rebuilds, safe to call always
+            refreshRenderedView();
+            toastr['success'](`${isNPC ? 'NPC Identity' : 'PC Persona'} sections updated!`, isNPC ? 'NPC Settings' : 'PC Settings');
+            close();
+        };
+
+        // Simple Drag and Drop
+        let draggedRow = null;
+        const listContainer = document.getElementById('rt_sec_se_list');
+        document.querySelectorAll('.sec-section-row').forEach(row => {
+            const handle = row.querySelector('.drag-handle');
+            row.setAttribute('draggable', 'false');
+            
+            handle.addEventListener('mousedown', () => row.setAttribute('draggable', 'true'));
+            handle.addEventListener('mouseup', () => row.setAttribute('draggable', 'false'));
+            handle.addEventListener('mouseleave', () => row.setAttribute('draggable', 'false'));
+            
+            row.addEventListener('dragstart', e => {
+                draggedRow = row;
+                e.dataTransfer.effectAllowed = 'move';
+                row.style.opacity = '0.5';
+            });
+            
+            row.addEventListener('dragend', () => {
+                draggedRow = null;
+                row.style.opacity = '1';
+                // Read back new order
+                const newArr = [];
+                listContainer.querySelectorAll('.sec-section-row').forEach(r => {
+                    newArr.push(workingSections[r.getAttribute('data-idx')]);
+                });
+                workingSections = newArr;
+                render();
+            });
+
+            row.addEventListener('dragover', e => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                const bounding = row.getBoundingClientRect();
+                const offset = bounding.y + (bounding.height / 2);
+                if (e.clientY - offset > 0) {
+                    row.style.borderBottom = '2px solid var(--rt-accent, #b464ff)';
+                    row.style.borderTop = '';
+                } else {
+                    row.style.borderTop = '2px solid var(--rt-accent, #b464ff)';
+                    row.style.borderBottom = '';
+                }
+            });
+
+            row.addEventListener('dragleave', e => {
+                row.style.borderTop = '';
+                row.style.borderBottom = '';
+            });
+
+            row.addEventListener('drop', e => {
+                e.preventDefault();
+                row.style.borderTop = '';
+                row.style.borderBottom = '';
+                if (draggedRow && draggedRow !== row) {
+                    const bounding = row.getBoundingClientRect();
+                    const offset = bounding.y + (bounding.height / 2);
+                    if (e.clientY - offset > 0) {
+                        row.after(draggedRow);
+                    } else {
+                        row.before(draggedRow);
+                    }
+                }
+            });
+        });
+    };
+
+    const close = () => { overlay.close(); };
+    
+    render();
+    overlay.showModal();
 }
 

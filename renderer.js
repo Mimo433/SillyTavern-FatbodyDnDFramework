@@ -783,6 +783,54 @@ export function getTimeOfDayInfo(str) {
         }).join('');
     };
 
+    /**
+     * Renders a single ability line as a structured pill.
+     * Splits on the FIRST colon only: everything before is the "name"
+     * (may include a resource annotation like "Rage (2/2 per day)"),
+     * everything after is the description.  This intentionally does NOT
+     * split on commas inside the description (unlike renderPills/splitSmart),
+     * so ability text like "Resistance to bludgeoning, piercing, slashing"
+     * stays as one contiguous pill description instead of being shattered
+     * into multiple pills.
+     */
+    const renderAbilityLine = (text) => {
+        let pillClass = 'rt-unit-pill';
+        let displayText = text.trim();
+
+        // Strip buff/debuff prefix markers
+        if (displayText.startsWith('(+)') || displayText.startsWith('(+) ')) {
+            pillClass += ' rt-pill-buff';
+            displayText = displayText.replace(/^\(\+\)\s*/, '');
+        } else if (displayText.startsWith('(-)') || displayText.startsWith('(-) ')) {
+            pillClass += ' rt-pill-debuff';
+            displayText = displayText.replace(/^\(-\)\s*/, '');
+        }
+
+        const colonIdx = displayText.indexOf(':');
+        if (colonIdx !== -1) {
+            const namePart = displayText.substring(0, colonIdx).trim();
+            const descPart = displayText.substring(colonIdx + 1).trim();
+
+            // Extract resource count from the name part (e.g. "Rage (2/2 per day)")
+            let iconHtml = '';
+            const resourceMatch = namePart.match(/(\d+)\s*\/\s*(\d+)/);
+            if (resourceMatch) {
+                iconHtml = `<span class="rt-unit-icon">${escapeHtmlWithColor(resourceMatch[0])}</span>`;
+            }
+
+            if (descPart) {
+                return `<div class="rt-entity-sub-line rt-units-container"><span class="${pillClass}">
+                    <span class="rt-unit-name">${escapeHtmlWithColor(namePart)}</span>
+                    ${iconHtml}
+                    <span class="rt-unit-descr">${escapeHtmlWithColor(descPart)}</span>
+                </span></div>`;
+            }
+        }
+
+        // No colon — fall back to a simple no-description pill
+        return `<div class="rt-entity-sub-line rt-units-container"><span class="${pillClass} no-desc"><span class="rt-unit-name">${escapeHtmlWithColor(displayText)}</span></span></div>`;
+    };
+
 
     /**
      * Parse the memo's [TAG]...[/TAG] blocks and return structured object.
@@ -1314,9 +1362,9 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                         { rx: /\b(bronze|copper|cp)\b/i,                       color: '#cd7f32', icon: '🪙' },
                     ];
 
-                    // Bare currency item: a line that IS the currency (e.g. "45 GP", "💰 45 GP", "$500")
+                    // Bare currency item: a line that IS the currency (e.g. "45 GP", "💰 45 GP", "$500", "130 Gold Dragons")
                     // — no parenthesised worth annotation, just a number + currency unit
-                    const BARE_CURRENCY_RX = /^[^(]*?(?:([$£€])\s*\d[\d,]*|\d[\d,]*\s*(gp|sp|cp|gold|silver|bronze|copper|dollar|usd|euro|eur|pound|gbp|£|\$|€))\s*$/i;
+                    const BARE_CURRENCY_RX = /^[^(]*?(?:([$£€])\s*\d[\d,]*|\d[\d,]*\s*(gp|sp|cp|gold|silver|bronze|copper|dollar|usd|euro|eur|pound|gbp|£|\$|€)(?:\s+[a-z]+){0,2})\s*$/i;
 
                     const worthMode = getSettings().inventoryWorthMode || 'hover'; // 'hover' | 'display'
                     const worthRx = /\s*\(~([^)]+)\)\s*$|\s*\(Worth:\s*([^)]+)\)\s*$/i;
@@ -1440,9 +1488,44 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                     const line = lines[abIdx];
                     const asMarker = tryRenderMarker(line, tag, '', abIdx);
                     if (asMarker !== null) { abilityResults.push(asMarker); continue; }
-                    const l = line.trim();
-                    const items = l.match(/^[-*]\s+/) ? [l.replace(/^[-*]\s*/, '')] : splitSmart(l);
-                    items.forEach(t => abilityResults.push(renderPills(t)));
+                    const l = line.trim().replace(/^[-*]\s*/, '');
+
+                    // Format detection: does this line use the "Name: description" format
+                    // (colon before any unparenthesised comma) or the old comma-separated
+                    // pill format ("Rage (2/2 per day), Reckless Attack, Danger Sense")?
+                    //
+                    // Walk through the string tracking paren depth; the first character
+                    // that is ',' at depth 0 is the "first unparenthesised comma", and
+                    // the first ':' at depth 0 is the "first unparenthesised colon".
+                    // If the colon comes first (or there is no comma at all), treat the
+                    // whole line as a single ability via renderAbilityLine so that commas
+                    // inside the description (e.g. "bludgeoning, piercing, slashing")
+                    // are not mis-split into separate pills.
+                    // If a comma comes first (old format), fall back to renderPills so
+                    // that multi-ability single-line entries still work exactly as before.
+                    let firstCommaIdx = -1, firstColonIdx = -1, depth = 0;
+                    for (let ci = 0; ci < l.length; ci++) {
+                        const ch = l[ci];
+                        if (ch === '(') depth++;
+                        else if (ch === ')') depth--;
+                        else if (depth === 0) {
+                            if (ch === ',' && firstCommaIdx === -1) firstCommaIdx = ci;
+                            if (ch === ':' && firstColonIdx === -1) firstColonIdx = ci;
+                        }
+                        if (firstCommaIdx !== -1 && firstColonIdx !== -1) break;
+                    }
+
+                    const isColonFormat = firstColonIdx !== -1 &&
+                        (firstCommaIdx === -1 || firstColonIdx < firstCommaIdx);
+
+                    if (isColonFormat) {
+                        abilityResults.push(renderAbilityLine(l));
+                    } else {
+                        // Old comma-separated pill format — wrap in a container div
+                        abilityResults.push(
+                            `<div class="rt-entity-sub-line rt-units-container">${renderPills(l)}</div>`
+                        );
+                    }
                 }
                 return abilityResults;
             }
@@ -1512,29 +1595,73 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                     <button class="rt-random-char-btn" data-archetype="persona">🎭 Persona</button>
                     <button class="rt-random-char-btn" data-archetype="custom">⚙️ Custom</button>
                     <button class="rt-random-char-btn rt-char-roll-trigger" data-archetype="char_roll">🎲 Character Creator</button>
+                    <button class="rt-random-char-btn rt-pc-import-trigger" data-archetype="pc_import">📥 Import Card</button>
                 </div>
                 <div class="rt-onboarding-buttons rt-realistic-buttons" style="width: 100%; display: ${onboardingGenre === 'realistic' ? 'flex' : 'none'}; justify-content: center; gap: 4px; margin: 4px 0; flex-shrink: 0; flex-wrap: wrap;">
                     <button class="rt-random-char-btn" data-archetype="persona">🎭 Persona</button>
                     <button class="rt-random-char-btn" data-archetype="custom">⚙️ Custom</button>
                     <button class="rt-random-char-btn rt-char-roll-trigger" data-archetype="char_roll">🎲 Character Creator</button>
+                    <button class="rt-random-char-btn rt-pc-import-trigger" data-archetype="pc_import">📥 Import Card</button>
                 </div>
                 <div class="rt-onboarding-buttons rt-scifi-buttons" style="width: 100%; display: ${onboardingGenre === 'scifi' ? 'flex' : 'none'}; justify-content: center; gap: 4px; margin: 4px 0; flex-shrink: 0; flex-wrap: wrap;">
                     <button class="rt-random-char-btn" data-archetype="persona">🎭 Persona</button>
                     <button class="rt-random-char-btn" data-archetype="custom">⚙️ Custom</button>
                     <button class="rt-random-char-btn rt-char-roll-trigger" data-archetype="char_roll">🎲 Character Creator</button>
+                    <button class="rt-random-char-btn rt-pc-import-trigger" data-archetype="pc_import">📥 Import Card</button>
                 </div>
                 <div class="rt-onboarding-buttons rt-horror-buttons" style="width: 100%; display: ${onboardingGenre === 'horror' ? 'flex' : 'none'}; justify-content: center; gap: 4px; margin: 4px 0; flex-shrink: 0; flex-wrap: wrap;">
                     <button class="rt-random-char-btn" data-archetype="persona">🎭 Persona</button>
                     <button class="rt-random-char-btn" data-archetype="custom">⚙️ Custom</button>
                     <button class="rt-random-char-btn rt-char-roll-trigger" data-archetype="char_roll">🎲 Character Creator</button>
+                    <button class="rt-random-char-btn rt-pc-import-trigger" data-archetype="pc_import">📥 Import Card</button>
+                </div>
+
+                <!-- PC Import Inline Panel (hidden until 📥 is clicked) -->
+                <div id="rt-pc-import-panel" style="display:none; flex-direction:column; gap:7px; width:100%; flex-shrink:0;">
+                    <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+                        <button id="rt-pc-import-back" style="background:none; border:1px solid rgba(255,255,255,0.2); border-radius:4px; color:inherit; font-size:0.8em; padding:2px 8px; cursor:pointer; opacity:0.75;">← Back</button>
+                        <span style="flex:1; display:flex; align-items:center; gap:6px;">
+                            <span style="font-weight:bold; color:var(--rt-accent); font-size:0.95em;">📥 Import Character Card as PC</span>
+                            <button class="rt-edit-pc-sections-btn" style="background:none; border:none; color:var(--rt-accent); cursor:pointer; font-size:1.1em; opacity:0.8; padding:0; margin-top:-2px;" title="Edit PC Formatting Sections">⚙️</button>
+                        </span>
+                    </div>
+                    <div style="font-size:10px; color:rgba(255,255,255,0.45); line-height:1.4;"><b>Add as is</b> = AI preserves original writing, fixes only era/world impossibilities · <b>Fit into Story</b> = full adaptation to campaign setting.</div>
+                    <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+                        <label style="font-size:11px; color:rgba(255,255,255,0.6); white-space:nowrap;">Persona Bio Length</label>
+                        <select id="rt-pc-import-wordselect" style="background:rgba(0,0,0,0.3); color:white; border:1px solid rgba(255,255,255,0.15); border-radius:4px; padding:2px 4px; font-size:11px; box-sizing:border-box;">
+                            <option value="same">Same as Card</option>
+                            <option value="150">Short (~150 words)</option>
+                            <option value="300">Medium (~300 words)</option>
+                            <option value="500">Long (~500 words)</option>
+                            <option value="custom">Custom...</option>
+                        </select>
+                        <input id="rt-pc-import-wordcount" type="number" value="150" min="50" max="5000" step="25"
+                            style="display:none; width:60px; background:rgba(0,0,0,0.3); color:white; border:1px solid rgba(255,255,255,0.15); border-radius:4px; padding:3px 6px; font-size:12px; box-sizing:border-box;">
+                        <span style="font-size:10px; color:rgba(255,255,255,0.35);">(Fit into Story only)</span>
+                    </div>
+                    <input id="rt-pc-import-search" type="text" placeholder="Search characters..." style="width:100%; background:rgba(0,0,0,0.3); color:white; border:1px solid rgba(255,255,255,0.15); border-radius:5px; padding:5px 8px; font-size:12px; box-sizing:border-box;">
+                    <div id="rt-pc-import-list" style="display:flex; flex-direction:column; gap:4px; max-height:200px; overflow-y:auto; padding-right:2px;"></div>
                 </div>
 
                 <!-- Character Roll Inline Panel (hidden until 🎲 is clicked) -->
                 <div id="rt-char-roll-panel" style="display:none; flex-direction:column; gap:7px; width:100%; flex-shrink:0;">
                     <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
                         <button id="rt-char-roll-back" style="background:none; border:1px solid rgba(255,255,255,0.2); border-radius:4px; color:inherit; font-size:0.8em; padding:2px 8px; cursor:pointer; opacity:0.75;">← Back</button>
-                        <span style="flex:1; font-weight:bold; color:var(--rt-accent); font-size:0.95em;">🎲 Character Creator</span>
+                        <span style="flex:1; display:flex; align-items:center; gap:6px;">
+                            <span style="font-weight:bold; color:var(--rt-accent); font-size:0.95em;">🎲 Character Creator</span>
+                            <button class="rt-edit-pc-sections-btn" style="background:none; border:none; color:var(--rt-accent); cursor:pointer; font-size:1.1em; opacity:0.8; padding:0; margin-top:-2px;" title="Edit PC Formatting Sections">⚙️</button>
+                        </span>
                         <button id="rt-cr-reset-btn" class="rt-cr-reset-btn" style="background:none; border:1px solid rgba(255,255,255,0.2); border-radius:4px; color:inherit; font-size:0.8em; padding:2px 8px; cursor:pointer; opacity:0.75;" title="Clear all fields">🗑 Reset</button>
+                    </div>
+                    <!-- Presets Bar -->
+                    <div id="rt-cr-presets-bar" style="display:flex; align-items:center; gap:5px; padding:4px 0 3px; border-bottom:1px solid rgba(255,255,255,0.08);">
+                        <span style="font-size:0.78em; opacity:0.55; white-space:nowrap;">📋 Presets:</span>
+                        <select id="rt-cr-preset-select" class="text_pole" style="flex:1; font-size:11px; height:22px; padding:2px 4px;">
+                            <option value="">— Select preset —</option>
+                        </select>
+                        <button id="rt-cr-preset-load-btn" style="background:rgba(120,80,220,0.2); border:1px solid rgba(120,80,220,0.5); border-radius:4px; color:inherit; font-size:0.75em; padding:2px 8px; cursor:pointer; white-space:nowrap; flex-shrink:0;">Load</button>
+                        <button id="rt-cr-preset-delete-btn" style="background:rgba(220,50,50,0.12); border:1px solid rgba(220,50,50,0.4); border-radius:4px; color:rgba(255,100,100,0.9); font-size:0.75em; padding:2px 8px; cursor:pointer; white-space:nowrap; flex-shrink:0;">Delete</button>
+                        <button id="rt-cr-preset-save-btn" title="Save current fields as a new preset" style="background:none; border:1px solid rgba(120,80,220,0.5); border-radius:4px; color:var(--rt-accent); font-size:0.75em; padding:2px 8px; cursor:pointer; white-space:nowrap; flex-shrink:0;">＋ Save</button>
                     </div>
                     <div class="rt-cr-row">
                         <div class="rt-cr-field">
@@ -1632,7 +1759,7 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                             <option value="1000">1000</option>
                             <option value="other">Other...</option>
                         </select>
-                        <input id="rt-cr-persona-words-custom" type="number" class="text_pole" style="display:none; width:65px; font-size:11px; height:22px; padding:2px 4px; margin-left:4px;" placeholder="e.g. 800" min="50" max="3000" />
+                        <input id="rt-cr-persona-words-custom" type="number" class="text_pole" style="display:none; width:65px; font-size:11px; height:22px; padding:2px 4px; margin-left:4px;" placeholder="e.g. 800" min="50" max="5000" />
                     </div>
                     <button id="rt-cr-generate-btn" style="width:100%; padding:8px 12px; background:rgba(120,80,220,0.2); border:1px solid rgba(120,80,220,0.6); border-radius:5px; color:var(--rt-text,#eee); font-size:0.92em; font-weight:bold; cursor:pointer; letter-spacing:0.03em;">🎲 Generate Character</button>
                 </div>

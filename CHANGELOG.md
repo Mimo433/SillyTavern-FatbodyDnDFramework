@@ -2,6 +2,48 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [4.9.1] - 2026-07-11
+
+### Added
+- **Editable Portrait Prompt Templates**: The system prompts used to generate AI image-generation prompts for portraits are no longer hardcoded. Two new editable, resettable prompt templates are available under AI Character Portraits → Portrait Prompt Templates:
+  - **NPC / PC Portrait Prompt** — used when generating portraits for NPCs and Player Characters opened from the Lorebook Agent. This prompt already receives the NPC's full lorebook entry verbatim, so you can instruct the AI to prioritize a custom `[CORE]` field (e.g. an "Image Tags"/Danbooru-tags section added via the NPC Section Editor) by referencing it by name.
+  - **Character / Party / Combat Portrait Prompt** — used for the main character, party members, and combatants.
+  - **Saved Setups**: Save your current pair of prompts (plus the word target below) as a named, reloadable preset (library-style, like Saved Themes), so you can swap between different portrait-prompt styles (e.g. Danbooru-tag-focused vs. natural-language descriptions) without rewriting them each time. Saved setups and the prompt templates themselves now travel with Game Cartridge export/import.
+  - **Portrait Prompt Word Target**: The "Keep it under 200 words" instruction in both prompts is now a `{{wordtarget}}` token backed by a new, independent numeric setting (default 200), so the length limit is configurable instead of hardcoded. This is unrelated to the "Major/Minor NPC Section Word Target" fields used for lorebook `[CORE]` sections.
+- **NPC/PC Section Editor now included in Game Cartridges**: Your custom Core Identity section layouts (names, descriptions, colors, icons, and ordering for both NPC and PC cards) and their saved presets now travel with Game Cartridge export/import, so a shared cartridge can enforce a specific way of recording characters for that game/system instead of falling back to your locally configured layout.
+- **Portrait Generation on the Full NPC Card**: The large portrait shown in the Full NPC Card popup now supports the same click-to-generate/manage overlay as the small NPC card thumbnails in the Lorebook Agent list. Hovering reveals a 🎨/⚙️ icon; clicking opens the portrait settings menu (URL, upload, or AI Generate), and the popup's portrait updates in place immediately after applying, without needing to close and reopen the card.
+
+## [4.9.0] - 2026-07-10
+
+### Added
+- **Expanded Relationship Tiers**: Completely overhauled the Friendship and Affection systems, expanding them from 7 to a highly granular 13-tier system. The scale is now perfectly symmetrical, with the "Neutral" zone significantly tightened and multiple new intermediate tiers added (e.g., "Unreceptive/Withdrawn", "Amicable"). This eliminates all previous massive dead zones in early positive and negative relationship progression. All `{{user}}` macro strings have also been cleanly removed from behavioral hints to prevent token/interpolation bugs.
+- **NPC Section Editor & PC Section Editor**: Brand new, fully interactive editors for customizing how Character details are tracked! You are no longer stuck with the default sections. You can now easily **add new sections**, **edit existing ones**, **delete them**, and fully reorder them to fit your campaign's unique needs.
+  - **Preset Support**: Save your favorite section layouts as presets and load them anytime with a single click. No need to rebuild your sections from scratch for different types of campaigns!
+  - **Visual Customization**: Every section now supports choosing a custom color and assigning an emoji. These will be beautifully rendered inside the popup character cards and tracker UI, making your character details pop out perfectly.
+- **Character Creator Presets**: The Character Creator now features a persistent Presets system. You can save your currently entered fields (Species, Traits, Class, etc.) as a named preset, then instantly load them later via a dropdown menu to skip repetitive typing for common character archetypes.
+- **NPC Strengths & Flaws Sections**: Two new sections — `Strengths` and `Flaws` — are now part of every NPC `[CORE]` block. The AI is instructed to keep them concise (sharp phrases over prose) and use asymmetric counts to reflect character nature (e.g. a villain gets more flaws; a kindly mentor gets more strengths). Both sections are parsed and rendered in the full NPC card UI with distinct icons (⚡ and ⚠️) and colors (green / red).
+- **Dual-Mode "Add as is" NPC Import**: The "Add as is" button on character card import now supports two configurable modes, selectable in ⚙️ NPC Settings:
+  - **Literal** — Wraps the card's raw description verbatim in `[CORE][/CORE]` tags. No AI is involved. The card's existing writing is treated as canonical.
+  - **AI Review** — Sends the card to the AI for a *minimal* fix pass that resolves only hard logical impossibilities (e.g. a smartphone in a medieval setting, modern slang in a historical world). Original prose is preserved as faithfully as possible.
+- **📥 Import Card — PC Import Flow**: A new `📥 Import Card` button is now available alongside the existing archetype buttons on the State Tracker startup screen. Clicking it opens an inline character picker with search/filter and per-card action buttons:
+  - **📋 Add as is** — Performs a minimal AI review (era/world conflict fixes only) then generates a persona bio from the card.
+  - **🤖 Fit into Story** — Fully adapts the character to the current campaign setting before generating a state memo and persona bio.
+  - Both modes: (1) send a `sendDirectPrompt` to generate the tracker state memo blocks directly in the chat, then (2) generate a persona bio via the router AI and surface it in the existing Persona Confirm overlay for review and one-click lorebook registration.
+
+- **✨ Edit with AI — Full PC Card & Full NPC Card**: Both the Full PC Card and Full NPC Card popups now include an **"✨ Edit with AI"** button stacked below the existing "✏️ Edit Text" button. Clicking it opens an AI edit pane where you describe the changes you want (e.g. *"Make the background more tied to the ongoing war"*). The AI rewrites the entire character entry with those changes applied, then surfaces a preview textarea. From the preview you can **✅ Apply** the result (persisted to `pc.bio` for the PC, or saved to the lorebook entry for NPCs) or **🔄 Regenerate** for a fresh attempt — all without leaving the popup.
+
+### Changed
+- **NPC Import Default Fidelity**: The "Ignore Character Limits When Importing Character Cards" setting is now ON by default. This ensures the AI stays as faithful to the original character card as possible without attempting to truncate or heavily condense their background and personality to fit standard NPC lore budgets.
+- **`buildNpcInstruction` / `router.js` field lists**: All NPC-related field enumerations, tool schemas, update instructions, and legacy wrap patterns now include `Strengths` and `Flaws`.
+- **NPC section parser / renderer**: `parseNpcSections` and `renderSectionsHtml` now recognize and visually distinguish `Strengths` (green, ⚡) and `Flaws` (red, ⚠️) from the rest of the Core Identity sections.
+- **Literal add verbatim limit**: Raised the character card description slice from 1,500 to 3,000 characters for literal adds to avoid silently truncating long cards. Personality is only appended when it is not already embedded in the description.
+- **"Fit into Story" Background Adaptation**: The persona bio `Background` section generated when importing a character card via "🤖 Fit into Story" now explicitly adapts the character's backstory to the current campaign setting and world context, rather than grounding it solely in the source card. The overall rewrite instruction was also strengthened to actively integrate the character into the world's lore and ongoing story.
+
+### Fixed
+- **PC Import Portrait Sync**: Fixed a bug during "Fit into Story" PC imports where the AI deciding to rename the character (e.g. inventing a surname to a firstname only Card) would break the portrait binding in the State Tracker. The system now extracts the newly generated name from the state memo and maps it back to the original card's avatar.
+- **Custom Currency Rendering**: Fixed a bug where custom fantasy currencies containing additional words (e.g. "130 Gold Dragons", "50 Silver Staggs") would fail to render as inline coin badges. The inventory currency parser now correctly captures up to two trailing descriptor words.
+- **Abilities Block Rendering**: Fixed a bug where abilities containing multiple commas in their description or using a "Name: Description" format were incorrectly split into separate broken pills. The formatting parser is now less rigid, allowing complex abilities like "Rage (2/2 per day): Advantage on Strength checks/saves" to render perfectly as single, unbroken elements while maintaining backwards compatibility with old comma-separated lists.
+
 ## [4.8.9] - 2026-07-10
 
 ### Added

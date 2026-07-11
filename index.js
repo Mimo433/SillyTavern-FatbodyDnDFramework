@@ -1,5 +1,5 @@
 import { EXAMPLES, COLOR_EXAMPLES, DEFAULT_STOCK_PROMPTS, RT_PROMPTS, BLOCK_ICONS, BLOCK_ORDER, PAGE_SIZE, NO_PAGINATE, buildOnboardingXpHint, resolveTimePromptKey, resolveTimePromptDisplayTag } from './constants.js';
-import { MODULE_NAME, DEFAULT_MODULES, getSettings, getBarBackground, migrateCustomFields, saveChatState, saveProfile, deleteProfile, getEffectiveRouterCampaignPrefix, sanitizeCampaignPrefixString, buildNpcInstruction, loadStockPromptsFromProfile, getNpcRelationshipMax, getNpcRelationshipMaxDefault, clampRelationshipValue, relationshipBarPct, getFriendshipTier, getAffectionTier, getRelTierBadgeStyle, getRelTierDetailedStyle, getRelTierDetailedLabelStyle, applyRelTierBadgeElement, sanitizeRouterState, rebuildAllModuleInstructions, adjustAllStoredTemplatesForTimeFormat } from './state-manager.js';
+import { MODULE_NAME, DEFAULT_MODULES, getSettings, getBarBackground, migrateCustomFields, saveChatState, saveProfile, deleteProfile, getEffectiveRouterCampaignPrefix, sanitizeCampaignPrefixString, buildNpcInstruction, loadStockPromptsFromProfile, getNpcRelationshipMax, getNpcRelationshipMaxDefault, clampRelationshipValue, relationshipBarPct, getFriendshipTier, getAffectionTier, getRelTierBadgeStyle, getRelTierDetailedStyle, getRelTierDetailedLabelStyle, applyRelTierBadgeElement, sanitizeRouterState, rebuildAllModuleInstructions, adjustAllStoredTemplatesForTimeFormat, DEFAULT_NPC_SECTIONS } from './state-manager.js';
 import { sendStateRequest, fetchOllamaModels, fetchOpenAIModels, testOpenAIConnection, getConnectionProfiles, getCurrentCompletionPreset, setCompletionPreset, syncCombatProfile, resetCombatProfileOverride } from './llm-client.js';
 import { getDiceToolName, getDiceCommandName, getDiceCommandAliases, doDiceRoll, registerDiceFunctionTool, registerDiceSlashCommand, installInterceptor, getNarrativeBlocks, onGenerationStarted, onGenerationEnded, ensureRelTagRegex, resetRouterTick, getRouterTick, resetRouterAutoTick, makeRngQueue, buildRngBlock, RNG_QUEUE_LEN, parseAndApplyNarrativeRelTags } from './narrative-hooks.js';
 import { deduplicateMemo, mergeMemo, computeDelta, escapeHtml, escapeRegex, highlightParens, cleanToolCallMessage, cleanMessageContent, getLastUserAction, buildLorebookContext, buildModulesInstructionText, buildModuleFormatInstruction, parseQuestsFromMemo, syncQuestsFromMemo, syncQuestsToMemo, writeQuestsToMemo, getQuestMood, extractCurrentTimeStr, stripArchivedQuestsFromMemo, stripCompletedQuestsFromMemo, applyQuestSyncAndStripMemo, isArchivedQuestStatus, removeArchivedQuest, parseInWorldTime, formatInWorldTime, sanitizeLorebookRecordContent } from './memo-processor.js';
@@ -11,8 +11,8 @@ import { getRequestHeaders } from '../../../../script.js';
 import { fileToDataUrl, scaleImageTo512Square, applyPortraitData, generatePortraitPrompt, generateNpcPortraitPrompt, showPortraitPromptPopup, generatePortraitDirect, autoGeneratePartyPortraits, removeAllPortraits, checkAndTriggerAutoGenerations, autoGenerateEnemyPortraits, forceCheckAutoGenerations, resetAutoGenerationTracking } from './portraits.js';
 import { loadPanelGeometry, loadDeltaHeight, makeDraggable, makeResizableTR, makeResizableBR, makeResizableBL, setupResizeObserver, setupDeltaResize } from './ui-geometry.js';
 import { applyCustomTheme, openThemeWizard, refreshSavedThemesList, handleRecolor, undoThemeChange } from './theme-manager.js';
-import { showCharacterRollPanel } from './character-creator.js';
-import { handleCategorySettings, openCustomFieldEditor, openPromptEditor, refreshOrderList, exportModules, importModulesFromJson } from './ui-editors.js';
+import { showCharacterRollPanel, showPcImportPanel } from './character-creator.js';
+import { handleCategorySettings, openCustomFieldEditor, openPromptEditor, refreshOrderList, exportModules, importModulesFromJson, openNpcSectionEditor, openPcSectionEditor } from './ui-editors.js';
 import { openGameSystemWizard, openManageGameSystems, openSystemPromptControlRoom, syncAllNarratorTogglesForUnlockState, extractTopLevelSections, normalizeSectionOrder, getSectionRowDescriptor, transformBaseSectionContent, isBlankSectionContent } from './game-systems.js';
 import { openManageGameCartridges } from './game-cartridges.js';
 
@@ -53,7 +53,7 @@ let refreshNpcManifest = async () => { };
 const refreshAll = () => {
     refreshRenderedView();
     if (typeof refreshNpcManifest === 'function') {
-        void refreshNpcManifest().catch(() => {});
+        void refreshNpcManifest().catch(() => { });
     }
 };
 
@@ -94,7 +94,7 @@ function scheduleDeferred(fn) {
 /** Refresh CAMPAIGN RECORDS only when the Lorebook Agent panel is open (avoids heavy load on F5). */
 function scheduleAgentManifestRefresh(force = false) {
     if (!force && !isAgentPanelVisible()) return;
-    void refreshAgentManifest().catch(() => {});
+    void refreshAgentManifest().catch(() => { });
 }
 
 /** Reload CAMPAIGN RECORDS — safe from settings UI outside createPanel(). */
@@ -493,11 +493,9 @@ function persistChatTimeFormatIfLinked() {
     if (s.chatLinkEnabled && _currentChatId) saveChatState(_currentChatId);
 }
 
-function rebuildNpcInstructionIfNeeded() {
+export function rebuildNpcInstructionIfNeeded() {
     const s = getSettings();
-    if (s.routerModules?.npc) {
-        s.routerModules.npc.instruction = buildNpcInstruction(s.npcMajorWords, s.npcMinorWords, false);
-    }
+    rebuildAllModuleInstructions(s);
 }
 
 /** Apply default or saved per-chat relationship max into live settings. */
@@ -776,9 +774,9 @@ async function activateCampaignBooks(opts = {}) {
             const allNames = resolveAllWorldNames(ctx, reg);
             if (allNames.includes('World')) {
                 if (s.worldProgressionEnabled) {
-                    await ctx.executeSlashCommandsWithOptions('/world state=on silent=true "World"').catch(() => {});
+                    await ctx.executeSlashCommandsWithOptions('/world state=on silent=true "World"').catch(() => { });
                 } else {
-                    await ctx.executeSlashCommandsWithOptions('/world state=off silent=true "World"').catch(() => {});
+                    await ctx.executeSlashCommandsWithOptions('/world state=off silent=true "World"').catch(() => { });
                 }
             }
         }
@@ -2363,6 +2361,72 @@ async function showComponentsExplanation() {
     await Popup.show.confirm('🧩 Components Explained', popupBody, { okButton: 'Got it', cancelButton: false });
 }
 
+function refreshPortraitPromptPresetsList() {
+    const settings = getSettings();
+    const container = document.getElementById('rpg_portrait_prompt_presets_container');
+    const list = document.getElementById('rpg_portrait_prompt_presets_list');
+    if (!container || !list) return;
+
+    const entries = Object.entries(settings.savedPortraitPromptPresets || {});
+    if (entries.length === 0) {
+        container.style.display = 'none';
+        return;
+    }
+
+    container.style.display = 'block';
+    list.innerHTML = '';
+
+    entries.forEach(([name, preset]) => {
+        const row = document.createElement('div');
+        row.className = 'flex-container alignitemscenter gap-1';
+        row.style.background = 'rgba(255,255,255,0.05)';
+        row.style.padding = '4px 8px';
+        row.style.borderRadius = '4px';
+
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = name;
+        nameSpan.style.flex = '1';
+        nameSpan.style.fontSize = '0.85em';
+        nameSpan.style.cursor = 'pointer';
+        nameSpan.className = 'interactable';
+        nameSpan.title = 'Click to load this portrait prompt setup';
+        nameSpan.addEventListener('click', () => {
+            settings.portraitNpcSystemPrompt = preset.npcSystemPrompt || '';
+            settings.portraitCharacterSystemPrompt = preset.characterSystemPrompt || '';
+            if (preset.wordTarget !== undefined) {
+                settings.portraitPromptWordTarget = preset.wordTarget;
+            }
+            saveSettings();
+
+            $('#rpg_portrait_npc_system_prompt').val(settings.portraitNpcSystemPrompt);
+            $('#rpg_portrait_character_system_prompt').val(settings.portraitCharacterSystemPrompt);
+            if (preset.wordTarget !== undefined) {
+                $('#rpg_portrait_prompt_word_target').val(settings.portraitPromptWordTarget);
+            }
+
+            toastr['success'](`Loaded portrait prompt setup: ${name}`, 'Portrait Prompt Library');
+        });
+
+        const delBtn = document.createElement('i');
+        delBtn.className = 'fa-solid fa-trash-can interactable';
+        delBtn.style.fontSize = '0.8em';
+        delBtn.style.opacity = '0.5';
+        delBtn.title = 'Delete setup';
+        delBtn.addEventListener('click', () => {
+            if (confirm(`Are you sure you want to delete the portrait prompt setup "${name}"?`)) {
+                delete settings.savedPortraitPromptPresets[name];
+                saveSettings();
+                refreshPortraitPromptPresetsList();
+                toastr['info'](`Deleted setup: ${name}`, 'Portrait Prompt Library');
+            }
+        });
+
+        row.appendChild(nameSpan);
+        row.appendChild(delBtn);
+        list.appendChild(row);
+    });
+}
+
 async function showPortraitSettingsMenu(entityName, onRefresh, npcContent = null) {
     const refresh = onRefresh || refreshRenderedView;
     const s = getSettings();
@@ -2371,8 +2435,8 @@ async function showPortraitSettingsMenu(entityName, onRefresh, npcContent = null
     const previewHtml = currentSrc
         ? `<img src="${currentSrc}" style="max-width:128px;max-height:128px;border-radius:6px;display:block;margin:0 auto 10px;"/>`
         : `<div style="text-align:center;opacity:0.5;margin-bottom:10px;">No portrait set</div>`;
-    const inputId     = `rt-portrait-url-${Date.now()}`;
-    const fileId      = `rt-portrait-file-${Date.now()}`;
+    const inputId = `rt-portrait-url-${Date.now()}`;
+    const fileId = `rt-portrait-file-${Date.now()}`;
     const browseBtnId = `rt-portrait-browse-${Date.now()}`;
     const popupContent = `<div style="padding:10px;min-width:270px;">
             <b style="display:block;margin-bottom:8px;">Set Portrait — ${entityName}</b>
@@ -2387,7 +2451,8 @@ async function showPortraitSettingsMenu(entityName, onRefresh, npcContent = null
         </div>`;
     const ctx = SillyTavern.getContext();
     if (!ctx.callGenericPopup) { toastr['warning']('Popup API not available.', 'RPG Tracker'); return; }
-    const popupOpts = { okButton: 'Apply', cancelButton: 'Cancel', wide: false,
+    const popupOpts = {
+        okButton: 'Apply', cancelButton: 'Cancel', wide: false,
         customButtons: [
             { text: '🤖 AI Generate', result: 4, classes: ['menu_button'] },
         ],
@@ -2400,10 +2465,10 @@ async function showPortraitSettingsMenu(entityName, onRefresh, npcContent = null
     const localApply = (src) => {
         applyPortraitData(entityName, src);
         refresh();
-        void refreshNpcManifest().catch(() => {});
+        void refreshNpcManifest().catch(() => { });
     };
 
-    let capturedUrl    = currentSrc.startsWith('http') ? currentSrc : '';
+    let capturedUrl = currentSrc.startsWith('http') ? currentSrc : '';
     let capturedRawUrl = '';
 
     const popupPasteHandler = async (ev) => {
@@ -2413,7 +2478,7 @@ async function showPortraitSettingsMenu(entityName, onRefresh, npcContent = null
             ev.stopPropagation();
             try {
                 capturedRawUrl = await fileToDataUrl(file);
-                capturedUrl    = '';
+                capturedUrl = '';
                 const urlInput = /** @type {HTMLInputElement|null} */ (document.getElementById(inputId));
                 if (urlInput) urlInput.value = '(image pasted — click Apply to crop ✔)';
             } catch (err) {
@@ -2426,11 +2491,11 @@ async function showPortraitSettingsMenu(entityName, onRefresh, npcContent = null
     setTimeout(() => {
         const fileInput = /** @type {HTMLInputElement|null} */ (document.getElementById(fileId));
         const browseBtn = document.getElementById(browseBtnId);
-        const urlInput  = /** @type {HTMLInputElement|null} */ (document.getElementById(inputId));
+        const urlInput = /** @type {HTMLInputElement|null} */ (document.getElementById(inputId));
 
         if (urlInput) {
             urlInput.addEventListener('input', () => {
-                capturedUrl    = urlInput.value.trim();
+                capturedUrl = urlInput.value.trim();
                 capturedRawUrl = '';
             });
         }
@@ -2446,7 +2511,7 @@ async function showPortraitSettingsMenu(entityName, onRefresh, npcContent = null
                 if (!file) return;
                 try {
                     capturedRawUrl = await fileToDataUrl(file);
-                    capturedUrl    = '';
+                    capturedUrl = '';
                     if (urlInput) urlInput.value = '(file selected — click Apply to crop ✔)';
                 } catch (err) {
                     console.error(err);
@@ -2611,9 +2676,13 @@ export function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRe
             const level = parseInt(String(levelSelectEl?.value ?? getSettings().onboardingLevel ?? 1), 10) || 1;
             getSettings().onboardingLevel = level;
 
-            // char_roll just opens a UI panel — no need to persist or trigger I/O
+            // char_roll and pc_import just open UI panels — no need to persist or trigger I/O
             if (archetype === 'char_roll') {
                 showCharacterRollPanel(el);
+                return;
+            }
+            if (archetype === 'pc_import') {
+                showPcImportPanel(el);
                 return;
             }
 
@@ -2920,7 +2989,7 @@ Gear:
                     globalThis._rpgRenderAgentModules();
                 }
                 if (typeof refreshAgentManifest === 'function') {
-                    void refreshAgentManifest().catch(() => {});
+                    void refreshAgentManifest().catch(() => { });
                 }
             }, 1);
         });
@@ -3155,7 +3224,7 @@ Gear:
         const localApply = (src) => {
             applyPortraitData(entityName, src);
             refresh();
-            void refreshNpcManifest().catch(() => {});
+            void refreshNpcManifest().catch(() => { });
         };
 
         container.addEventListener('dragover', (e) => {
@@ -3411,15 +3480,15 @@ function createDetachedPanel(tag) {
         });
         resizerBR.addEventListener('pointermove', (e) => {
             if (!resizerBR.hasPointerCapture(e.pointerId)) return;
-            panel.style.width  = Math.max(220, startW + (e.clientX - startX)) + 'px';
+            panel.style.width = Math.max(220, startW + (e.clientX - startX)) + 'px';
             panel.style.height = Math.max(120, startH + (e.clientY - startY)) + 'px';
         });
         resizerBR.addEventListener('pointerup', (e) => {
-            try { resizerBR.releasePointerCapture(e.pointerId); } catch(_){}
+            try { resizerBR.releasePointerCapture(e.pointerId); } catch (_) { }
             saveDetachedGeo();
         });
         resizerBR.addEventListener('pointercancel', (e) => {
-            try { resizerBR.releasePointerCapture(e.pointerId); } catch(_){}
+            try { resizerBR.releasePointerCapture(e.pointerId); } catch (_) { }
         });
     }
 
@@ -3445,16 +3514,16 @@ function createDetachedPanel(tag) {
             const newW = Math.max(220, startW - dx);
             if (newW > 220) {
                 panel.style.width = newW + 'px';
-                panel.style.left  = (startLeft + dx) + 'px';
+                panel.style.left = (startLeft + dx) + 'px';
             }
             panel.style.height = Math.max(120, startH + (e.clientY - startY)) + 'px';
         });
         resizerBL.addEventListener('pointerup', (e) => {
-            try { resizerBL.releasePointerCapture(e.pointerId); } catch(_){}
+            try { resizerBL.releasePointerCapture(e.pointerId); } catch (_) { }
             saveDetachedGeo();
         });
         resizerBL.addEventListener('pointercancel', (e) => {
-            try { resizerBL.releasePointerCapture(e.pointerId); } catch(_){}
+            try { resizerBL.releasePointerCapture(e.pointerId); } catch (_) { }
         });
     }
 
@@ -3467,7 +3536,7 @@ function createDetachedPanel(tag) {
 
             panel.style.left = left + 'px'; panel.style.right = 'auto';
             panel.style.top = top + 'px'; panel.style.bottom = 'auto';
-            if (saved.width)  panel.style.width  = saved.width  + 'px';
+            if (saved.width) panel.style.width = saved.width + 'px';
             if (saved.height) panel.style.height = saved.height + 'px';
         } else {
             const mainPanel = document.getElementById('rpg-tracker-panel');
@@ -3609,9 +3678,9 @@ function createPanel() {
                         </label>
 
                         ${(() => {
-                            const mode = settings.routerLookbackSinceLastRun !== false ? 'since_last_run'
-                                : settings.routerLookbackSinceLastUser === true ? 'since_last_user' : 'fixed';
-                            return `
+            const mode = settings.routerLookbackSinceLastRun !== false ? 'since_last_run'
+                : settings.routerLookbackSinceLastUser === true ? 'since_last_user' : 'fixed';
+            return `
                         <div style="margin-bottom: 8px;">
                             <div style="font-size: 0.769em; opacity: 0.7; margin-bottom: 4px;">Lookback mode:</div>
                             <label style="display: flex; align-items: center; gap: 5px; margin-bottom: 4px; cursor: pointer; font-size: 0.769em; opacity: 0.85;" title="Read every message since the last successful agent run — ideal when Run Every > 1.">
@@ -3631,7 +3700,7 @@ function createPanel() {
                                 <span style="font-size: 0.769em; opacity: 0.5;">msgs</span>
                             </div>
                         </div>`;
-                        })()}
+        })()}
 
                         <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
                             <div style="display: flex; align-items: center; gap: 6px; flex: 1;" title="Run every N messages: 1 = fires every turn (always current, but may create excessive entry granularity). 3+ = fires less often but sees more narrative context, producing more coherent updates. Keyword hits still fire immediately regardless.">
@@ -4145,7 +4214,7 @@ function createPanel() {
             }
             const wpLastEl = agentPanel.querySelector('#rt-agent-world-last-fired');
             const wpNextEl = agentPanel.querySelector('#rt-agent-world-next-fire');
-            const wpBadge  = agentPanel.querySelector('#rt-agent-world-enabled-badge');
+            const wpBadge = agentPanel.querySelector('#rt-agent-world-enabled-badge');
             if (wpLastEl) wpLastEl.textContent = wpLabel || 'Never';
 
             let wpNextMins = -1;
@@ -4481,7 +4550,7 @@ function createPanel() {
             }
             const lastEl = agentPanel.querySelector('#rt-agent-world-last-fired');
             const nextEl = agentPanel.querySelector('#rt-agent-world-next-fire');
-            const badge  = agentPanel.querySelector('#rt-agent-world-enabled-badge');
+            const badge = agentPanel.querySelector('#rt-agent-world-enabled-badge');
             if (lastEl) lastEl.textContent = label || 'Never';
 
             let nextMins = -1;
@@ -4896,11 +4965,11 @@ function createPanel() {
                     staleBadge.style.display = 'none';
                     saveBtn.textContent = 'Save';
                     saveBtn.disabled = false;
-                    
+
                     if (!entryHdr.parentElement) {
                         _openEntries.delete(item.id);
                     }
-                    
+
                     document.dispatchEvent(new CustomEvent('rt_lore_agent_updated'));
                     await refreshManifest();
                     // @ts-ignore
@@ -4921,10 +4990,10 @@ function createPanel() {
                 keysInp.value = item.keys.join(', ');
                 contentArea.value = item.content || '';
                 syncReadFromItem();
-                
+
                 readPane.style.display = 'flex';
                 editPane.style.display = 'none';
-                
+
                 if (!entryHdr.parentElement) {
                     body.style.display = 'none';
                     _openEntries.delete(item.id);
@@ -4958,91 +5027,106 @@ function createPanel() {
 
             const gen = ++_manifestRenderGen;
             list.innerHTML = '';
-                // Helper: escape HTML to prevent XSS and rendering issues
-                const escapeHtml = (unsafe) => (unsafe || '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+            // Helper: escape HTML to prevent XSS and rendering issues
+            const escapeHtml = (unsafe) => (unsafe || '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 
-                // Helper: parse NPC/PC content into structured sections for the detail popup
-                const parseNpcSections = (content) => {
-                    const sections = { core: {}, dynamic: [] };
-                    if (!content) return sections;
+            // Helper: parse NPC/PC content into structured sections for the detail popup
+            const parseNpcSections = (content) => {
+                const sections = { core: {}, dynamic: [] };
+                if (!content) return sections;
 
-                    // 1. Extract [CORE] ... [/CORE] block
-                    let coreContent = '';
-                    let dynamicContent = content;
+                // 1. Extract [CORE] ... [/CORE] block
+                let coreContent = '';
+                let dynamicContent = content;
 
-                    const coreMatch = content.match(/\[CORE\]([\s\S]*?)\[\/CORE\]/i);
-                    if (coreMatch) {
-                        coreContent = coreMatch[1];
-                        dynamicContent = content.replace(/\[CORE\][\s\S]*?\[\/CORE\]/gi, '');
-                    } else {
-                        coreContent = content;
-                        dynamicContent = '';
-                    }
+                const coreMatch = content.match(/\[CORE\]([\s\S]*?)\[\/CORE\]/i);
+                if (coreMatch) {
+                    coreContent = coreMatch[1];
+                    dynamicContent = content.replace(/\[CORE\][\s\S]*?\[\/CORE\]/gi, '');
+                } else {
+                    coreContent = content;
+                    dynamicContent = '';
+                }
 
-                    // 2. Parse core sections
-                    const sectionMarkers = /(?=(?:Appearance\/Species|Appearance|Personality|Brief Background|Background|Habits(?:\/|\s*&\s*|\s+and\s+)Behaviors|Habits|(?<!Habits\/)(?<!Habits & )(?<!Habits and )Behaviors|Relationship with\s*\{\{user\}\}|(?<!Friendship\/)(?<!Affection\/)Relationship)\s*:)/gi;
-                    const normalizedCore = coreContent.replace(sectionMarkers, '\n');
-                    const coreLines = normalizedCore.split('\n');
-                    let currentSection = 'General';
-                    const sectionPattern = /^(Appearance\/Species|Appearance|Personality|Brief Background|Background|Habits(?:\/|\s*&\s*|\s+and\s+)Behaviors|Habits|Behaviors|Relationship with\s*\{\{user\}\}|Relationship)\s*:/i;
+                // 2. Parse core sections
+                const customSecs = getSettings().npcCoreSections || DEFAULT_NPC_SECTIONS;
+                const escRgx = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const customNames = customSecs.map(s => escRgx(s.name.trim())).join('|');
+                const legacyNames = 'Appearance\\/Species|Appearance|Personality|Brief Background|Background|Habits(?:\\/|\\s*&\\s*|\\s+and\\s+)Behaviors|Habits|(?<!Habits\\/)(?<!Habits & )(?<!Habits and )Behaviors|Strengths|Flaws|Relationship with\\s*\\{\\{user\\}\\}|(?<!Friendship\\/)(?<!Affection\\/)Relationship';
+                const allNamesPattern = customNames ? `${customNames}|${legacyNames}` : legacyNames;
+                const sectionMarkers = new RegExp(`(?=(?:${allNamesPattern})\\s*:)`, 'gi');
 
-                    for (const line of coreLines) {
-                        const trimmed = line.trim();
-                        if (!trimmed || /^\[ID:/i.test(trimmed) || /^Friendship\/Rapport:/i.test(trimmed) || /^Affection\/Interest:/i.test(trimmed)) continue;
-                        const match = trimmed.match(sectionPattern);
-                        if (match) {
-                            currentSection = match[1].replace(/\s*\{\{user\}\}/, '').replace(/\s+with$/i, '').trim();
-                            
-                            // Normalize section names for consistent rendering
-                            if (/^Habits/i.test(currentSection) && /Behaviors/i.test(currentSection)) {
-                                currentSection = 'Habits/Behaviors';
-                            } else if (currentSection.toLowerCase() === 'background') {
-                                currentSection = 'Brief Background';
-                            }
-                            
-                            const afterColon = trimmed.substring(match[0].length).trim();
-                            if (afterColon) {
-                                if (!sections.core[currentSection]) sections.core[currentSection] = [];
-                                sections.core[currentSection].push(afterColon);
-                            }
-                        } else {
-                            if (!sections.core[currentSection]) sections.core[currentSection] = [];
-                            sections.core[currentSection].push(trimmed);
+                const normalizedCore = coreContent.replace(sectionMarkers, '\n');
+                const coreLines = normalizedCore.split('\n');
+                let currentSection = 'General';
+
+                const allNamesPatternStart = customNames ? `(${customNames}|Appearance\\/Species|Appearance|Personality|Brief Background|Background|Habits(?:\\/|\\s*&\\s*|\\s+and\\s+)Behaviors|Habits|Behaviors|Strengths|Flaws|Relationship with\\s*\\{\\{user\\}\\}|Relationship)` : `(Appearance\\/Species|Appearance|Personality|Brief Background|Background|Habits(?:\\/|\\s*&\\s*|\\s+and\\s+)Behaviors|Habits|Behaviors|Strengths|Flaws|Relationship with\\s*\\{\\{user\\}\\}|Relationship)`;
+                const sectionPattern = new RegExp(`^${allNamesPatternStart}\\s*:`, 'i');
+
+                for (const line of coreLines) {
+                    const trimmed = line.trim();
+                    if (!trimmed || /^\[ID:/i.test(trimmed) || /^Friendship\/Rapport:/i.test(trimmed) || /^Affection\/Interest:/i.test(trimmed)) continue;
+                    const match = trimmed.match(sectionPattern);
+                    if (match) {
+                        currentSection = match[1].replace(/\s*\{\{user\}\}/, '').replace(/\s+with$/i, '').trim();
+
+                        // Normalize section names for consistent rendering
+                        if (/^Habits/i.test(currentSection) && /Behaviors/i.test(currentSection)) {
+                            currentSection = 'Habits/Behaviors';
+                        } else if (currentSection.toLowerCase() === 'background') {
+                            currentSection = 'Brief Background';
                         }
+
+                        const afterColon = trimmed.substring(match[0].length).trim();
+                        if (afterColon) {
+                            if (!sections.core[currentSection]) sections.core[currentSection] = [];
+                            sections.core[currentSection].push(afterColon);
+                        }
+                    } else {
+                        if (!sections.core[currentSection]) sections.core[currentSection] = [];
+                        sections.core[currentSection].push(trimmed);
                     }
+                }
 
-                    // 3. Parse dynamic updates
-                    const dynamicLines = dynamicContent.split('\n');
-                    for (const line of dynamicLines) {
-                        const trimmed = line.trim();
-                        if (!trimmed || /^\[ID:/i.test(trimmed) || /^Friendship\/Rapport:/i.test(trimmed) || /^Affection\/Interest:/i.test(trimmed)) continue;
-                        const timestampOnlyRegex = /^\[[^\]]+\]\s*$/;
-                        if (timestampOnlyRegex.test(trimmed)) continue;
-                        sections.dynamic.push(trimmed);
-                    }
-                    return sections;
-                };
+                // 3. Parse dynamic updates
+                const dynamicLines = dynamicContent.split('\n');
+                for (const line of dynamicLines) {
+                    const trimmed = line.trim();
+                    if (!trimmed || /^\[ID:/i.test(trimmed) || /^Friendship\/Rapport:/i.test(trimmed) || /^Affection\/Interest:/i.test(trimmed)) continue;
+                    const timestampOnlyRegex = /^\[[^\]]+\]\s*$/;
+                    if (timestampOnlyRegex.test(trimmed)) continue;
+                    sections.dynamic.push(trimmed);
+                }
+                return sections;
+            };
 
-                const sectionIcons = {
-                    'General': '📋', 'Appearance/Species': '👁️', 'Appearance': '👁️', 'Personality': '🧠',
-                    'Brief Background': '📜', 'Habits/Behaviors': '🔄', 'Habits': '🔄',
-                    'Behaviors': '🔄', 'Relationship': '❤️',
-                };
+            const sectionIcons = {
+                'General': '📋', 'Appearance/Species': '👁️', 'Appearance': '👁️', 'Personality': '🧠',
+                'Brief Background': '📜', 'Habits/Behaviors': '🔄', 'Habits': '🔄',
+                'Behaviors': '🔄', 'Relationship': '❤️',
+                'Strengths': '⚡', 'Flaws': '⚠️',
+            };
 
-                const renderSectionsHtml = (rawContent) => {
-                    const parsed = parseNpcSections(rawContent);
-                    let html = '';
-                    const coreEntries = Object.entries(parsed.core);
-                    if (coreEntries.length > 0) {
-                        html += `<div style="font-size:11px;font-weight:bold;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:14px;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:4px;">🛡️ Core Identity</div>`;
-                        for (const [name, lines] of coreEntries) {
-                            const icon = sectionIcons[name] || '📋';
-                            const sectionColor = (name === 'Appearance/Species' || name === 'Appearance') ? '#d4a940' :
-                                                 name === 'Personality' ? '#8b5cf6' :
-                                                 name === 'Brief Background' ? '#3b82f6' :
-                                                 name.includes('Habit') || name.includes('Behavior') ? '#10b981' :
-                                                 'var(--SmartThemeEmColor, var(--SmartThemeBodyColorTextMuted, rgba(128,128,128,0.5)))';
-                            html += `<div style="margin-bottom:18px;">
+            const renderSectionsHtml = (rawContent) => {
+                const parsed = parseNpcSections(rawContent);
+                const customSecs = getSettings().npcCoreSections || DEFAULT_NPC_SECTIONS;
+                let html = '';
+                const coreEntries = Object.entries(parsed.core);
+                if (coreEntries.length > 0) {
+                    html += `<div style="font-size:11px;font-weight:bold;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:14px;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:4px;">🛡️ Core Identity</div>`;
+                    for (const [name, lines] of coreEntries) {
+                        const config = customSecs.find(s => s.name.trim().toLowerCase() === name.trim().toLowerCase());
+                        const icon = config ? config.icon : (sectionIcons[name] || '📋');
+                        const sectionColor = config ? config.color : (
+                            (name === 'Appearance/Species' || name === 'Appearance') ? '#d4a940' :
+                                name === 'Personality' ? '#8b5cf6' :
+                                    name === 'Brief Background' ? '#3b82f6' :
+                                        name.includes('Habit') || name.includes('Behavior') ? '#10b981' :
+                                            name === 'Strengths' ? '#22c55e' :
+                                                name === 'Flaws' ? '#ef4444' :
+                                                    'var(--SmartThemeEmColor, var(--SmartThemeBodyColorTextMuted, rgba(128,128,128,0.5)))'
+                        );
+                        html += `<div style="margin-bottom:18px;">
                                 <div style="font-size:14px;font-weight:bold;color:${sectionColor};text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;display:flex;align-items:center;gap:7px;">
                                     <span style="font-size:16px;">${icon}</span> ${escapeHtml(name)}
                                 </div>
@@ -5050,22 +5134,22 @@ function createPanel() {
                                     ${lines.map(l => escapeHtml(l)).join('<br>')}
                                 </div>
                             </div>`;
+                    }
+                }
+                if (parsed.dynamic.length > 0) {
+                    html += `<div style="font-size:11px;font-weight:bold;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:1.5px;margin-top:24px;margin-bottom:14px;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:4px;">📖 Campaign History &amp; Dynamic Lore</div>`;
+                    html += `<div style="font-size:14px;line-height:1.6;color:var(--SmartThemeBodyColor, inherit);padding:4px 0 4px 10px;">`;
+                    html += parsed.dynamic.map(line => {
+                        const match = line.match(/^(\[.+?\])\s*(.*)/);
+                        if (match) {
+                            return `<div style="margin-bottom:8px;"><span style="color:#d4a940;font-weight:bold;font-family:monospace;font-size:12px;background:rgba(212,169,64,0.1);padding:2px 6px;border-radius:4px;margin-right:6px;">${escapeHtml(match[1])}</span><span>${escapeHtml(match[2])}</span></div>`;
                         }
-                    }
-                    if (parsed.dynamic.length > 0) {
-                        html += `<div style="font-size:11px;font-weight:bold;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:1.5px;margin-top:24px;margin-bottom:14px;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:4px;">📖 Campaign History &amp; Dynamic Lore</div>`;
-                        html += `<div style="font-size:14px;line-height:1.6;color:var(--SmartThemeBodyColor, inherit);padding:4px 0 4px 10px;">`;
-                        html += parsed.dynamic.map(line => {
-                            const match = line.match(/^(\[.+?\])\s*(.*)/);
-                            if (match) {
-                                return `<div style="margin-bottom:8px;"><span style="color:#d4a940;font-weight:bold;font-family:monospace;font-size:12px;background:rgba(212,169,64,0.1);padding:2px 6px;border-radius:4px;margin-right:6px;">${escapeHtml(match[1])}</span><span>${escapeHtml(match[2])}</span></div>`;
-                            }
-                            return `<div style="margin-bottom:8px;">${escapeHtml(line)}</div>`;
-                        }).join('');
-                        html += `</div>`;
-                    }
-                    return html;
-                };
+                        return `<div style="margin-bottom:8px;">${escapeHtml(line)}</div>`;
+                    }).join('');
+                    html += `</div>`;
+                }
+                return html;
+            };
 
 
 
@@ -5077,19 +5161,19 @@ function createPanel() {
                 // ── Player Character Rendering ──
                 if (_currentChatId && s.chatStates?.[_currentChatId]?.playerCharacter) {
                     const pc = s.chatStates[_currentChatId].playerCharacter;
-                    
+
                     let desc = '';
                     if (pc.bio) {
                         const cleanBio = pc.bio.replace(/\[\/?CORE\]/gi, '');
                         desc = cleanBio.split('\n').map(l => l.trim()).filter(l => l && !/^\[ID:/i.test(l)).slice(0, 2).join(' ').substring(0, 260);
                     }
                     const portraitSrc = s.customPortraits?.[pc.name] || '';
-                    
+
                     const pcDiv = document.createElement('div');
                     pcDiv.className = 'rt-npc-card';
                     pcDiv.style.borderLeft = '3px solid #c4b5fd';
                     pcDiv.style.marginBottom = '12px';
-                    
+
                     const portraitHtml = portraitSrc
                         ? `<img src="${escapeHtml(portraitSrc)}" alt="${escapeHtml(pc.name)}">`
                         : `<div class="rt-npc-portrait-placeholder" style="color:#c4b5fd; border-color:rgba(120,80,220,0.5);">👤</div>`;
@@ -5110,7 +5194,7 @@ function createPanel() {
                             </div>
                         </div>
                     `;
-                    
+
                     const portraitWrap = pcDiv.querySelector('.rt-npc-portrait-wrap');
                     if (portraitWrap) {
                         portraitWrap.addEventListener('click', async (e) => {
@@ -5133,19 +5217,22 @@ function createPanel() {
                         const popupPortraitEl = popupPortraitSrc
                             ? `<img src="${escapeHtml(popupPortraitSrc)}" style="width:100%;height:auto;aspect-ratio:1;object-fit:cover;border-radius:12px;border:2px solid rgba(120,80,220,0.5);box-shadow:0 4px 20px rgba(0,0,0,0.4);" alt="${escapeHtml(pc.name)}">`
                             : `<div style="width:100%;aspect-ratio:1;border-radius:12px;background:var(--SmartThemeBorderColor, rgba(128,128,128,0.1));border:2px solid rgba(120,80,220,0.3);display:flex;align-items:center;justify-content:center;font-size:64px;opacity:0.25;color:var(--SmartThemeBodyColor, inherit);">👤</div>`;
-                        
+
                         const popupDom = document.createElement('div');
                         popupDom.style.cssText = 'width:100%;box-sizing:border-box;padding:24px;text-align:left;font-family:var(--rt-font, system-ui, sans-serif);color:var(--SmartThemeBodyColor, inherit);max-height:85vh;overflow-y:auto;';
-                        
+
                         const sectionsInitialHtml = renderSectionsHtml(pc.bio) || '<div style="font-size:14px;color:var(--SmartThemeBodyColor, inherit);opacity:0.5;font-style:italic;padding:16px 0;">No structured sections found.</div>';
-                        
+
                         popupDom.innerHTML = `
                             <div style="display:flex;gap:24px;margin-bottom:20px;align-items:flex-start;flex-wrap:wrap;">
                                 ${hidePortrait ? '' : `<div style="flex-shrink:0;width:280px;">${popupPortraitEl}</div>`}
                                 <div style="flex:1;min-width:220px;display:flex;flex-direction:column;gap:8px;">
                                     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
                                         <div style="font-size:24px;font-weight:bold;color:#c4b5fd;line-height:1.2;">${escapeHtml(pc.name)}</div>
-                                        <button class="rt-npc-popup-edit-btn menu_button" style="flex-shrink:0;font-size:12px;padding:4px 12px;white-space:nowrap;">✏️ Edit Text</button>
+                                        <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;">
+                                            <button class="rt-npc-popup-edit-btn menu_button" style="flex-shrink:0;font-size:12px;padding:4px 12px;white-space:nowrap;">✏️ Edit Text</button>
+                                            <button class="rt-npc-popup-ai-edit-btn menu_button" style="flex-shrink:0;font-size:12px;padding:4px 12px;white-space:nowrap;background:rgba(120,80,220,0.15);border-color:rgba(120,80,220,0.5);color:#c4b5fd;">✨ Edit with AI</button>
+                                        </div>
                                     </div>
                                     <span style="font-size:11px;padding:3px 10px;border-radius:10px;font-weight:bold;align-self:flex-start;background:rgba(120,80,220,0.15);color:#c4b5fd;border:1px solid rgba(120,80,220,0.5);">Player Character</span>
                                 </div>
@@ -5162,49 +5249,132 @@ function createPanel() {
                                         <button class="rt-npc-popup-save-btn menu_button" style="font-size:12px;padding:5px 18px;background:rgba(120,80,220,0.2);border-color:rgba(120,80,220,0.5);color:#c4b5fd;font-weight:bold;">💾 Save</button>
                                     </div>
                                 </div>
+                                <div class="rt-npc-popup-ai-edit" style="display:none;flex-direction:column;gap:10px;">
+                                    <div style="font-size:11px;font-weight:bold;color:rgba(120,80,220,0.9);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:4px;">✨ AI Edit Request</div>
+                                    <textarea class="rt-npc-popup-ai-instructions" spellcheck="true" placeholder="Describe what you want changed or iterated on… e.g. 'Make the background more tied to the ongoing war' or 'Give her a more cynical personality'" style="width:100%;min-height:90px;box-sizing:border-box;background:var(--SmartThemeBlurTintColor, rgba(0,0,0,0.3));color:var(--SmartThemeBodyColor, inherit);border:1px solid rgba(120,80,220,0.5);border-radius:8px;padding:12px;font-family:inherit;font-size:13px;line-height:1.6;resize:vertical;"></textarea>
+                                    <div style="display:flex;gap:8px;justify-content:flex-end;">
+                                        <button class="rt-npc-popup-ai-cancel-btn menu_button" style="font-size:12px;padding:5px 14px;">Cancel</button>
+                                        <button class="rt-npc-popup-ai-generate-btn menu_button" style="font-size:12px;padding:5px 18px;background:rgba(120,80,220,0.2);border-color:rgba(120,80,220,0.5);color:#c4b5fd;font-weight:bold;">✨ Generate</button>
+                                    </div>
+                                    <div class="rt-npc-popup-ai-preview" style="display:none;flex-direction:column;gap:8px;">
+                                        <div style="font-size:11px;font-weight:bold;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:1.5px;">Preview — Review before applying</div>
+                                        <textarea class="rt-npc-popup-ai-preview-text" spellcheck="false" style="width:100%;min-height:320px;box-sizing:border-box;background:rgba(0,0,0,0.35);color:var(--SmartThemeBodyColor, inherit);border:1px solid rgba(120,80,220,0.3);border-radius:8px;padding:12px;font-family:monospace;font-size:13px;line-height:1.6;resize:vertical;"></textarea>
+                                        <div style="display:flex;gap:8px;justify-content:flex-end;">
+                                            <button class="rt-npc-popup-ai-regen-btn menu_button" style="font-size:12px;padding:5px 14px;">🔄 Regenerate</button>
+                                            <button class="rt-npc-popup-ai-apply-btn menu_button" style="font-size:12px;padding:5px 18px;background:rgba(0,200,140,0.15);border-color:rgba(0,200,140,0.5);color:#00c88c;font-weight:bold;">✅ Apply</button>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         `;
-                        
+
                         const viewPane = popupDom.querySelector('.rt-npc-popup-view');
                         const editPane = popupDom.querySelector('.rt-npc-popup-edit');
+                        const aiEditPane = popupDom.querySelector('.rt-npc-popup-ai-edit');
                         const textarea = /** @type {HTMLTextAreaElement} */ (popupDom.querySelector('.rt-npc-popup-textarea'));
                         const editBtn = popupDom.querySelector('.rt-npc-popup-edit-btn');
+                        const aiEditBtn = popupDom.querySelector('.rt-npc-popup-ai-edit-btn');
                         const cancelBtn = popupDom.querySelector('.rt-npc-popup-cancel-btn');
                         const saveBtn = /** @type {HTMLButtonElement} */ (popupDom.querySelector('.rt-npc-popup-save-btn'));
                         const sectionsDiv = popupDom.querySelector('.rt-npc-popup-sections');
-                        
+                        const aiInstructionsEl = /** @type {HTMLTextAreaElement} */ (popupDom.querySelector('.rt-npc-popup-ai-instructions'));
+                        const aiCancelBtn = popupDom.querySelector('.rt-npc-popup-ai-cancel-btn');
+                        const aiGenerateBtn = /** @type {HTMLButtonElement} */ (popupDom.querySelector('.rt-npc-popup-ai-generate-btn'));
+                        const aiPreviewPane = popupDom.querySelector('.rt-npc-popup-ai-preview');
+                        const aiPreviewText = /** @type {HTMLTextAreaElement} */ (popupDom.querySelector('.rt-npc-popup-ai-preview-text'));
+                        const aiRegenBtn = /** @type {HTMLButtonElement} */ (popupDom.querySelector('.rt-npc-popup-ai-regen-btn'));
+                        const aiApplyBtn = /** @type {HTMLButtonElement} */ (popupDom.querySelector('.rt-npc-popup-ai-apply-btn'));
+
+                        const showPane = (pane) => {
+                            viewPane.style.display = 'none';
+                            editPane.style.display = 'none';
+                            aiEditPane.style.display = 'none';
+                            if (pane) pane.style.display = 'flex';
+                        };
+
                         const startEdit = () => {
                             textarea.value = pc.bio || '';
-                            viewPane.style.display = 'none';
-                            editPane.style.display = 'flex';
+                            showPane(editPane);
                             textarea.focus();
                         };
-                        
+
                         editBtn.addEventListener('click', startEdit);
-                        
-                        cancelBtn.addEventListener('click', () => {
-                            editPane.style.display = 'none';
-                            viewPane.style.display = 'block';
-                        });
-                        
+
+                        cancelBtn.addEventListener('click', () => showPane(viewPane));
+
                         saveBtn.addEventListener('click', async () => {
                             pc.bio = textarea.value;
                             if (typeof saveChatState === 'function') saveChatState(_currentChatId);
-                            
                             const newHtml = renderSectionsHtml(pc.bio) || `<div style="font-size:14px;color:var(--SmartThemeBodyColor, inherit);opacity:0.5;font-style:italic;padding:16px 0;">No structured sections found.</div>`;
                             sectionsDiv.innerHTML = newHtml;
-                            
-                            editPane.style.display = 'none';
-                            viewPane.style.display = 'block';
-                            
+                            showPane(viewPane);
                             if (typeof refreshAgentManifestNow === 'function') refreshAgentManifestNow();
-                            
                             // @ts-ignore
                             if (typeof toastr !== 'undefined') toastr.success('Player Character saved.', 'Campaign Records');
                         });
-                        
+
+                        // ── AI Edit ────────────────────────────────────────────
+                        aiEditBtn.addEventListener('click', () => {
+                            aiPreviewPane.style.display = 'none';
+                            aiInstructionsEl.value = '';
+                            showPane(aiEditPane);
+                            aiInstructionsEl.focus();
+                        });
+
+                        aiCancelBtn.addEventListener('click', () => showPane(viewPane));
+
+                        const runAiEdit = async () => {
+                            const instructions = aiInstructionsEl.value.trim();
+                            if (!instructions) { toastr['warning']('Please describe what you want changed.', 'Edit with AI'); return; }
+                            aiGenerateBtn.disabled = true; aiRegenBtn.disabled = true;
+                            aiGenerateBtn.textContent = '⏳ Generating…';
+                            const curSettings = getSettings();
+                            const aiSettings = {
+                                connectionSource: curSettings.routerConnectionSource ?? 'default',
+                                connectionProfileId: curSettings.routerConnectionProfileId || '',
+                                completionPresetId: curSettings.routerCompletionPresetId || '',
+                                ollamaUrl: curSettings.routerOllamaUrl || 'http://localhost:11434',
+                                ollamaModel: curSettings.routerOllamaModel || '',
+                                openaiUrl: curSettings.routerOpenaiUrl || '',
+                                openaiKey: curSettings.routerOpenaiKey || '',
+                                openaiModel: curSettings.routerOpenaiModel || '',
+                                maxTokens: curSettings.routerMaxTokens || 0,
+                                debugMode: curSettings.debugMode,
+                            };
+                            const sysPrompt = `You are a persona editor for a roleplay system. The user wants to make specific changes to an existing character persona. Output the ENTIRE revised persona with the requested changes applied — keep everything else identical. Do not add preambles or commentary. Output only the revised persona text.`;
+                            const userMsg = `CURRENT PERSONA:\n${pc.bio || ''}\n\nREQUESTED CHANGES:\n${instructions}\n\nOutput the full revised persona now.`;
+                            try {
+                                const result = await sendStateRequest(aiSettings, sysPrompt, userMsg);
+                                const trimmed = (result || '').trim();
+                                if (trimmed) {
+                                    aiPreviewText.value = trimmed;
+                                    aiPreviewPane.style.display = 'flex';
+                                } else {
+                                    toastr['warning']('AI returned an empty result. Please try again.', 'Edit with AI');
+                                }
+                            } catch (err) {
+                                toastr['error'](`AI edit failed: ${String(err.message || err).substring(0, 120)}`, 'Edit with AI');
+                            }
+                            aiGenerateBtn.disabled = false; aiRegenBtn.disabled = false;
+                            aiGenerateBtn.textContent = '✨ Generate';
+                        };
+
+                        aiGenerateBtn.addEventListener('click', runAiEdit);
+                        aiRegenBtn.addEventListener('click', runAiEdit);
+
+                        aiApplyBtn.addEventListener('click', async () => {
+                            pc.bio = aiPreviewText.value;
+                            if (typeof saveChatState === 'function') saveChatState(_currentChatId);
+                            const newHtml = renderSectionsHtml(pc.bio) || `<div style="font-size:14px;color:var(--SmartThemeBodyColor, inherit);opacity:0.5;font-style:italic;padding:16px 0;">No structured sections found.</div>`;
+                            sectionsDiv.innerHTML = newHtml;
+                            showPane(viewPane);
+                            if (typeof refreshAgentManifestNow === 'function') refreshAgentManifestNow();
+                            // @ts-ignore
+                            if (typeof toastr !== 'undefined') toastr.success('Player Character updated via AI.', 'Campaign Records');
+                        });
+
                         if (startInEditMode) startEdit();
-                        
+
                         const popupOpts = { okButton: 'Close', cancelButton: false, wide: true, large: true };
                         await ctx.callGenericPopup(popupDom, ctx.POPUP_TYPE?.TEXT ?? 1, '', popupOpts);
                     };
@@ -5224,7 +5394,7 @@ function createPanel() {
                             await openPcPopup(true);
                         });
                     }
-                    
+
                     const delBtn = pcDiv.querySelector('.rt-npc-delete');
                     if (delBtn) {
                         delBtn.addEventListener('click', async (e) => {
@@ -5255,64 +5425,64 @@ function createPanel() {
                         console.time('[RPG Tracker] getLorebookManifest');
                         const manifest = prefix ? await getLorebookManifest(!forceFullRefresh) : [];
                         console.timeEnd('[RPG Tracker] getLorebookManifest');
-                        
+
                         if (gen !== _manifestRenderGen) return;
                         const existingLoading = list.querySelector('#rt-agent-manifest-loading');
                         if (existingLoading) existingLoading.remove();
 
-                // Group entries by lorebook
-                /** @type {Map<string, typeof manifest>} */
-                const byBook = new Map();
-                for (const item of manifest) {
-                    if (item.book.endsWith('_Skeleton')) continue;
-                    if (!byBook.has(item.book)) byBook.set(item.book, []);
-                    byBook.get(item.book).push(item);
-                }
+                        // Group entries by lorebook
+                        /** @type {Map<string, typeof manifest>} */
+                        const byBook = new Map();
+                        for (const item of manifest) {
+                            if (item.book.endsWith('_Skeleton')) continue;
+                            if (!byBook.has(item.book)) byBook.set(item.book, []);
+                            byBook.get(item.book).push(item);
+                        }
 
-                // Ensure NPC book is always represented so the user can add NPCs
-                if (prefix) {
-                    const npcBookName = `${prefix}_NPCs`;
-                    if (!byBook.has(npcBookName)) {
-                        byBook.set(npcBookName, []);
-                    }
-                }
+                        // Ensure NPC book is always represented so the user can add NPCs
+                        if (prefix) {
+                            const npcBookName = `${prefix}_NPCs`;
+                            if (!byBook.has(npcBookName)) {
+                                byBook.set(npcBookName, []);
+                            }
+                        }
 
-                // list.innerHTML = ''; // DO NOT CLEAR! This wipes the instantly-rendered PC card!
+                        // list.innerHTML = ''; // DO NOT CLEAR! This wipes the instantly-rendered PC card!
 
-                if (!prefix) {
-                    if (gen !== _manifestRenderGen) return;
-                    const msg = document.createElement('div');
-                    msg.style.cssText = 'text-align: center; opacity: 0.5; font-size: 0.769em; padding: 10px;';
-                    msg.innerHTML = 'Set a Campaign Prefix to see records.';
-                    list.appendChild(msg);
-                    return;
-                }
+                        if (!prefix) {
+                            if (gen !== _manifestRenderGen) return;
+                            const msg = document.createElement('div');
+                            msg.style.cssText = 'text-align: center; opacity: 0.5; font-size: 0.769em; padding: 10px;';
+                            msg.innerHTML = 'Set a Campaign Prefix to see records.';
+                            list.appendChild(msg);
+                            return;
+                        }
 
-                for (const [bookName, items] of byBook) {
-                    if (gen !== _manifestRenderGen) return;
-                    // Strip campaign prefix from display name: "Eldoria_Factions" → "Factions"
-                    const displayName = prefix && bookName.startsWith(prefix + '_')
-                        ? bookName.slice(prefix.length + 1)
-                        : bookName;
+                        for (const [bookName, items] of byBook) {
+                            if (gen !== _manifestRenderGen) return;
+                            // Strip campaign prefix from display name: "Eldoria_Factions" → "Factions"
+                            const displayName = prefix && bookName.startsWith(prefix + '_')
+                                ? bookName.slice(prefix.length + 1)
+                                : bookName;
 
-                    const activeCount = items.filter(i => i.is_active).length;
-                    const totalTokens = items.reduce((sum, item) => sum + Math.round((item.content || '').length / 4), 0);
-                    const isOpen = _manifestOpenFolders.has(bookName);
+                            const activeCount = items.filter(i => i.is_active).length;
+                            const totalTokens = items.reduce((sum, item) => sum + Math.round((item.content || '').length / 4), 0);
+                            const isOpen = _manifestOpenFolders.has(bookName);
 
-                    // ── Detect NPC books ──
-                    const bookNameLowerFull = bookName.toLowerCase();
-                    const displayNameLower = displayName.toLowerCase();
-                    const isNpcBook = displayNameLower === 'npcs' || displayNameLower === 'npc' ||
-                                      bookNameLowerFull.endsWith('_npcs') || bookNameLowerFull.endsWith('_npc');
-                    const useNpcCardView = isNpcBook && s.npcPortraits !== false;
+                            // ── Detect NPC books ──
+                            const bookNameLowerFull = bookName.toLowerCase();
+                            const displayNameLower = displayName.toLowerCase();
+                            const isNpcBook = displayNameLower === 'npcs' || displayNameLower === 'npc' ||
+                                bookNameLowerFull.endsWith('_npcs') || bookNameLowerFull.endsWith('_npc');
+                            const useNpcCardView = isNpcBook && s.npcPortraits !== false;
 
-                    const folder = document.createElement('div');
-                    folder.style.cssText = 'flex-shrink: 0; margin-bottom: 2px;';
+                            const folder = document.createElement('div');
+                            folder.style.cssText = 'flex-shrink: 0; margin-bottom: 2px;';
 
-                    const folderHdr = document.createElement('div');
-                    folderHdr.style.cssText = 'display:flex; align-items:center; gap:6px; padding:5px 6px; cursor:pointer; border-radius:4px; background:rgba(255,255,255,0.04);';
-                    if (useNpcCardView) folderHdr.classList.add('rt-npc-folder-hdr');
-                    folderHdr.innerHTML = `
+                            const folderHdr = document.createElement('div');
+                            folderHdr.style.cssText = 'display:flex; align-items:center; gap:6px; padding:5px 6px; cursor:pointer; border-radius:4px; background:rgba(255,255,255,0.04);';
+                            if (useNpcCardView) folderHdr.classList.add('rt-npc-folder-hdr');
+                            folderHdr.innerHTML = `
                             ${useNpcCardView ? '<span class="rt-npc-folder-icon">👤</span>' : ''}
                             <span class="rt-mf-icon" style="font-size:9px; opacity:0.5; width:10px; flex-shrink:0; font-family:monospace;">${isOpen ? '▼' : '▶'}</span>
                             <span style="font-weight:bold; font-size:11px; flex:1; color:var(--rt-text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(displayName)}</span>
@@ -5320,28 +5490,28 @@ function createPanel() {
                             ${isNpcBook ? '<button class="rt-npc-settings-btn" title="NPC Settings" style="background:none;border:none;cursor:pointer;font-size:11px;opacity:0.5;padding:0;margin:0;width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center;color:var(--rt-text-muted);flex-shrink:0;line-height:1;" onclick="event.stopPropagation()">⚙️</button>' : ''}
                         `;
 
-                    const folderBody = document.createElement('div');
-                    folderBody.style.cssText = `display:${isOpen ? 'flex' : 'none'}; flex-direction:column; ${useNpcCardView ? 'padding:4px 0;' : 'border-left:1px solid rgba(255,255,255,0.07); margin-left:10px; padding-left:6px;'} gap:${useNpcCardView ? '4' : '1'}px; padding-top:3px; padding-bottom:3px;`;
+                            const folderBody = document.createElement('div');
+                            folderBody.style.cssText = `display:${isOpen ? 'flex' : 'none'}; flex-direction:column; ${useNpcCardView ? 'padding:4px 0;' : 'border-left:1px solid rgba(255,255,255,0.07); margin-left:10px; padding-left:6px;'} gap:${useNpcCardView ? '4' : '1'}px; padding-top:3px; padding-bottom:3px;`;
 
-                    folderHdr.addEventListener('click', () => {
-                        const opening = folderBody.style.display === 'none';
-                        folderBody.style.display = opening ? 'flex' : 'none';
-                        folderHdr.querySelector('.rt-mf-icon').textContent = opening ? '▼' : '▶';
-                        if (opening) _manifestOpenFolders.add(bookName);
-                        else _manifestOpenFolders.delete(bookName);
-                    });
+                            folderHdr.addEventListener('click', () => {
+                                const opening = folderBody.style.display === 'none';
+                                folderBody.style.display = opening ? 'flex' : 'none';
+                                folderHdr.querySelector('.rt-mf-icon').textContent = opening ? '▼' : '▶';
+                                if (opening) _manifestOpenFolders.add(bookName);
+                                else _manifestOpenFolders.delete(bookName);
+                            });
 
-                    // NPC settings gear button handler
-                    if (isNpcBook) {
-                        const settingsBtn = folderHdr.querySelector('.rt-npc-settings-btn');
-                        if (settingsBtn) {
-                            settingsBtn.addEventListener('click', async (e) => {
-                                e.stopPropagation();
-                                const ctx = SillyTavern.getContext();
-                                if (!ctx.callGenericPopup) return;
-                                const curS = getSettings();
+                            // NPC settings gear button handler
+                            if (isNpcBook) {
+                                const settingsBtn = folderHdr.querySelector('.rt-npc-settings-btn');
+                                if (settingsBtn) {
+                                    settingsBtn.addEventListener('click', async (e) => {
+                                        e.stopPropagation();
+                                        const ctx = SillyTavern.getContext();
+                                        if (!ctx.callGenericPopup) return;
+                                        const curS = getSettings();
 
-                                const popupHtml = `<div style="padding:16px;width:320px;text-align:left;font-family:var(--rt-font, system-ui, sans-serif);">
+                                        const popupHtml = `<div style="padding:16px;width:320px;text-align:left;font-family:var(--rt-font, system-ui, sans-serif);">
                                     <div style="font-size:16px;font-weight:bold;color:#d4a940;margin-bottom:16px;">⚙️ NPC Settings</div>
 
                                     <div style="margin-bottom:6px;display:flex;align-items:center;gap:10px;">
@@ -5378,15 +5548,32 @@ function createPanel() {
                                     </div>
                                     <div style="font-size:10px;color:rgba(255,255,255,0.35);margin-bottom:14px;">Shows Friendship/Affection tracking bars on NPC cards and popups. Also adds relationship fields to the AI instruction.</div>
 
-                                     <div style="margin-bottom:6px;display:flex;align-items:center;gap:10px;">
-                                         <label style="font-size:12px;color:rgba(255,255,255,0.7);flex:1;">Show Relationship Toast Notifications</label>
-                                         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-                                             <input type="checkbox" id="rt-npc-rel-toast" ${curS.npcRelationshipToast !== false ? 'checked' : ''}
-                                                 style="width:16px;height:16px;accent-color:#d4a940;cursor:pointer;">
-                                             <span style="font-size:11px;color:rgba(255,255,255,0.5);">${curS.npcRelationshipToast !== false ? 'Enabled' : 'Disabled'}</span>
-                                         </label>
-                                     </div>
+                                    <div style="margin-bottom:6px;display:flex;align-items:center;gap:10px;">
+                                        <label style="font-size:12px;color:rgba(255,255,255,0.7);flex:1;">Show Relationship Toast Notifications</label>
+                                        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                                            <input type="checkbox" id="rt-npc-rel-toast" ${curS.npcRelationshipToast !== false ? 'checked' : ''}
+                                                style="width:16px;height:16px;accent-color:#d4a940;cursor:pointer;">
+                                            <span style="font-size:11px;color:rgba(255,255,255,0.5);">${curS.npcRelationshipToast !== false ? 'Enabled' : 'Disabled'}</span>
+                                        </label>
+                                    </div>
                                     <div style="font-size:10px;color:rgba(255,255,255,0.35);margin-bottom:14px;">Emits a toast notification in the bottom-right corner when friendship or affection values change.</div>
+
+                                    <div style="margin-bottom:14px;">
+                                        <label style="font-size:12px;color:rgba(255,255,255,0.7);display:block;margin-bottom:4px;">"Add as is" Import Mode</label>
+                                        <div style="display:flex;flex-direction:column;gap:5px;">
+                                            <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;" title="Wraps the card's raw content in [CORE][/CORE] tags exactly as written. No AI involvement.">
+                                                <input type="radio" name="rt-npc-add-as-is-mode" value="literal" ${(curS.npcAddAsIsMode ?? 'ai_review') === 'literal' ? 'checked' : ''}
+                                                    style="margin-top:3px;accent-color:#d4a940;cursor:pointer;">
+                                                <span style="font-size:11px;color:rgba(255,255,255,0.75);"><b>Literal</b> — wraps the card verbatim in [CORE][/CORE]. No AI.</span>
+                                            </label>
+                                            <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;" title="Sends the card to AI for a minimal logical review. Only corrects world/era conflicts. Original writing is preserved as completely as possible.">
+                                                <input type="radio" name="rt-npc-add-as-is-mode" value="ai_review" ${(curS.npcAddAsIsMode ?? 'ai_review') === 'ai_review' ? 'checked' : ''}
+                                                    style="margin-top:3px;accent-color:#d4a940;cursor:pointer;">
+                                                <span style="font-size:11px;color:rgba(255,255,255,0.75);"><b>AI Review</b> — minimal fix pass for era/world conflicts only. Original writing preserved.</span>
+                                            </label>
+                                        </div>
+                                        <div style="font-size:10px;color:rgba(255,255,255,0.35);margin-top:4px;">Controls what happens when you click "+ Add as is" on a character card.</div>
+                                    </div>
 
                                     <div style="margin-bottom:14px;">
                                         <label style="font-size:12px;color:rgba(255,255,255,0.7);display:block;margin-bottom:4px;">Relationship Max — this chat (± range)</label>
@@ -5404,171 +5591,191 @@ function createPanel() {
                                         </label>
                                     </div>
                                     <div style="font-size:10px;color:rgba(255,255,255,0.35);margin-bottom:10px;">Omits the &lt;CORE LENGTH TARGETS&gt; section from the NPC prompt.</div>
+                                    
+                                    <button id="rt-btn-edit-npc-sections-inline" style="width:100%;background:rgba(180, 100, 255, 0.15);border:1px solid rgba(180, 100, 255, 0.4);color:white;border-radius:6px;padding:8px 10px;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:10px;transition:background 0.2s;">
+                                        <i class="fa-solid fa-puzzle-piece"></i> Edit NPC Sections
+                                    </button>
                                 </div>`;
 
-                                let newRel = curS.npcRelationshipBars ?? false;
-                                let newIgnoreLimits = curS.ignoreNpcImportLimits ?? false;
-                                let newRelToast = curS.npcRelationshipToast !== false;
-                                let newNpcPortraits = curS.npcPortraits !== false;
-                                // Track word count values via closure — updated by input events,
-                                // read at save time. Initialized to current saved values so
-                                // leaving them unchanged correctly preserves the user's setting.
-                                let newMajor = curS.npcMajorWords ?? 25;
-                                let newMinor = curS.npcMinorWords ?? 15;
-                                let newRelMax = getNpcRelationshipMax(curS);
+                                        let newRel = curS.npcRelationshipBars ?? false;
+                                        let newIgnoreLimits = curS.ignoreNpcImportLimits ?? false;
+                                        let newRelToast = curS.npcRelationshipToast !== false;
+                                        let newNpcPortraits = curS.npcPortraits !== false;
+                                        let newAddAsIsMode = curS.npcAddAsIsMode ?? 'ai_review';
+                                        // Track word count values via closure — updated by input events,
+                                        // read at save time. Initialized to current saved values so
+                                        // leaving them unchanged correctly preserves the user's setting.
+                                        let newMajor = curS.npcMajorWords ?? 25;
+                                        let newMinor = curS.npcMinorWords ?? 15;
+                                        let newRelMax = getNpcRelationshipMax(curS);
 
-                                setTimeout(() => {
-                                    const majorEl = document.getElementById('rt-npc-major-words');
-                                    const minorEl = document.getElementById('rt-npc-minor-words');
-                                    const relMaxEl = document.getElementById('rt-npc-rel-max');
-                                    const relEl = document.getElementById('rt-npc-rel-bars');
-                                    const ignoreEl = document.getElementById('rt-ignore-npc-limits');
+                                        setTimeout(() => {
+                                            const majorEl = document.getElementById('rt-npc-major-words');
+                                            const minorEl = document.getElementById('rt-npc-minor-words');
+                                            const relMaxEl = document.getElementById('rt-npc-rel-max');
+                                            const relEl = document.getElementById('rt-npc-rel-bars');
+                                            const ignoreEl = document.getElementById('rt-ignore-npc-limits');
 
-                                    if (majorEl) {
-                                        majorEl.addEventListener('input', () => {
-                                            const parsed = parseInt(majorEl.value, 10);
-                                            // Only update if it's a real number — don't clobber on
-                                            // partial input (e.g. empty field while user is typing)
-                                            if (!isNaN(parsed) && parsed > 0) newMajor = parsed;
+                                            if (majorEl) {
+                                                majorEl.addEventListener('input', () => {
+                                                    const parsed = parseInt(majorEl.value, 10);
+                                                    // Only update if it's a real number — don't clobber on
+                                                    // partial input (e.g. empty field while user is typing)
+                                                    if (!isNaN(parsed) && parsed > 0) newMajor = parsed;
+                                                });
+                                            }
+                                            if (minorEl) {
+                                                minorEl.addEventListener('input', () => {
+                                                    const parsed = parseInt(minorEl.value, 10);
+                                                    if (!isNaN(parsed) && parsed > 0) newMinor = parsed;
+                                                });
+                                            }
+                                            if (relMaxEl) {
+                                                relMaxEl.addEventListener('input', () => {
+                                                    const parsed = parseInt(relMaxEl.value, 10);
+                                                    if (!isNaN(parsed) && parsed >= 10) newRelMax = parsed;
+                                                });
+                                            }
+                                            if (relEl) {
+                                                relEl.addEventListener('change', () => {
+                                                    newRel = relEl.checked;
+                                                    if (relEl.nextElementSibling) relEl.nextElementSibling.textContent = newRel ? 'Enabled' : 'Disabled';
+                                                });
+                                            }
+                                            if (ignoreEl) {
+                                                ignoreEl.addEventListener('change', () => {
+                                                    newIgnoreLimits = ignoreEl.checked;
+                                                    if (ignoreEl.nextElementSibling) ignoreEl.nextElementSibling.textContent = newIgnoreLimits ? 'Enabled' : 'Disabled';
+                                                });
+                                            }
+                                            const relToastEl = document.getElementById('rt-npc-rel-toast');
+                                            if (relToastEl) {
+                                                relToastEl.addEventListener('change', () => {
+                                                    newRelToast = relToastEl.checked;
+                                                    if (relToastEl.nextElementSibling) relToastEl.nextElementSibling.textContent = newRelToast ? 'Enabled' : 'Disabled';
+                                                });
+                                            }
+                                            const portraitsEl = document.getElementById('rt-npc-portraits');
+                                            if (portraitsEl) {
+                                                portraitsEl.addEventListener('change', () => {
+                                                    newNpcPortraits = portraitsEl.checked;
+                                                    if (portraitsEl.nextElementSibling) portraitsEl.nextElementSibling.textContent = newNpcPortraits ? 'Enabled' : 'Disabled';
+                                                });
+                                            }
+                                            // Wire up the add-as-is mode radio buttons
+                                            document.querySelectorAll('input[name="rt-npc-add-as-is-mode"]').forEach(radio => {
+                                                radio.addEventListener('change', () => {
+                                                    if (radio.checked) newAddAsIsMode = radio.value;
+                                                });
+                                            });
+                                            const editNpcBtn = document.getElementById('rt-btn-edit-npc-sections-inline');
+                                            if (editNpcBtn) {
+                                                editNpcBtn.addEventListener('click', () => {
+                                                    openNpcSectionEditor();
+                                                });
+                                            }
+                                        }, 0);
+
+                                        const result = await ctx.callGenericPopup(popupHtml, ctx.POPUP_TYPE?.CONFIRM ?? 3, '', {
+                                            okButton: 'Save', cancelButton: 'Cancel', wide: false,
                                         });
-                                    }
-                                    if (minorEl) {
-                                        minorEl.addEventListener('input', () => {
-                                            const parsed = parseInt(minorEl.value, 10);
-                                            if (!isNaN(parsed) && parsed > 0) newMinor = parsed;
-                                        });
-                                    }
-                                    if (relMaxEl) {
-                                        relMaxEl.addEventListener('input', () => {
-                                            const parsed = parseInt(relMaxEl.value, 10);
-                                            if (!isNaN(parsed) && parsed >= 10) newRelMax = parsed;
-                                        });
-                                    }
-                                    if (relEl) {
-                                        relEl.addEventListener('change', () => {
-                                            newRel = relEl.checked;
-                                            if (relEl.nextElementSibling) relEl.nextElementSibling.textContent = newRel ? 'Enabled' : 'Disabled';
-                                        });
-                                    }
-                                    if (ignoreEl) {
-                                        ignoreEl.addEventListener('change', () => {
-                                            newIgnoreLimits = ignoreEl.checked;
-                                            if (ignoreEl.nextElementSibling) ignoreEl.nextElementSibling.textContent = newIgnoreLimits ? 'Enabled' : 'Disabled';
-                                        });
-                                    }
-                                    const relToastEl = document.getElementById('rt-npc-rel-toast');
-                                    if (relToastEl) {
-                                        relToastEl.addEventListener('change', () => {
-                                            newRelToast = relToastEl.checked;
-                                            if (relToastEl.nextElementSibling) relToastEl.nextElementSibling.textContent = newRelToast ? 'Enabled' : 'Disabled';
-                                        });
-                                    }
-                                    const portraitsEl = document.getElementById('rt-npc-portraits');
-                                    if (portraitsEl) {
-                                        portraitsEl.addEventListener('change', () => {
-                                            newNpcPortraits = portraitsEl.checked;
-                                            if (portraitsEl.nextElementSibling) portraitsEl.nextElementSibling.textContent = newNpcPortraits ? 'Enabled' : 'Disabled';
-                                        });
-                                    }
-                                }, 0);
 
-                                const result = await ctx.callGenericPopup(popupHtml, ctx.POPUP_TYPE?.CONFIRM ?? 3, '', {
-                                    okButton: 'Save', cancelButton: 'Cancel', wide: false,
-                                });
+                                        if (result) {
+                                            const finalMajor = Math.max(1, Math.min(1000, newMajor));
+                                            const finalMinor = Math.max(1, Math.min(1000, newMinor));
+                                            const finalRelMax = getNpcRelationshipMax({ npcRelationshipMax: newRelMax });
 
-                                if (result) {
-                                    const finalMajor = Math.max(1, Math.min(1000, newMajor));
-                                    const finalMinor = Math.max(1, Math.min(1000, newMinor));
-                                    const finalRelMax = getNpcRelationshipMax({ npcRelationshipMax: newRelMax });
+                                            const updS = getSettings();
+                                            updS.ignoreNpcImportLimits = newIgnoreLimits;
+                                            updS.npcMajorWords = finalMajor;
+                                            updS.npcMinorWords = finalMinor;
+                                            updS.npcAddAsIsMode = newAddAsIsMode;
+                                            setNpcRelationshipMaxForCurrentChat(finalRelMax);
+                                            updS.npcRelationshipBars = newRel;
+                                            updS.npcRelationshipToast = newRelToast;
+                                            applyNpcPortraitSetting(updS, newNpcPortraits);
+                                            $('#rpg_tracker_npc_rel_toast').prop('checked', newRelToast);
 
-                                    const updS = getSettings();
-                                    updS.ignoreNpcImportLimits = newIgnoreLimits;
-                                    updS.npcMajorWords = finalMajor;
-                                    updS.npcMinorWords = finalMinor;
-                                    setNpcRelationshipMaxForCurrentChat(finalRelMax);
-                                    updS.npcRelationshipBars = newRel;
-                                    updS.npcRelationshipToast = newRelToast;
-                                    applyNpcPortraitSetting(updS, newNpcPortraits);
-                                    $('#rpg_tracker_npc_rel_toast').prop('checked', newRelToast);
+                                            // Update the main settings panel inputs if present
+                                            $('#rpg_tracker_npc_major_words').val(finalMajor);
+                                            $('#rpg_tracker_npc_minor_words').val(finalMinor);
+                                            $('#rpg_tracker_npc_rel_bars').prop('checked', newRel);
+                                            $('#rpg_sysprompt_mod_npc_rel_bars').prop('checked', newRel);
+                                            const onbRel = document.getElementById('rt_onboarding_mod_npc_rel_bars');
+                                            if (onbRel) onbRel.checked = newRel;
+                                            $('#rpg_tracker_ignore_npc_limits').prop('checked', newIgnoreLimits);
+                                            // Sync Add as Is mode to main settings panel radios
+                                            $(`input[name="rpg_npc_add_as_is_mode_main"][value="${newAddAsIsMode}"]`).prop('checked', true);
 
-                                    // Update the main settings panel inputs if present
-                                    $('#rpg_tracker_npc_major_words').val(finalMajor);
-                                    $('#rpg_tracker_npc_minor_words').val(finalMinor);
-                                    $('#rpg_tracker_npc_rel_bars').prop('checked', newRel);
-                                    $('#rpg_sysprompt_mod_npc_rel_bars').prop('checked', newRel);
-                                    const onbRel = document.getElementById('rt_onboarding_mod_npc_rel_bars');
-                                    if (onbRel) onbRel.checked = newRel;
-                                    $('#rpg_tracker_ignore_npc_limits').prop('checked', newIgnoreLimits);
+                                            // Rebuild the NPC instruction from settings
+                                            if (updS.routerModules?.npc) {
+                                                updS.routerModules.npc.instruction = buildNpcInstruction(finalMajor, finalMinor, false); // ignoreLimits only applies at import-time, not stored globally
+                                            }
 
-                                    // Rebuild the NPC instruction from settings
-                                    if (updS.routerModules?.npc) {
-                                        updS.routerModules.npc.instruction = buildNpcInstruction(finalMajor, finalMinor, false); // ignoreLimits only applies at import-time, not stored globally
-                                    }
-
-                                    saveSettings();
-                                    toastr['success']('NPC settings saved.', 'NPC Settings');
-                                    if (typeof globalThis._rpgRenderAgentModules === 'function') {
-                                        globalThis._rpgRenderAgentModules();
-                                    }
-                                    await refreshManifest();
+                                            saveSettings();
+                                            toastr['success']('NPC settings saved.', 'NPC Settings');
+                                            if (typeof globalThis._rpgRenderAgentModules === 'function') {
+                                                globalThis._rpgRenderAgentModules();
+                                            }
+                                            await refreshManifest();
+                                        }
+                                    });
                                 }
-                            });
-                        }
-                    }
+                            }
 
-                    // ════════════════════════════════════════════════════════════
-                    //  NPC HELPERS (shared by card grid + compact list)
-                    // ════════════════════════════════════════════════════════════
-                    /** @type {((item: any, rel: any) => Promise<void>)|null} */
-                    let openNpcDetailPopup = null;
-                    /** @type {((entryId: string) => { friendship: number, affection: number })|null} */
-                    let parseRelationship = null;
-                    /** @type {((entryId: string) => string)|null} */
-                    let renderCompactRelStats = null;
-                    /** @type {((value: number, type: string, entryId: string) => string)|null} */
-                    let renderRelBar = null;
-                    /** @type {((content: string) => string)|null} */
-                    let getNpcDescription = null;
+                            // ════════════════════════════════════════════════════════════
+                            //  NPC HELPERS (shared by card grid + compact list)
+                            // ════════════════════════════════════════════════════════════
+                            /** @type {((item: any, rel: any) => Promise<void>)|null} */
+                            let openNpcDetailPopup = null;
+                            /** @type {((entryId: string) => { friendship: number, affection: number })|null} */
+                            let parseRelationship = null;
+                            /** @type {((entryId: string) => string)|null} */
+                            let renderCompactRelStats = null;
+                            /** @type {((value: number, type: string, entryId: string) => string)|null} */
+                            let renderRelBar = null;
+                            /** @type {((content: string) => string)|null} */
+                            let getNpcDescription = null;
 
-                    if (isNpcBook) {
+                            if (isNpcBook) {
 
-                        // Helper: parse relationship values — read from code-owned settings, not entry text
-                        parseRelationship = (entryId) => {
-                            const s = getSettings();
-                            const rel = (s.npcRelationshipValues || {})[entryId];
-                            return {
-                                friendship: rel?.friendship ?? 0,
-                                affection:  rel?.affection  ?? 0,
-                            };
-                        };
+                                // Helper: parse relationship values — read from code-owned settings, not entry text
+                                parseRelationship = (entryId) => {
+                                    const s = getSettings();
+                                    const rel = (s.npcRelationshipValues || {})[entryId];
+                                    return {
+                                        friendship: rel?.friendship ?? 0,
+                                        affection: rel?.affection ?? 0,
+                                    };
+                                };
 
-                        // Helper: render a dual-direction bar (always renders, even at 0)
-                        renderRelBar = (value, type, entryId) => {
-                            const relMax = getNpcRelationshipMax();
-                            const clamped = clampRelationshipValue(value, relMax);
-                            const pct = relationshipBarPct(clamped, relMax);
-                            const icon = type === 'friendship' ? '🤝' : '💗';
-                            const isPositive = clamped >= 0;
-                            const fillClass = isPositive
-                                ? `${type}-pos positive`
-                                : `${type}-neg negative`;
-                            const valClass = type === 'friendship'
-                                ? (clamped > 0 ? 'val-positive' : clamped < 0 ? 'val-negative' : 'val-zero')
-                                : (clamped > 0 ? 'val-affection-positive' : clamped < 0 ? 'val-affection-negative' : 'val-zero');
-                            // Last-delta badge from log
-                            const curS = getSettings();
-                            const log = (curS.npcRelationshipLog?.[entryId] || []).find(e => e.field === type);
-                            // (User requested hiding the visual badge, so we keep this blank)
-                            const badgeHtml = ''; 
-                            /* log
-                                ? (() => {
-                                    const badgeColor = log.source === 'manual' ? 'rgba(180,180,180,0.7)' : (log.delta > 0 ? '#4ade80' : '#ef4444');
-                                    const sign = log.delta > 0 ? '+' : '';
-                                    const label = log.source === 'manual' ? '✋' : '🤖';
-                                    return `<span style="font-size:9px;font-weight:bold;color:${badgeColor};margin-left:4px;opacity:0.85;" title="${label} last change: ${sign}${log.delta}">${sign}${log.delta}</span>`;
-                                  })()
-                                : ''; */
-                            return `<div class="rt-npc-bar-row">
+                                // Helper: render a dual-direction bar (always renders, even at 0)
+                                renderRelBar = (value, type, entryId) => {
+                                    const relMax = getNpcRelationshipMax();
+                                    const clamped = clampRelationshipValue(value, relMax);
+                                    const pct = relationshipBarPct(clamped, relMax);
+                                    const icon = type === 'friendship' ? '🤝' : '💗';
+                                    const isPositive = clamped >= 0;
+                                    const fillClass = isPositive
+                                        ? `${type}-pos positive`
+                                        : `${type}-neg negative`;
+                                    const valClass = type === 'friendship'
+                                        ? (clamped > 0 ? 'val-positive' : clamped < 0 ? 'val-negative' : 'val-zero')
+                                        : (clamped > 0 ? 'val-affection-positive' : clamped < 0 ? 'val-affection-negative' : 'val-zero');
+                                    // Last-delta badge from log
+                                    const curS = getSettings();
+                                    const log = (curS.npcRelationshipLog?.[entryId] || []).find(e => e.field === type);
+                                    // (User requested hiding the visual badge, so we keep this blank)
+                                    const badgeHtml = '';
+                                    /* log
+                                        ? (() => {
+                                            const badgeColor = log.source === 'manual' ? 'rgba(180,180,180,0.7)' : (log.delta > 0 ? '#4ade80' : '#ef4444');
+                                            const sign = log.delta > 0 ? '+' : '';
+                                            const label = log.source === 'manual' ? '✋' : '🤖';
+                                            return `<span style="font-size:9px;font-weight:bold;color:${badgeColor};margin-left:4px;opacity:0.85;" title="${label} last change: ${sign}${log.delta}">${sign}${log.delta}</span>`;
+                                          })()
+                                        : ''; */
+                                    return `<div class="rt-npc-bar-row">
                                 <span class="rt-npc-bar-icon">${icon}</span>
                                 <div class="rt-npc-bar-track">
                                     <div class="rt-npc-bar-center-marker"></div>
@@ -5576,58 +5783,58 @@ function createPanel() {
                                 </div>
                                 <span class="rt-npc-bar-value ${valClass}">${clamped > 0 ? '+' : ''}${clamped}${badgeHtml}</span>
                             </div>`;
-                        };
+                                };
 
-                        /** Compact friendship/affection labels for the tree list view. */
-                        renderCompactRelStats = (entryId) => {
-                            if (!getSettings().npcRelationshipBars) return '';
-                            const rel = parseRelationship(entryId);
-                            const fmtVal = (val, type) => {
-                                const relMax = getNpcRelationshipMax();
-                                const clamped = clampRelationshipValue(val, relMax);
-                                const icon = type === 'friendship' ? '🤝' : '💗';
-                                let color = 'rgba(255,255,255,0.45)';
-                                if (type === 'friendship') {
-                                    color = clamped > 0 ? '#4ade80' : clamped < 0 ? '#ef4444' : 'rgba(255,255,255,0.45)';
-                                } else {
-                                    color = clamped > 0 ? '#f472b6' : clamped < 0 ? '#a855f7' : 'rgba(255,255,255,0.45)';
-                                }
-                                const label = type === 'friendship' ? 'Friendship' : 'Affection';
-                                return `<span class="rt-agent-entry-rel-${type}" style="font-size:9px;font-family:monospace;color:${color};" title="${label}">${icon}${clamped > 0 ? '+' : ''}${clamped}</span>`;
-                            };
-                            return `<span class="rt-agent-entry-rel-stats" data-entry-id="${escapeHtml(entryId)}" style="display:inline-flex;align-items:center;gap:5px;margin-left:6px;flex-shrink:0;">${fmtVal(rel.friendship, 'friendship')}${fmtVal(rel.affection, 'affection')}</span>`;
-                        };
+                                /** Compact friendship/affection labels for the tree list view. */
+                                renderCompactRelStats = (entryId) => {
+                                    if (!getSettings().npcRelationshipBars) return '';
+                                    const rel = parseRelationship(entryId);
+                                    const fmtVal = (val, type) => {
+                                        const relMax = getNpcRelationshipMax();
+                                        const clamped = clampRelationshipValue(val, relMax);
+                                        const icon = type === 'friendship' ? '🤝' : '💗';
+                                        let color = 'rgba(255,255,255,0.45)';
+                                        if (type === 'friendship') {
+                                            color = clamped > 0 ? '#4ade80' : clamped < 0 ? '#ef4444' : 'rgba(255,255,255,0.45)';
+                                        } else {
+                                            color = clamped > 0 ? '#f472b6' : clamped < 0 ? '#a855f7' : 'rgba(255,255,255,0.45)';
+                                        }
+                                        const label = type === 'friendship' ? 'Friendship' : 'Affection';
+                                        return `<span class="rt-agent-entry-rel-${type}" style="font-size:9px;font-family:monospace;color:${color};" title="${label}">${icon}${clamped > 0 ? '+' : ''}${clamped}</span>`;
+                                    };
+                                    return `<span class="rt-agent-entry-rel-stats" data-entry-id="${escapeHtml(entryId)}" style="display:inline-flex;align-items:center;gap:5px;margin-left:6px;flex-shrink:0;">${fmtVal(rel.friendship, 'friendship')}${fmtVal(rel.affection, 'affection')}</span>`;
+                                };
 
-                        // Helper: get brief synopsis for the card (pulls from Appearance section or first text)
-                        getNpcDescription = (content) => {
-                            if (!content) return '';
-                            // Strip [CORE] and [/CORE] tags before parsing
-                            const cleanContent = content.replace(/\[\/?CORE\]/gi, '');
-                            // Try to extract Appearance section content first
-                            const appMatch = cleanContent.match(/(?:Appearance\/Species|Appearance):\s*(.+?)(?=\s*(?:Personality|Brief Background|Habits|Behaviors|Relationship with|Friendship\/Rapport|Affection\/Interest):|$)/is);
-                            if (appMatch && appMatch[1].trim()) {
-                                return appMatch[1].trim().substring(0, 260);
-                            }
-                            // Fallback: first meaningful text
-                            const lines = cleanContent.split('\n').map(l => l.trim())
-                                .filter(l => l && !/^\[ID:/i.test(l) && !/^Friendship\/Rapport:/i.test(l) && !/^Affection\/Interest:/i.test(l));
-                            return lines.slice(0, 2).join(' ').substring(0, 260);
-                        };
+                                // Helper: get brief synopsis for the card (pulls from Appearance section or first text)
+                                getNpcDescription = (content) => {
+                                    if (!content) return '';
+                                    // Strip [CORE] and [/CORE] tags before parsing
+                                    const cleanContent = content.replace(/\[\/?CORE\]/gi, '');
+                                    // Try to extract Appearance section content first
+                                    const appMatch = cleanContent.match(/(?:Appearance\/Species|Appearance):\s*(.+?)(?=\s*(?:Personality|Brief Background|Habits|Behaviors|Relationship with|Friendship\/Rapport|Affection\/Interest):|$)/is);
+                                    if (appMatch && appMatch[1].trim()) {
+                                        return appMatch[1].trim().substring(0, 260);
+                                    }
+                                    // Fallback: first meaningful text
+                                    const lines = cleanContent.split('\n').map(l => l.trim())
+                                        .filter(l => l && !/^\[ID:/i.test(l) && !/^Friendship\/Rapport:/i.test(l) && !/^Affection\/Interest:/i.test(l));
+                                    return lines.slice(0, 2).join(' ').substring(0, 260);
+                                };
 
-                        // Helper: Open the full NPC popup
-                        openNpcDetailPopup = async (item, rel) => {
-                            const ctx = SillyTavern.getContext();
-                            if (!ctx.callGenericPopup) return;
+                                // Helper: Open the full NPC popup
+                                openNpcDetailPopup = async (item, rel) => {
+                                    const ctx = SillyTavern.getContext();
+                                    if (!ctx.callGenericPopup) return;
 
-                            // Friendship/Affection bars for popup (large version, with editable sliders)
-                            const makeBigBar = (val, label, colorPos, colorNeg, icon, type) => {
-                                const relMax = getNpcRelationshipMax(s);
-                                const clamped = clampRelationshipValue(val, relMax);
-                                const pct = relationshipBarPct(clamped, relMax);
-                                const isPos = clamped >= 0;
-                                const bgColor = isPos ? colorPos : colorNeg;
-                                const valColor = clamped === 0 ? 'var(--SmartThemeEmColor, inherit)' : bgColor;
-                                return `<div style="margin-bottom:14px;">
+                                    // Friendship/Affection bars for popup (large version, with editable sliders)
+                                    const makeBigBar = (val, label, colorPos, colorNeg, icon, type) => {
+                                        const relMax = getNpcRelationshipMax(s);
+                                        const clamped = clampRelationshipValue(val, relMax);
+                                        const pct = relationshipBarPct(clamped, relMax);
+                                        const isPos = clamped >= 0;
+                                        const bgColor = isPos ? colorPos : colorNeg;
+                                        const valColor = clamped === 0 ? 'var(--SmartThemeEmColor, inherit)' : bgColor;
+                                        return `<div style="margin-bottom:14px;">
                                     <div style="display:grid;grid-template-columns:auto 80px 1fr 40px;align-items:center;column-gap:12px;row-gap:6px;">
                                         <span style="font-size:20px;">${icon}</span>
                                         <span style="font-size:13px;color:var(--SmartThemeBodyColor, inherit);opacity:0.65;font-weight:500;">${label}</span>
@@ -5644,75 +5851,83 @@ function createPanel() {
                                     </div>
                                     <div id="rt-npc-detail-${type}-tier">${renderRelTierDetailed(type, clamped, relMax)}</div>
                                 </div>`;
-                            };
+                                    };
 
-                            const barsHtml = `
+                                    const barsHtml = `
                                 ${makeBigBar(rel.friendship, 'Friendship', '#4ade80', '#ef4444', '🤝', 'friendship')}
                                 ${makeBigBar(rel.affection, 'Affection', '#f472b6', '#a855f7', '💗', 'affection')}
                             `;
 
-                            const normLabel = item.label.replace(/\s*\(.*?\)/g, '').trim();
-                            const portraitSrc = s.customPortraits?.[normLabel] || '';
-                            const hidePortrait = s.npcPortraits === false;
+                                    const normLabel = item.label.replace(/\s*\(.*?\)/g, '').trim();
+                                    const portraitSrc = s.customPortraits?.[normLabel] || '';
+                                    const hidePortrait = s.npcPortraits === false;
 
-                            // Full-size portrait (512px stored, display at native res)
-                            const portraitEl = portraitSrc
-                                ? `<img src="${escapeHtml(portraitSrc)}" style="width:100%;height:auto;aspect-ratio:1;object-fit:cover;border-radius:12px;border:2px solid rgba(212,169,64,0.3);box-shadow:0 4px 20px rgba(0,0,0,0.4);" alt="${escapeHtml(item.label)}">`
-                                : `<div style="width:100%;aspect-ratio:1;border-radius:12px;background:var(--SmartThemeBorderColor, rgba(128,128,128,0.1));border:2px solid rgba(212,169,64,0.2);display:flex;align-items:center;justify-content:center;font-size:64px;opacity:0.25;color:var(--SmartThemeBodyColor, inherit);">👤</div>`;
+                                    // Full-size portrait (512px stored, display at native res), with the same
+                                    // click-to-generate/manage overlay used on the small NPC card thumbnails.
+                                    const renderNpcPopupPortraitInner = (src) => {
+                                        const imgOrPlaceholder = src
+                                            ? `<img src="${escapeHtml(src)}" alt="${escapeHtml(item.label)}">`
+                                            : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:64px;opacity:0.25;color:var(--SmartThemeBodyColor, inherit);">👤</div>`;
+                                        return `${imgOrPlaceholder}<div class="rt-npc-portrait-gen-overlay" title="${src ? 'Manage portrait' : 'Generate portrait'}" style="font-size:32px;">${src ? '⚙️' : '🎨'}</div>`;
+                                    };
+                                    const portraitEl = `<div class="rt-npc-portrait-wrap rt-npc-popup-portrait-wrap" style="width:100%;height:auto;aspect-ratio:1;border-radius:12px;border:2px solid rgba(212,169,64,0.3);box-shadow:0 4px 20px rgba(0,0,0,0.4);">${renderNpcPopupPortraitInner(portraitSrc)}</div>`;
 
-                            // Build popup DOM
-                            const popupDom = document.createElement('div');
-                            popupDom.style.cssText = 'width:100%;box-sizing:border-box;padding:24px;text-align:left;font-family:var(--rt-font, system-ui, sans-serif);color:var(--SmartThemeBodyColor, inherit);max-height:85vh;overflow-y:auto;';
+                                    // Build popup DOM
+                                    const popupDom = document.createElement('div');
+                                    popupDom.style.cssText = 'width:100%;box-sizing:border-box;padding:24px;text-align:left;font-family:var(--rt-font, system-ui, sans-serif);color:var(--SmartThemeBodyColor, inherit);max-height:85vh;overflow-y:auto;';
 
-                            // Pre-build section HTML (avoids nested template literals confusing IDE)
-                            const sectionsInitialHtml = renderSectionsHtml(item.content)
-                                || '<div style="font-size:14px;color:var(--SmartThemeBodyColor, inherit);opacity:0.5;font-style:italic;padding:16px 0;">No structured sections found. Click Edit Text to add content.</div>';
+                                    // Pre-build section HTML (avoids nested template literals confusing IDE)
+                                    const sectionsInitialHtml = renderSectionsHtml(item.content)
+                                        || '<div style="font-size:14px;color:var(--SmartThemeBodyColor, inherit);opacity:0.5;font-style:italic;padding:16px 0;">No structured sections found. Click Edit Text to add content.</div>';
 
-                            const barsBlockHtml = s.npcRelationshipBars
-                                ? '<div style="margin-top:20px;">' + barsHtml + '</div>'
-                                : '';
+                                    const barsBlockHtml = s.npcRelationshipBars
+                                        ? '<div style="margin-top:20px;">' + barsHtml + '</div>'
+                                        : '';
 
-                            const activeStyle = item.is_active
-                                ? 'background:rgba(0,255,170,0.12);color:#00ffaa;border:1px solid rgba(0,255,170,0.25);'
-                                : 'background:var(--SmartThemeBorderColor, rgba(128,128,128,0.1));color:var(--SmartThemeBodyColor, inherit);opacity:0.65;border:1px solid var(--SmartThemeBorderColor, rgba(128,128,128,0.2));';
-                            const activeLabel = item.is_active ? '● Active' : '○ Inactive';
+                                    const activeStyle = item.is_active
+                                        ? 'background:rgba(0,255,170,0.12);color:#00ffaa;border:1px solid rgba(0,255,170,0.25);'
+                                        : 'background:var(--SmartThemeBorderColor, rgba(128,128,128,0.1));color:var(--SmartThemeBodyColor, inherit);opacity:0.65;border:1px solid var(--SmartThemeBorderColor, rgba(128,128,128,0.2));';
+                                    const activeLabel = item.is_active ? '● Active' : '○ Inactive';
 
-                            // Build relationship history log rows (plain string concatenation)
-                            let relLogHtml = '';
-                            if (s.npcRelationshipBars) {
-                                const logEntries = (s.npcRelationshipLog && s.npcRelationshipLog[item.id] || []).slice(0, 20);
-                                let rows = '';
-                                for (const e of logEntries) {
-                                    const date = new Date(e.timestamp);
-                                    const timeStr = date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})
-                                        + ', ' + date.toLocaleDateString([], {month: 'short', day: 'numeric'});
-                                    const sign = e.delta > 0 ? '+' : '';
-                                    const deltaColor = e.delta > 0 ? '#4ade80' : '#ef4444';
-                                    const srcIcon = e.source === 'manual' ? '✋' : '🤖';
-                                    const fieldLabel = e.field === 'friendship' ? '🤝' : '💗';
-                                    rows += '<tr>'
-                                        + '<td style="font-size:10px;color:var(--SmartThemeBodyColor,inherit);opacity:0.5;padding:3px 8px 3px 0;white-space:nowrap;">' + timeStr + '</td>'
-                                        + '<td style="font-size:12px;padding:3px 8px;">' + fieldLabel + '</td>'
-                                        + '<td style="font-size:13px;font-weight:bold;color:' + deltaColor + ';font-family:monospace;padding:3px 8px;">' + sign + e.delta + '</td>'
-                                        + '<td style="font-size:11px;color:var(--SmartThemeBodyColor,inherit);opacity:0.45;padding:3px 0;">' + srcIcon + ' \u2192 ' + (e.newValue >= 0 ? '+' : '') + e.newValue + '</td>'
-                                        + '</tr>';
-                                }
-                                relLogHtml = '<div class="rt-npc-log-container" style="border-top:2px solid rgba(212,169,64,0.15);padding-top:18px;margin-top:18px;' + (logEntries.length === 0 ? 'display:none;' : '') + '">'
-                                    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:4px;">'
-                                    + '<span style="font-size:11px;font-weight:bold;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:1.5px;">📊 Relationship History</span>'
-                                    + '<button class="rt-npc-log-clear-btn" style="background:transparent;border:none;color:#ff5555;cursor:pointer;font-size:10px;opacity:0.6;padding:0;" title="Clear relationship history">🗑️ Clear Log</button>'
-                                    + '</div>'
-                                    + '<table class="rt-npc-log-table" style="width:100%;border-collapse:collapse;">' + rows + '</table>'
-                                    + '</div>';
-                            }
+                                    // Build relationship history log rows (plain string concatenation)
+                                    let relLogHtml = '';
+                                    if (s.npcRelationshipBars) {
+                                        const logEntries = (s.npcRelationshipLog && s.npcRelationshipLog[item.id] || []).slice(0, 20);
+                                        let rows = '';
+                                        for (const e of logEntries) {
+                                            const date = new Date(e.timestamp);
+                                            const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                                                + ', ' + date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+                                            const sign = e.delta > 0 ? '+' : '';
+                                            const deltaColor = e.delta > 0 ? '#4ade80' : '#ef4444';
+                                            const srcIcon = e.source === 'manual' ? '✋' : '🤖';
+                                            const fieldLabel = e.field === 'friendship' ? '🤝' : '💗';
+                                            rows += '<tr>'
+                                                + '<td style="font-size:10px;color:var(--SmartThemeBodyColor,inherit);opacity:0.5;padding:3px 8px 3px 0;white-space:nowrap;">' + timeStr + '</td>'
+                                                + '<td style="font-size:12px;padding:3px 8px;">' + fieldLabel + '</td>'
+                                                + '<td style="font-size:13px;font-weight:bold;color:' + deltaColor + ';font-family:monospace;padding:3px 8px;">' + sign + e.delta + '</td>'
+                                                + '<td style="font-size:11px;color:var(--SmartThemeBodyColor,inherit);opacity:0.45;padding:3px 0;">' + srcIcon + ' \u2192 ' + (e.newValue >= 0 ? '+' : '') + e.newValue + '</td>'
+                                                + '</tr>';
+                                        }
+                                        relLogHtml = '<div class="rt-npc-log-container" style="border-top:2px solid rgba(212,169,64,0.15);padding-top:18px;margin-top:18px;' + (logEntries.length === 0 ? 'display:none;' : '') + '">'
+                                            + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:4px;">'
+                                            + '<span style="font-size:11px;font-weight:bold;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:1.5px;">📊 Relationship History</span>'
+                                            + '<button class="rt-npc-log-clear-btn" style="background:transparent;border:none;color:#ff5555;cursor:pointer;font-size:10px;opacity:0.6;padding:0;" title="Clear relationship history">🗑️ Clear Log</button>'
+                                            + '</div>'
+                                            + '<table class="rt-npc-log-table" style="width:100%;border-collapse:collapse;">' + rows + '</table>'
+                                            + '</div>';
+                                    }
 
-                            popupDom.innerHTML = `
+                                    popupDom.innerHTML = `
                                 <div style="display:flex;gap:24px;margin-bottom:20px;align-items:flex-start;flex-wrap:wrap;">
                                     ${hidePortrait ? '' : `<div style="flex-shrink:0;width:280px;">${portraitEl}</div>`}
                                     <div style="flex:1;min-width:220px;display:flex;flex-direction:column;gap:8px;">
                                         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
                                             <div style="font-size:24px;font-weight:bold;color:#d4a940;line-height:1.2;">${escapeHtml(item.label)}</div>
-                                            <button class="rt-npc-popup-edit-btn menu_button" style="flex-shrink:0;font-size:12px;padding:4px 12px;white-space:nowrap;">✏️ Edit Text</button>
+                                            <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;">
+                                                <button class="rt-npc-popup-edit-btn menu_button" style="flex-shrink:0;font-size:12px;padding:4px 12px;white-space:nowrap;">✏️ Edit Text</button>
+                                                <button class="rt-npc-popup-ai-edit-btn menu_button" style="flex-shrink:0;font-size:12px;padding:4px 12px;white-space:nowrap;background:rgba(212,169,64,0.1);border-color:rgba(212,169,64,0.5);color:#d4a940;">✨ Edit with AI</button>
+                                            </div>
                                         </div>
                                         <span style="font-size:11px;padding:3px 10px;border-radius:10px;font-weight:bold;align-self:flex-start;${activeStyle}">${activeLabel}</span>
                                         ${barsBlockHtml}
@@ -5732,205 +5947,330 @@ function createPanel() {
                                             <button class="rt-npc-popup-save-btn menu_button" style="font-size:12px;padding:5px 18px;background:rgba(212,169,64,0.2);border-color:rgba(212,169,64,0.5);color:#d4a940;font-weight:bold;">💾 Save</button>
                                         </div>
                                     </div>
+                                    <!-- AI EDIT PANE -->
+                                    <div class="rt-npc-popup-ai-edit" style="display:none;flex-direction:column;gap:10px;">
+                                        <div style="font-size:11px;font-weight:bold;color:rgba(212,169,64,0.9);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:4px;">✨ AI Edit Request</div>
+                                        <textarea class="rt-npc-popup-ai-instructions" spellcheck="true" placeholder="Describe what you want changed or iterated on… e.g. 'Make her backstory more tragic' or 'Add a rivalry with the player character'" style="width:100%;min-height:90px;box-sizing:border-box;background:var(--SmartThemeBlurTintColor, rgba(0,0,0,0.3));color:var(--SmartThemeBodyColor, inherit);border:1px solid rgba(212,169,64,0.5);border-radius:8px;padding:12px;font-family:inherit;font-size:13px;line-height:1.6;resize:vertical;"></textarea>
+                                        <div style="display:flex;gap:8px;justify-content:flex-end;">
+                                            <button class="rt-npc-popup-ai-cancel-btn menu_button" style="font-size:12px;padding:5px 14px;">Cancel</button>
+                                            <button class="rt-npc-popup-ai-generate-btn menu_button" style="font-size:12px;padding:5px 18px;background:rgba(212,169,64,0.15);border-color:rgba(212,169,64,0.5);color:#d4a940;font-weight:bold;">✨ Generate</button>
+                                        </div>
+                                        <div class="rt-npc-popup-ai-preview" style="display:none;flex-direction:column;gap:8px;">
+                                            <div style="font-size:11px;font-weight:bold;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:1.5px;">Preview — Review before applying</div>
+                                            <textarea class="rt-npc-popup-ai-preview-text" spellcheck="false" style="width:100%;min-height:320px;box-sizing:border-box;background:rgba(0,0,0,0.35);color:var(--SmartThemeBodyColor, inherit);border:1px solid rgba(212,169,64,0.3);border-radius:8px;padding:12px;font-family:monospace;font-size:13px;line-height:1.6;resize:vertical;"></textarea>
+                                            <div style="display:flex;gap:8px;justify-content:flex-end;">
+                                                <button class="rt-npc-popup-ai-regen-btn menu_button" style="font-size:12px;padding:5px 14px;">🔄 Regenerate</button>
+                                                <button class="rt-npc-popup-ai-apply-btn menu_button" style="font-size:12px;padding:5px 18px;background:rgba(0,200,140,0.15);border-color:rgba(0,200,140,0.5);color:#00c88c;font-weight:bold;">✅ Apply</button>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                                 ${relLogHtml}
                             `;
 
 
 
-                            // Wire up in-popup edit/save/cancel
-                            const viewPane = popupDom.querySelector('.rt-npc-popup-view');
-                            const editPane = popupDom.querySelector('.rt-npc-popup-edit');
-                            const sectionsDiv = popupDom.querySelector('.rt-npc-popup-sections');
-                            const textarea = /** @type {HTMLTextAreaElement} */ (popupDom.querySelector('.rt-npc-popup-textarea'));
-                            const editBtn = popupDom.querySelector('.rt-npc-popup-edit-btn');
-                            const cancelBtn = popupDom.querySelector('.rt-npc-popup-cancel-btn');
-                            const saveBtn = /** @type {HTMLButtonElement} */ (popupDom.querySelector('.rt-npc-popup-save-btn'));
+                                    // Wire up in-popup edit/save/cancel
+                                    const viewPane = popupDom.querySelector('.rt-npc-popup-view');
+                                    const editPane = popupDom.querySelector('.rt-npc-popup-edit');
+                                    const aiEditPane = popupDom.querySelector('.rt-npc-popup-ai-edit');
+                                    const sectionsDiv = popupDom.querySelector('.rt-npc-popup-sections');
+                                    const textarea = /** @type {HTMLTextAreaElement} */ (popupDom.querySelector('.rt-npc-popup-textarea'));
+                                    const editBtn = popupDom.querySelector('.rt-npc-popup-edit-btn');
+                                    const aiEditBtn = popupDom.querySelector('.rt-npc-popup-ai-edit-btn');
+                                    const cancelBtn = popupDom.querySelector('.rt-npc-popup-cancel-btn');
+                                    const saveBtn = /** @type {HTMLButtonElement} */ (popupDom.querySelector('.rt-npc-popup-save-btn'));
+                                    const aiInstructionsEl = /** @type {HTMLTextAreaElement} */ (popupDom.querySelector('.rt-npc-popup-ai-instructions'));
+                                    const aiCancelBtn = popupDom.querySelector('.rt-npc-popup-ai-cancel-btn');
+                                    const aiGenerateBtn = /** @type {HTMLButtonElement} */ (popupDom.querySelector('.rt-npc-popup-ai-generate-btn'));
+                                    const aiPreviewPane = popupDom.querySelector('.rt-npc-popup-ai-preview');
+                                    const aiPreviewText = /** @type {HTMLTextAreaElement} */ (popupDom.querySelector('.rt-npc-popup-ai-preview-text'));
+                                    const aiRegenBtn = /** @type {HTMLButtonElement} */ (popupDom.querySelector('.rt-npc-popup-ai-regen-btn'));
+                                    const aiApplyBtn = /** @type {HTMLButtonElement} */ (popupDom.querySelector('.rt-npc-popup-ai-apply-btn'));
 
-                            editBtn.addEventListener('click', () => {
-                                textarea.value = item.content || '';
-                                viewPane.style.display = 'none';
-                                editPane.style.display = 'flex';
-                                textarea.focus();
-                            });
-
-                            cancelBtn.addEventListener('click', () => {
-                                editPane.style.display = 'none';
-                                viewPane.style.display = 'block';
-                            });
-
-                            const clearLogBtn = popupDom.querySelector('.rt-npc-log-clear-btn');
-                            if (clearLogBtn) {
-                                clearLogBtn.addEventListener('click', () => {
-                                    if (confirm('Clear relationship history log for this NPC? (This cannot be undone)')) {
-                                        const cleanS = getSettings();
-                                        if (cleanS.npcRelationshipLog) {
-                                            delete cleanS.npcRelationshipLog[item.id];
-                                            saveSettings();
-                                        }
-                                        const logContainer = popupDom.querySelector('.rt-npc-log-container');
-                                        if (logContainer) logContainer.style.display = 'none';
-                                        
-                                        // Also clear the badges in the background card UI!
-                                        const cardEl = document.querySelector(`.rt-npc-card[data-entry-id="${item.id}"]`);
-                                        if (cardEl) {
-                                            cardEl.querySelectorAll('.rt-npc-bar-value span').forEach(badge => badge.remove());
-                                        }
+                                    // Portrait click/generate overlay — same behavior as the small NPC card thumbnail.
+                                    const popupPortraitWrap = popupDom.querySelector('.rt-npc-popup-portrait-wrap');
+                                    if (popupPortraitWrap) {
+                                        popupPortraitWrap.addEventListener('click', async (e) => {
+                                            e.stopPropagation();
+                                            const refreshPopupPortrait = () => {
+                                                const norm = item.label.replace(/\s*\(.*?\)/g, '').trim();
+                                                const newSrc = getSettings().customPortraits?.[norm] || '';
+                                                popupPortraitWrap.innerHTML = renderNpcPopupPortraitInner(newSrc);
+                                                if (typeof refreshManifest === 'function') refreshManifest();
+                                                if (typeof refreshRenderedView === 'function') refreshRenderedView();
+                                            };
+                                            await showPortraitSettingsMenu(item.label, refreshPopupPortrait, item.content || '');
+                                        });
                                     }
-                                });
-                            }
 
-                            const bindSlider = (type) => {
-                                const slider = popupDom.querySelector(`#rt-npc-detail-${type}-slider`);
-                                const fill = popupDom.querySelector(`#rt-npc-detail-${type}-fill`);
-                                const text = popupDom.querySelector(`#rt-npc-detail-${type}-text`);
-                                const tierEl = popupDom.querySelector(`#rt-npc-detail-${type}-tier`);
-                                if (!slider || !fill || !text) return;
-                                
-                                let originalValue = parseInt(slider.value, 10) || 0;
-                                
-                                slider.addEventListener('input', () => {
-                                    const val = parseInt(slider.value, 10) || 0;
-                                    const relMax = getNpcRelationshipMax(s);
-                                    const pct = relationshipBarPct(val, relMax);
-                                    const isPos = val >= 0;
-                                    fill.style.width = pct + '%';
-                                    fill.style.left = isPos ? '50%' : 'auto';
-                                    fill.style.right = isPos ? 'auto' : '50%';
-                                    
-                                    const colorPos = type === 'friendship' ? '#4ade80' : '#f472b6';
-                                    const colorNeg = type === 'friendship' ? '#ef4444' : '#a855f7';
-                                    const bgColor = isPos ? colorPos : colorNeg;
-                                    fill.style.background = bgColor;
-                                    
-                                    text.textContent = (val > 0 ? '+' : '') + val;
-                                    text.style.color = val === 0 ? 'var(--SmartThemeEmColor, inherit)' : bgColor;
+                                    const npcShowPane = (pane) => {
+                                        viewPane.style.display = 'none';
+                                        editPane.style.display = 'none';
+                                        aiEditPane.style.display = 'none';
+                                        if (pane) pane.style.display = 'flex';
+                                    };
 
-                                    if (tierEl) tierEl.innerHTML = renderRelTierDetailed(type, val, relMax);
-                                });
-                                
-                                slider.addEventListener('change', () => {
-                                    const val = clampRelationshipValue(parseInt(slider.value, 10) || 0, getNpcRelationshipMax(s));
-                                    if (val === originalValue) return;
-                                    
-                                    // Update the setting
-                                    if (!s.npcRelationshipValues) s.npcRelationshipValues = {};
-                                    if (!s.npcRelationshipValues[item.id]) s.npcRelationshipValues[item.id] = { friendship: 0, affection: 0 };
-                                    s.npcRelationshipValues[item.id][type] = val;
-                                    saveSettings();
-                                    
-                                    originalValue = val;
-                                    
-                                    // Dynamically re-render the NPC card in the background UI
-                                    const cardEl = document.querySelector(`.rt-npc-card[data-entry-id="${item.id}"]`);
-                                    if (cardEl) {
-                                        const bgIsPos = val >= 0;
-                                        const bgBarColor = bgIsPos 
-                                            ? (type === 'friendship' ? '#4ade80' : '#f472b6')
-                                            : (type === 'friendship' ? '#ef4444' : '#a855f7');
-                                        
-                                        const barFill = cardEl.querySelector(`.rt-npc-bar-fill.${type}-pos, .rt-npc-bar-fill.${type}-neg`);
-                                        if (barFill) {
-                                            barFill.style.width = relationshipBarPct(val, getNpcRelationshipMax(s)) + '%';
-                                            barFill.style.left = bgIsPos ? '50%' : 'auto';
-                                            barFill.style.right = bgIsPos ? 'auto' : '50%';
-                                            barFill.style.background = bgBarColor;
-                                            barFill.className = `rt-npc-bar-fill ${type}-${bgIsPos ? 'pos positive' : 'neg negative'}`;
+                                    editBtn.addEventListener('click', () => {
+                                        textarea.value = item.content || '';
+                                        npcShowPane(editPane);
+                                        textarea.focus();
+                                    });
 
-                                            const rowEl = barFill.closest('.rt-npc-bar-row');
-                                            if (rowEl) {
-                                                const valText = rowEl.querySelector('.rt-npc-bar-value');
-                                                if (valText) {
-                                                    if (valText.firstChild && valText.firstChild.nodeType === Node.TEXT_NODE) {
-                                                        valText.firstChild.nodeValue = `${val > 0 ? '+' : ''}${val}`;
-                                                    } else {
-                                                        valText.innerHTML = `${val > 0 ? '+' : ''}${val}`;
-                                                    }
-                                                    
-                                                    const valClass = type === 'friendship'
-                                                        ? (val > 0 ? 'val-positive' : val < 0 ? 'val-negative' : 'val-zero')
-                                                        : (val > 0 ? 'val-affection-positive' : val < 0 ? 'val-affection-negative' : 'val-zero');
-                                                    valText.className = `rt-npc-bar-value ${valClass}`;
+                                    cancelBtn.addEventListener('click', () => npcShowPane(viewPane));
+
+                                    // ── AI Edit ─────────────────────────────────────────
+                                    aiEditBtn.addEventListener('click', () => {
+                                        aiPreviewPane.style.display = 'none';
+                                        aiInstructionsEl.value = '';
+                                        npcShowPane(aiEditPane);
+                                        aiInstructionsEl.focus();
+                                    });
+
+                                    aiCancelBtn.addEventListener('click', () => npcShowPane(viewPane));
+
+                                    const runNpcAiEdit = async () => {
+                                        const instructions = aiInstructionsEl.value.trim();
+                                        if (!instructions) { toastr['warning']('Please describe what you want changed.', 'Edit with AI'); return; }
+                                        aiGenerateBtn.disabled = true; aiRegenBtn.disabled = true;
+                                        aiGenerateBtn.textContent = '⏳ Generating…';
+                                        const curSettings = getSettings();
+                                        const aiSettings = {
+                                            connectionSource: curSettings.routerConnectionSource ?? 'default',
+                                            connectionProfileId: curSettings.routerConnectionProfileId || '',
+                                            completionPresetId: curSettings.routerCompletionPresetId || '',
+                                            ollamaUrl: curSettings.routerOllamaUrl || 'http://localhost:11434',
+                                            ollamaModel: curSettings.routerOllamaModel || '',
+                                            openaiUrl: curSettings.routerOpenaiUrl || '',
+                                            openaiKey: curSettings.routerOpenaiKey || '',
+                                            openaiModel: curSettings.routerOpenaiModel || '',
+                                            maxTokens: curSettings.routerMaxTokens || 0,
+                                            debugMode: curSettings.debugMode,
+                                        };
+                                        const sysPrompt = `You are a character editor for a roleplay lorebook system. The user wants to make specific changes to an existing NPC entry. Output the ENTIRE revised entry with the requested changes applied — keep the same format and everything else identical. Do not add preambles or commentary. Output only the revised entry text.`;
+                                        const userMsg = `CURRENT NPC ENTRY:\n${item.content || ''}\n\nREQUESTED CHANGES:\n${instructions}\n\nOutput the full revised entry now.`;
+                                        try {
+                                            const result = await sendStateRequest(aiSettings, sysPrompt, userMsg);
+                                            const trimmed = (result || '').trim();
+                                            if (trimmed) {
+                                                aiPreviewText.value = trimmed;
+                                                aiPreviewPane.style.display = 'flex';
+                                            } else {
+                                                toastr['warning']('AI returned an empty result. Please try again.', 'Edit with AI');
+                                            }
+                                        } catch (err) {
+                                            toastr['error'](`AI edit failed: ${String(err.message || err).substring(0, 120)}`, 'Edit with AI');
+                                        }
+                                        aiGenerateBtn.disabled = false; aiRegenBtn.disabled = false;
+                                        aiGenerateBtn.textContent = '✨ Generate';
+                                    };
+
+                                    aiGenerateBtn.addEventListener('click', runNpcAiEdit);
+                                    aiRegenBtn.addEventListener('click', runNpcAiEdit);
+
+                                    aiApplyBtn.addEventListener('click', async () => {
+                                        if (isRouterRunning()) {
+                                            // @ts-ignore
+                                            toastr.warning('Agent is running — wait for it to finish before saving.', 'Lorebook Agent');
+                                            return;
+                                        }
+                                        aiApplyBtn.disabled = true;
+                                        aiApplyBtn.textContent = '…';
+                                        const ok = await updateLorebookEntry(item.id, {
+                                            content: aiPreviewText.value,
+                                            key: item.keys,
+                                            comment: item.label,
+                                        });
+                                        if (ok) {
+                                            item.content = aiPreviewText.value;
+                                            _dirtyEntries.delete(item.id);
+                                            document.dispatchEvent(new CustomEvent('rt_lore_agent_updated'));
+                                            await refreshManifest();
+                                            const newHtml = renderSectionsHtml(item.content);
+                                            sectionsDiv.innerHTML = newHtml || `<div style="font-size:14px;color:var(--SmartThemeBodyColor, inherit);opacity:0.5;font-style:italic;padding:16px 0;">No structured sections found.</div>`;
+                                            npcShowPane(viewPane);
+                                            // @ts-ignore
+                                            toastr.success('NPC entry updated via AI.', 'Lorebook Agent');
+                                        } else {
+                                            // @ts-ignore
+                                            toastr.error('Save failed.', 'Lorebook Agent');
+                                        }
+                                        aiApplyBtn.disabled = false;
+                                        aiApplyBtn.textContent = '✅ Apply';
+                                    });
+
+                                    const clearLogBtn = popupDom.querySelector('.rt-npc-log-clear-btn');
+                                    if (clearLogBtn) {
+                                        clearLogBtn.addEventListener('click', () => {
+                                            if (confirm('Clear relationship history log for this NPC? (This cannot be undone)')) {
+                                                const cleanS = getSettings();
+                                                if (cleanS.npcRelationshipLog) {
+                                                    delete cleanS.npcRelationshipLog[item.id];
+                                                    saveSettings();
+                                                }
+                                                const logContainer = popupDom.querySelector('.rt-npc-log-container');
+                                                if (logContainer) logContainer.style.display = 'none';
+
+                                                // Also clear the badges in the background card UI!
+                                                const cardEl = document.querySelector(`.rt-npc-card[data-entry-id="${item.id}"]`);
+                                                if (cardEl) {
+                                                    cardEl.querySelectorAll('.rt-npc-bar-value span').forEach(badge => badge.remove());
                                                 }
                                             }
-                                        }
-
-                                        const tierBadge = cardEl.querySelector(`.rt-npc-tier-badge.${type}`);
-                                        if (tierBadge) applyRelTierBadgeElement(tierBadge, type, val, getNpcRelationshipMax(s));
+                                        });
                                     }
-                                });
-                            };
 
-                            if (s.npcRelationshipBars) {
-                                bindSlider('friendship');
-                                bindSlider('affection');
+                                    const bindSlider = (type) => {
+                                        const slider = popupDom.querySelector(`#rt-npc-detail-${type}-slider`);
+                                        const fill = popupDom.querySelector(`#rt-npc-detail-${type}-fill`);
+                                        const text = popupDom.querySelector(`#rt-npc-detail-${type}-text`);
+                                        const tierEl = popupDom.querySelector(`#rt-npc-detail-${type}-tier`);
+                                        if (!slider || !fill || !text) return;
+
+                                        let originalValue = parseInt(slider.value, 10) || 0;
+
+                                        slider.addEventListener('input', () => {
+                                            const val = parseInt(slider.value, 10) || 0;
+                                            const relMax = getNpcRelationshipMax(s);
+                                            const pct = relationshipBarPct(val, relMax);
+                                            const isPos = val >= 0;
+                                            fill.style.width = pct + '%';
+                                            fill.style.left = isPos ? '50%' : 'auto';
+                                            fill.style.right = isPos ? 'auto' : '50%';
+
+                                            const colorPos = type === 'friendship' ? '#4ade80' : '#f472b6';
+                                            const colorNeg = type === 'friendship' ? '#ef4444' : '#a855f7';
+                                            const bgColor = isPos ? colorPos : colorNeg;
+                                            fill.style.background = bgColor;
+
+                                            text.textContent = (val > 0 ? '+' : '') + val;
+                                            text.style.color = val === 0 ? 'var(--SmartThemeEmColor, inherit)' : bgColor;
+
+                                            if (tierEl) tierEl.innerHTML = renderRelTierDetailed(type, val, relMax);
+                                        });
+
+                                        slider.addEventListener('change', () => {
+                                            const val = clampRelationshipValue(parseInt(slider.value, 10) || 0, getNpcRelationshipMax(s));
+                                            if (val === originalValue) return;
+
+                                            // Update the setting
+                                            if (!s.npcRelationshipValues) s.npcRelationshipValues = {};
+                                            if (!s.npcRelationshipValues[item.id]) s.npcRelationshipValues[item.id] = { friendship: 0, affection: 0 };
+                                            s.npcRelationshipValues[item.id][type] = val;
+                                            saveSettings();
+
+                                            originalValue = val;
+
+                                            // Dynamically re-render the NPC card in the background UI
+                                            const cardEl = document.querySelector(`.rt-npc-card[data-entry-id="${item.id}"]`);
+                                            if (cardEl) {
+                                                const bgIsPos = val >= 0;
+                                                const bgBarColor = bgIsPos
+                                                    ? (type === 'friendship' ? '#4ade80' : '#f472b6')
+                                                    : (type === 'friendship' ? '#ef4444' : '#a855f7');
+
+                                                const barFill = cardEl.querySelector(`.rt-npc-bar-fill.${type}-pos, .rt-npc-bar-fill.${type}-neg`);
+                                                if (barFill) {
+                                                    barFill.style.width = relationshipBarPct(val, getNpcRelationshipMax(s)) + '%';
+                                                    barFill.style.left = bgIsPos ? '50%' : 'auto';
+                                                    barFill.style.right = bgIsPos ? 'auto' : '50%';
+                                                    barFill.style.background = bgBarColor;
+                                                    barFill.className = `rt-npc-bar-fill ${type}-${bgIsPos ? 'pos positive' : 'neg negative'}`;
+
+                                                    const rowEl = barFill.closest('.rt-npc-bar-row');
+                                                    if (rowEl) {
+                                                        const valText = rowEl.querySelector('.rt-npc-bar-value');
+                                                        if (valText) {
+                                                            if (valText.firstChild && valText.firstChild.nodeType === Node.TEXT_NODE) {
+                                                                valText.firstChild.nodeValue = `${val > 0 ? '+' : ''}${val}`;
+                                                            } else {
+                                                                valText.innerHTML = `${val > 0 ? '+' : ''}${val}`;
+                                                            }
+
+                                                            const valClass = type === 'friendship'
+                                                                ? (val > 0 ? 'val-positive' : val < 0 ? 'val-negative' : 'val-zero')
+                                                                : (val > 0 ? 'val-affection-positive' : val < 0 ? 'val-affection-negative' : 'val-zero');
+                                                            valText.className = `rt-npc-bar-value ${valClass}`;
+                                                        }
+                                                    }
+                                                }
+
+                                                const tierBadge = cardEl.querySelector(`.rt-npc-tier-badge.${type}`);
+                                                if (tierBadge) applyRelTierBadgeElement(tierBadge, type, val, getNpcRelationshipMax(s));
+                                            }
+                                        });
+                                    };
+
+                                    if (s.npcRelationshipBars) {
+                                        bindSlider('friendship');
+                                        bindSlider('affection');
+                                    }
+
+                                    saveBtn.addEventListener('click', async () => {
+                                        if (isRouterRunning()) {
+                                            // @ts-ignore
+                                            toastr.warning('Agent is running — wait for it to finish before saving.', 'Lorebook Agent');
+                                            return;
+                                        }
+                                        saveBtn.disabled = true;
+                                        saveBtn.textContent = '…';
+                                        const ok = await updateLorebookEntry(item.id, {
+                                            content: textarea.value,
+                                            key: item.keys,
+                                            comment: item.label,
+                                        });
+                                        if (ok) {
+                                            item.content = textarea.value;
+                                            _dirtyEntries.delete(item.id);
+                                            document.dispatchEvent(new CustomEvent('rt_lore_agent_updated'));
+                                            await refreshManifest();
+                                            // @ts-ignore
+                                            toastr.success('Entry saved.', 'Lorebook Agent');
+                                            const newHtml = renderSectionsHtml(item.content);
+                                            sectionsDiv.innerHTML = newHtml || `<div style="font-size:14px;color:var(--SmartThemeBodyColor, inherit);opacity:0.5;font-style:italic;padding:16px 0;">No structured sections found. Click Edit Text to add content.</div>`;
+                                            editPane.style.display = 'none';
+                                            viewPane.style.display = 'block';
+                                        } else {
+                                            // @ts-ignore
+                                            toastr.error('Save failed.', 'Lorebook Agent');
+                                        }
+                                        saveBtn.disabled = false;
+                                        saveBtn.textContent = '💾 Save';
+                                    });
+
+                                    // Show popup with DOM element (upstream approach)
+
+                                    const popupOpts = { okButton: 'Close', cancelButton: false, wide: true, large: true };
+                                    await ctx.callGenericPopup(popupDom, ctx.POPUP_TYPE?.TEXT ?? 1, '', popupOpts);
+                                };
+
                             }
 
-                            saveBtn.addEventListener('click', async () => {
-                                if (isRouterRunning()) {
-                                    // @ts-ignore
-                                    toastr.warning('Agent is running — wait for it to finish before saving.', 'Lorebook Agent');
-                                    return;
-                                }
-                                saveBtn.disabled = true;
-                                saveBtn.textContent = '…';
-                                const ok = await updateLorebookEntry(item.id, {
-                                    content: textarea.value,
-                                    key: item.keys,
-                                    comment: item.label,
-                                });
-                                if (ok) {
-                                    item.content = textarea.value;
-                                    _dirtyEntries.delete(item.id);
-                                    document.dispatchEvent(new CustomEvent('rt_lore_agent_updated'));
-                                    await refreshManifest();
-                                    // @ts-ignore
-                                    toastr.success('Entry saved.', 'Lorebook Agent');
-                                    const newHtml = renderSectionsHtml(item.content);
-                                    sectionsDiv.innerHTML = newHtml || `<div style="font-size:14px;color:var(--SmartThemeBodyColor, inherit);opacity:0.5;font-style:italic;padding:16px 0;">No structured sections found. Click Edit Text to add content.</div>`;
-                                    editPane.style.display = 'none';
-                                    viewPane.style.display = 'block';
-                                } else {
-                                    // @ts-ignore
-                                    toastr.error('Save failed.', 'Lorebook Agent');
-                                }
-                                saveBtn.disabled = false;
-                                saveBtn.textContent = '💾 Save';
-                            });
+                            // ════════════════════════════════════════════════════════════
+                            //  NPC CARD GRID RENDERING
+                            // ════════════════════════════════════════════════════════════
+                            if (useNpcCardView) {
 
-                            // Show popup with DOM element (upstream approach)
+                                const npcGrid = document.createElement('div');
+                                npcGrid.className = 'rt-npc-card-grid';
 
-                            const popupOpts = { okButton: 'Close', cancelButton: false, wide: true, large: true };
-                            await ctx.callGenericPopup(popupDom, ctx.POPUP_TYPE?.TEXT ?? 1, '', popupOpts);
-                        };
+                                for (const item of items) {
+                                    const rel = parseRelationship ? parseRelationship(item.id) : { friendship: 0, affection: 0 };
+                                    const desc = getNpcDescription ? getNpcDescription(item.content) : '';
+                                    const normLabel = item.label.replace(/\s*\(.*?\)/g, '').trim();
+                                    const portraitSrc = s.customPortraits?.[normLabel] || '';
+                                    const isDirty = _dirtyEntries.has(item.id);
 
-                    }
+                                    const card = document.createElement('div');
+                                    card.className = 'rt-npc-card';
+                                    card.dataset.entryId = item.id;
 
-                    // ════════════════════════════════════════════════════════════
-                    //  NPC CARD GRID RENDERING
-                    // ════════════════════════════════════════════════════════════
-                    if (useNpcCardView) {
+                                    // Portrait area
+                                    const portraitHtml = portraitSrc
+                                        ? `<img src="${escapeHtml(portraitSrc)}" alt="${escapeHtml(item.label)}">`
+                                        : `<div class="rt-npc-portrait-placeholder">👤</div>`;
 
-                        const npcGrid = document.createElement('div');
-                        npcGrid.className = 'rt-npc-card-grid';
-
-                        for (const item of items) {
-                            const rel = parseRelationship ? parseRelationship(item.id) : { friendship: 0, affection: 0 };
-                            const desc = getNpcDescription ? getNpcDescription(item.content) : '';
-                            const normLabel = item.label.replace(/\s*\(.*?\)/g, '').trim();
-                            const portraitSrc = s.customPortraits?.[normLabel] || '';
-                            const isDirty = _dirtyEntries.has(item.id);
-
-                            const card = document.createElement('div');
-                            card.className = 'rt-npc-card';
-                            card.dataset.entryId = item.id;
-
-                            // Portrait area
-                            const portraitHtml = portraitSrc
-                                ? `<img src="${escapeHtml(portraitSrc)}" alt="${escapeHtml(item.label)}">`
-                                : `<div class="rt-npc-portrait-placeholder">👤</div>`;
-
-                            card.innerHTML = `
+                                    card.innerHTML = `
                                 <div class="rt-npc-portrait-wrap">
                                     ${portraitHtml}
                                     <div class="rt-npc-portrait-gen-overlay" title="${portraitSrc ? 'Manage portrait' : 'Generate portrait'}">${portraitSrc ? '⚙️' : '🎨'}</div>
@@ -5952,371 +6292,371 @@ function createPanel() {
                                 </div>
                             `;
 
-                            // Entry body (edit pane) — built lazily on first expand to keep manifest snappy
-                            let entryBody = null;
-                            const dirtySnap = isDirty ? _dirtyEntries.get(item.id) : null;
-                            const ensureEntryBody = () => {
-                                if (entryBody) return entryBody;
-                                const fakeHdr = document.createElement('div');
-                                entryBody = buildEntryBody(item, fakeHdr, {
-                                    stale: !!isDirty,
-                                    dirty: dirtySnap || null,
-                                    isNpcEntry: true,
-                                });
-                                entryBody.classList.add('rt-npc-card-entry');
-                                entryBody.style.display = 'none';
-                                entryBody.style.marginTop = '6px';
-                                entryBody.style.borderTop = '1px solid rgba(212, 169, 64, 0.1)';
-                                entryBody.style.paddingTop = '6px';
-                                card.appendChild(entryBody);
-                                return entryBody;
-                            };
-
-                            if (_openEntries.has(item.id)) {
-                                ensureEntryBody().style.display = 'flex';
-                                card.classList.add('open');
-                            }
-
-                            // Click card body → toggle inline view
-                            card.addEventListener('click', (e) => {
-                                if (/** @type {HTMLElement} */ (e.target).closest('.rt-npc-portrait-wrap, .rt-npc-portrait-gen-overlay, .rt-npc-action-btn, .rt-npc-view, .rt-npc-edit, .rt-npc-clean, .rt-npc-delete, textarea, input, button, select')) return;
-                                const body = ensureEntryBody();
-                                const opening = body.style.display === 'none';
-                                body.style.display = opening ? 'flex' : 'none';
-                                if (opening) {
-                                    _openEntries.add(item.id);
-                                    card.classList.add('open');
-                                } else {
-                                    _openEntries.delete(item.id);
-                                    card.classList.remove('open');
-                                }
-                            });
-
-
-                            // Portrait click/generate overlay handlers
-                            const portraitWrap = card.querySelector('.rt-npc-portrait-wrap');
-                            if (portraitWrap) {
-                                portraitWrap.addEventListener('click', async (e) => {
-                                    e.stopPropagation();
-                                    const refreshBoth = () => {
-                                        if (typeof refreshManifest === 'function') refreshManifest();
-                                        if (typeof refreshRenderedView === 'function') refreshRenderedView();
+                                    // Entry body (edit pane) — built lazily on first expand to keep manifest snappy
+                                    let entryBody = null;
+                                    const dirtySnap = isDirty ? _dirtyEntries.get(item.id) : null;
+                                    const ensureEntryBody = () => {
+                                        if (entryBody) return entryBody;
+                                        const fakeHdr = document.createElement('div');
+                                        entryBody = buildEntryBody(item, fakeHdr, {
+                                            stale: !!isDirty,
+                                            dirty: dirtySnap || null,
+                                            isNpcEntry: true,
+                                        });
+                                        entryBody.classList.add('rt-npc-card-entry');
+                                        entryBody.style.display = 'none';
+                                        entryBody.style.marginTop = '6px';
+                                        entryBody.style.borderTop = '1px solid rgba(212, 169, 64, 0.1)';
+                                        entryBody.style.paddingTop = '6px';
+                                        card.appendChild(entryBody);
+                                        return entryBody;
                                     };
-                                    await showPortraitSettingsMenu(item.label, refreshBoth, item.content || '');
-                                });
-                            }
 
-                            // Action button handlers
-                            const viewBtn = card.querySelector('.rt-npc-view');
-                            if (viewBtn) viewBtn.addEventListener('click', (e) => {
-                                e.stopPropagation();
-                                openNpcDetailPopup(item, parseRelationship(item.id));
-                            });
+                                    if (_openEntries.has(item.id)) {
+                                        ensureEntryBody().style.display = 'flex';
+                                        card.classList.add('open');
+                                    }
 
-                            const editBtn = card.querySelector('.rt-npc-edit');
-                            if (editBtn) editBtn.addEventListener('click', (e) => {
-                                e.stopPropagation();
-                                const body = ensureEntryBody();
-                                // Always open the entry body
-                                body.style.display = 'flex';
-                                _openEntries.add(item.id);
-                                card.classList.add('open');
-                                // Trigger the internal edit mode (switch from readPane to editPane)
-                                const internalEditBtn = body.querySelector('.rt-agent-entry-edit');
-                                if (internalEditBtn) {
-                                    internalEditBtn.click();
-                                } else {
-                                    // Fallback: directly toggle panes if no internal button
-                                    const readPane = body.querySelector('.rt-agent-manifest-read');
-                                    const editPane = body.querySelector('.rt-agent-manifest-edit');
-                                    if (readPane) readPane.style.display = 'none';
-                                    if (editPane) editPane.style.display = 'flex';
-                                }
-                            });
-
-                            const cleanBtn = card.querySelector('.rt-npc-clean');
-                            if (cleanBtn) cleanBtn.addEventListener('click', async (e) => {
-                                e.stopPropagation();
-                                if (isRouterRunning()) { toastr['warning']('Agent is busy.'); return; }
-                                const [bk, uid] = item.id.split('::');
-                                await runRouterPass(null, `__CLEANUP__::${bk}::${uid}`, null, true);
-                                await refreshManifest();
-                            });
-
-                            const delBtn = card.querySelector('.rt-npc-delete');
-                            if (delBtn) delBtn.addEventListener('click', async (e) => {
-                                e.stopPropagation();
-                                if (confirm(`Delete NPC "${item.label}"?`)) {
-                                    const ok = await deleteLorebookEntry(item.id);
-                                    if (ok) {
-                                        _dirtyEntries.delete(item.id);
-                                        _openEntries.delete(item.id);
-                                        // Clean up code-owned relationship values for this NPC
-                                        const delSettings = getSettings();
-                                        if (delSettings.npcRelationshipValues) {
-                                            delete delSettings.npcRelationshipValues[item.id];
+                                    // Click card body → toggle inline view
+                                    card.addEventListener('click', (e) => {
+                                        if (/** @type {HTMLElement} */ (e.target).closest('.rt-npc-portrait-wrap, .rt-npc-portrait-gen-overlay, .rt-npc-action-btn, .rt-npc-view, .rt-npc-edit, .rt-npc-clean, .rt-npc-delete, textarea, input, button, select')) return;
+                                        const body = ensureEntryBody();
+                                        const opening = body.style.display === 'none';
+                                        body.style.display = opening ? 'flex' : 'none';
+                                        if (opening) {
+                                            _openEntries.add(item.id);
+                                            card.classList.add('open');
+                                        } else {
+                                            _openEntries.delete(item.id);
+                                            card.classList.remove('open');
                                         }
+                                    });
+
+
+                                    // Portrait click/generate overlay handlers
+                                    const portraitWrap = card.querySelector('.rt-npc-portrait-wrap');
+                                    if (portraitWrap) {
+                                        portraitWrap.addEventListener('click', async (e) => {
+                                            e.stopPropagation();
+                                            const refreshBoth = () => {
+                                                if (typeof refreshManifest === 'function') refreshManifest();
+                                                if (typeof refreshRenderedView === 'function') refreshRenderedView();
+                                            };
+                                            await showPortraitSettingsMenu(item.label, refreshBoth, item.content || '');
+                                        });
+                                    }
+
+                                    // Action button handlers
+                                    const viewBtn = card.querySelector('.rt-npc-view');
+                                    if (viewBtn) viewBtn.addEventListener('click', (e) => {
+                                        e.stopPropagation();
+                                        openNpcDetailPopup(item, parseRelationship(item.id));
+                                    });
+
+                                    const editBtn = card.querySelector('.rt-npc-edit');
+                                    if (editBtn) editBtn.addEventListener('click', (e) => {
+                                        e.stopPropagation();
+                                        const body = ensureEntryBody();
+                                        // Always open the entry body
+                                        body.style.display = 'flex';
+                                        _openEntries.add(item.id);
+                                        card.classList.add('open');
+                                        // Trigger the internal edit mode (switch from readPane to editPane)
+                                        const internalEditBtn = body.querySelector('.rt-agent-entry-edit');
+                                        if (internalEditBtn) {
+                                            internalEditBtn.click();
+                                        } else {
+                                            // Fallback: directly toggle panes if no internal button
+                                            const readPane = body.querySelector('.rt-agent-manifest-read');
+                                            const editPane = body.querySelector('.rt-agent-manifest-edit');
+                                            if (readPane) readPane.style.display = 'none';
+                                            if (editPane) editPane.style.display = 'flex';
+                                        }
+                                    });
+
+                                    const cleanBtn = card.querySelector('.rt-npc-clean');
+                                    if (cleanBtn) cleanBtn.addEventListener('click', async (e) => {
+                                        e.stopPropagation();
+                                        if (isRouterRunning()) { toastr['warning']('Agent is busy.'); return; }
+                                        const [bk, uid] = item.id.split('::');
+                                        await runRouterPass(null, `__CLEANUP__::${bk}::${uid}`, null, true);
                                         await refreshManifest();
-                                        toastr['success'](`Deleted "${item.label}"`, 'NPCs');
+                                    });
+
+                                    const delBtn = card.querySelector('.rt-npc-delete');
+                                    if (delBtn) delBtn.addEventListener('click', async (e) => {
+                                        e.stopPropagation();
+                                        if (confirm(`Delete NPC "${item.label}"?`)) {
+                                            const ok = await deleteLorebookEntry(item.id);
+                                            if (ok) {
+                                                _dirtyEntries.delete(item.id);
+                                                _openEntries.delete(item.id);
+                                                // Clean up code-owned relationship values for this NPC
+                                                const delSettings = getSettings();
+                                                if (delSettings.npcRelationshipValues) {
+                                                    delete delSettings.npcRelationshipValues[item.id];
+                                                }
+                                                await refreshManifest();
+                                                toastr['success'](`Deleted "${item.label}"`, 'NPCs');
+                                            }
+                                        }
+                                    });
+
+                                    // Portrait drag-and-drop
+                                    if (portraitWrap) {
+                                        portraitWrap.addEventListener('dragover', (e) => { e.preventDefault(); portraitWrap.style.borderColor = '#d4a940'; });
+                                        portraitWrap.addEventListener('dragleave', () => { portraitWrap.style.borderColor = ''; });
+                                        portraitWrap.addEventListener('drop', async (e) => {
+                                            e.preventDefault();
+                                            portraitWrap.style.borderColor = '';
+                                            const file = e.dataTransfer?.files?.[0];
+                                            if (!file || !file.type.startsWith('image/')) return;
+                                            try {
+                                                const dataUrl = await fileToDataUrl(file);
+                                                const scaled = await scaleImageTo512Square(dataUrl);
+                                                applyPortraitData(item.label, scaled);
+                                                toastr['success'](`Portrait applied for ${item.label}`, 'NPC Portrait');
+                                                await refreshManifest();
+                                                refreshRenderedView();
+                                            } catch (err) {
+                                                toastr['error']('Failed to apply portrait.', 'NPC Portrait');
+                                            }
+                                        });
+                                    }
+
+                                    npcGrid.appendChild(card);
+                                }
+
+                                folderBody.appendChild(npcGrid);
+                            }
+
+                            // ════════════════════════════════════════════════════════════
+                            //  DEFAULT TREE RENDERING (compact view — non-NPC books, or NPCs with portraits off)
+                            // ════════════════════════════════════════════════════════════
+                            if (!useNpcCardView) {
+
+                                // Define TreeNode class locally
+                                class TreeNode {
+                                    constructor(name, item = null) {
+                                        this.name = name;
+                                        this.item = item;
+                                        /** @type {Map<string, TreeNode>} */
+                                        this.children = new Map();
+                                        /** @type {TreeNode|null} */
+                                        this.parent = null;
                                     }
                                 }
-                            });
 
-                            // Portrait drag-and-drop
-                            if (portraitWrap) {
-                                portraitWrap.addEventListener('dragover', (e) => { e.preventDefault(); portraitWrap.style.borderColor = '#d4a940'; });
-                                portraitWrap.addEventListener('dragleave', () => { portraitWrap.style.borderColor = ''; });
-                                portraitWrap.addEventListener('drop', async (e) => {
-                                    e.preventDefault();
-                                    portraitWrap.style.borderColor = '';
-                                    const file = e.dataTransfer?.files?.[0];
-                                    if (!file || !file.type.startsWith('image/')) return;
-                                    try {
-                                        const dataUrl = await fileToDataUrl(file);
-                                        const scaled = await scaleImageTo512Square(dataUrl);
-                                        applyPortraitData(item.label, scaled);
-                                        toastr['success'](`Portrait applied for ${item.label}`, 'NPC Portrait');
-                                        await refreshManifest();
-                                        refreshRenderedView();
-                                    } catch (err) {
-                                        toastr['error']('Failed to apply portrait.', 'NPC Portrait');
+
+                                const getNodePath = (node, bookName) => {
+                                    const parts = [];
+                                    let curr = node;
+                                    while (curr && curr.name) {
+                                        parts.unshift(curr.name);
+                                        curr = curr.parent;
                                     }
-                                });
-                            }
+                                    return bookName + '::' + parts.join('::');
+                                };
 
-                            npcGrid.appendChild(card);
-                        }
+                                const getEntryParts = (item) => {
+                                    const bookNameLower = (item.book || '').toLowerCase();
+                                    const isEventsBook = bookNameLower.includes('events') || bookNameLower.includes('event');
 
-                        folderBody.appendChild(npcGrid);
-                    }
+                                    if (isEventsBook) {
+                                        // Check for DD/MM/YY
+                                        const dateRegex = /\[([^\]]*\b(\d{1,2})\/(\d{1,2})\/(\d+)\b[^\]]*)\](.*)/i;
+                                        const dateMatch = item.label.match(dateRegex);
+                                        if (dateMatch) {
+                                            const dd = dateMatch[2].padStart(2, '0');
+                                            const mm = dateMatch[3].padStart(2, '0');
+                                            let yy = dateMatch[4];
+                                            if (yy.length === 2) yy = '20' + yy;
+                                            if (yy.length < 4) yy = yy.padStart(4, '0');
+                                            const dateStr = `${dd}/${mm}/${yy}`;
+                                            let bracketContent = dateMatch[1]
+                                                .replace(new RegExp(`(?:,\\s*)?${dateMatch[2]}\\/${dateMatch[3]}\\/${dateMatch[4]}(?:\\s*,)?`, 'i'), '')
+                                                .trim();
+                                            const title = dateMatch[5].trim();
+                                            const cleanLabel = bracketContent ? `[${bracketContent}] ${title}` : title;
+                                            return [dateStr, cleanLabel];
+                                        }
 
-                    // ════════════════════════════════════════════════════════════
-                    //  DEFAULT TREE RENDERING (compact view — non-NPC books, or NPCs with portraits off)
-                    // ════════════════════════════════════════════════════════════
-                    if (!useNpcCardView) {
+                                        // Check for "[10:40 AM, Day 2] The Uprising" or similar patterns containing Day/D and numbers
+                                        const dayRegex = /\[([^\]]*(?:Day|D)\s*(\d+)[^\]]*)\](.*)/i;
+                                        const match = item.label.match(dayRegex);
+                                        if (match) {
+                                            const dayStr = `Day ${match[2]}`;
+                                            let bracketContent = match[1]
+                                                .replace(new RegExp(`(?:,\\s*)?(?:Day|D)\\s*${match[2]}(?:\\s*,)?`, 'i'), '')
+                                                .trim();
+                                            const title = match[3].trim();
+                                            const cleanLabel = bracketContent ? `[${bracketContent}] ${title}` : title;
+                                            return [dayStr, cleanLabel];
+                                        }
+                                    }
 
-                    // Define TreeNode class locally
-                    class TreeNode {
-                        constructor(name, item = null) {
-                            this.name = name;
-                            this.item = item;
-                            /** @type {Map<string, TreeNode>} */
-                            this.children = new Map();
-                            /** @type {TreeNode|null} */
-                            this.parent = null;
-                        }
-                    }
+                                    // Default: split by "::"
+                                    return item.label.split('::').map(p => p.trim()).filter(Boolean);
+                                };
 
+                                const compareNodeKeys = (a, b, bookName) => {
+                                    const bookNameLower = (bookName || '').toLowerCase();
+                                    const isEventsBook = bookNameLower.includes('events') || bookNameLower.includes('event');
+                                    if (isEventsBook) {
+                                        // Check if keys start with "Day X"
+                                        const aDayMatch = a.match(/^Day\s+(\d+)/i);
+                                        const bDayMatch = b.match(/^Day\s+(\d+)/i);
+                                        if (aDayMatch && bDayMatch) {
+                                            return parseInt(aDayMatch[1], 10) - parseInt(bDayMatch[1], 10);
+                                        }
+                                        if (aDayMatch) return -1;
+                                        if (bDayMatch) return 1;
 
-                    const getNodePath = (node, bookName) => {
-                        const parts = [];
-                        let curr = node;
-                        while (curr && curr.name) {
-                            parts.unshift(curr.name);
-                            curr = curr.parent;
-                        }
-                        return bookName + '::' + parts.join('::');
-                    };
+                                        // Check if keys start with DD/MM/YY
+                                        const aDateMatch = a.match(/^(\d{1,2})\/(\d{1,2})\/(\d+)$/);
+                                        const bDateMatch = b.match(/^(\d{1,2})\/(\d{1,2})\/(\d+)$/);
+                                        if (aDateMatch && bDateMatch) {
+                                            const aD = parseInt(aDateMatch[1], 10);
+                                            const aM = parseInt(aDateMatch[2], 10);
+                                            let aY = parseInt(aDateMatch[3], 10);
+                                            if (aY < 100) aY += 2000;
+                                            const bD = parseInt(bDateMatch[1], 10);
+                                            const bM = parseInt(bDateMatch[2], 10);
+                                            let bY = parseInt(bDateMatch[3], 10);
+                                            if (bY < 100) bY += 2000;
+                                            const aTime = new Date(0, 0, 1);
+                                            aTime.setFullYear(aY, aM - 1, aD);
+                                            const bTime = new Date(0, 0, 1);
+                                            bTime.setFullYear(bY, bM - 1, bD);
+                                            return aTime.getTime() - bTime.getTime();
+                                        }
+                                        if (aDateMatch) return -1;
+                                        if (bDateMatch) return 1;
 
-                    const getEntryParts = (item) => {
-                        const bookNameLower = (item.book || '').toLowerCase();
-                        const isEventsBook = bookNameLower.includes('events') || bookNameLower.includes('event');
-                        
-                        if (isEventsBook) {
-                            // Check for DD/MM/YY
-                            const dateRegex = /\[([^\]]*\b(\d{1,2})\/(\d{1,2})\/(\d+)\b[^\]]*)\](.*)/i;
-                            const dateMatch = item.label.match(dateRegex);
-                            if (dateMatch) {
-                                const dd = dateMatch[2].padStart(2, '0');
-                                const mm = dateMatch[3].padStart(2, '0');
-                                let yy = dateMatch[4];
-                                if (yy.length === 2) yy = '20' + yy;
-                                if (yy.length < 4) yy = yy.padStart(4, '0');
-                                const dateStr = `${dd}/${mm}/${yy}`;
-                                let bracketContent = dateMatch[1]
-                                    .replace(new RegExp(`(?:,\\s*)?${dateMatch[2]}\\/${dateMatch[3]}\\/${dateMatch[4]}(?:\\s*,)?`, 'i'), '')
-                                    .trim();
-                                const title = dateMatch[5].trim();
-                                const cleanLabel = bracketContent ? `[${bracketContent}] ${title}` : title;
-                                return [dateStr, cleanLabel];
-                            }
+                                        // Check if keys start with a time bracket like "[10:40 AM]"
+                                        const timeRegex = /^\[(\d{1,2}):(\d{2})\s*(AM|PM)?\]/i;
+                                        const aTimeMatch = a.match(timeRegex);
+                                        const bTimeMatch = b.match(timeRegex);
+                                        if (aTimeMatch && bTimeMatch) {
+                                            let aH = parseInt(aTimeMatch[1], 10);
+                                            let aM = parseInt(aTimeMatch[2], 10);
+                                            if (aTimeMatch[3]) {
+                                                const mer = aTimeMatch[3].toUpperCase();
+                                                if (mer === 'AM' && aH === 12) aH = 0;
+                                                if (mer === 'PM' && aH !== 12) aH += 12;
+                                            }
+                                            let bH = parseInt(bTimeMatch[1], 10);
+                                            let bM = parseInt(bTimeMatch[2], 10);
+                                            if (bTimeMatch[3]) {
+                                                const mer = bTimeMatch[3].toUpperCase();
+                                                if (mer === 'AM' && bH === 12) bH = 0;
+                                                if (mer === 'PM' && bH !== 12) bH += 12;
+                                            }
+                                            return (aH * 60 + aM) - (bH * 60 + bM);
+                                        }
+                                    }
 
-                            // Check for "[10:40 AM, Day 2] The Uprising" or similar patterns containing Day/D and numbers
-                            const dayRegex = /\[([^\]]*(?:Day|D)\s*(\d+)[^\]]*)\](.*)/i;
-                            const match = item.label.match(dayRegex);
-                            if (match) {
-                                const dayStr = `Day ${match[2]}`;
-                                let bracketContent = match[1]
-                                    .replace(new RegExp(`(?:,\\s*)?(?:Day|D)\\s*${match[2]}(?:\\s*,)?`, 'i'), '')
-                                    .trim();
-                                const title = match[3].trim();
-                                const cleanLabel = bracketContent ? `[${bracketContent}] ${title}` : title;
-                                return [dayStr, cleanLabel];
-                            }
-                        }
-                        
-                        // Default: split by "::"
-                        return item.label.split('::').map(p => p.trim()).filter(Boolean);
-                    };
+                                    // Fallback to alphabetical sort
+                                    return a.localeCompare(b);
+                                };
 
-                    const compareNodeKeys = (a, b, bookName) => {
-                        const bookNameLower = (bookName || '').toLowerCase();
-                        const isEventsBook = bookNameLower.includes('events') || bookNameLower.includes('event');
-                        if (isEventsBook) {
-                            // Check if keys start with "Day X"
-                            const aDayMatch = a.match(/^Day\s+(\d+)/i);
-                            const bDayMatch = b.match(/^Day\s+(\d+)/i);
-                            if (aDayMatch && bDayMatch) {
-                                return parseInt(aDayMatch[1], 10) - parseInt(bDayMatch[1], 10);
-                            }
-                            if (aDayMatch) return -1;
-                            if (bDayMatch) return 1;
+                                // Build the hierarchy tree for this lorebook
+                                const rootNode = new TreeNode('');
+                                for (const item of items) {
+                                    const parts = getEntryParts(item);
+                                    if (parts.length === 0) continue;
 
-                            // Check if keys start with DD/MM/YY
-                            const aDateMatch = a.match(/^(\d{1,2})\/(\d{1,2})\/(\d+)$/);
-                            const bDateMatch = b.match(/^(\d{1,2})\/(\d{1,2})\/(\d+)$/);
-                            if (aDateMatch && bDateMatch) {
-                                const aD = parseInt(aDateMatch[1], 10);
-                                const aM = parseInt(aDateMatch[2], 10);
-                                let aY = parseInt(aDateMatch[3], 10);
-                                if (aY < 100) aY += 2000;
-                                const bD = parseInt(bDateMatch[1], 10);
-                                const bM = parseInt(bDateMatch[2], 10);
-                                let bY = parseInt(bDateMatch[3], 10);
-                                if (bY < 100) bY += 2000;
-                                const aTime = new Date(0, 0, 1);
-                                aTime.setFullYear(aY, aM - 1, aD);
-                                const bTime = new Date(0, 0, 1);
-                                bTime.setFullYear(bY, bM - 1, bD);
-                                return aTime.getTime() - bTime.getTime();
-                            }
-                            if (aDateMatch) return -1;
-                            if (bDateMatch) return 1;
-
-                            // Check if keys start with a time bracket like "[10:40 AM]"
-                            const timeRegex = /^\[(\d{1,2}):(\d{2})\s*(AM|PM)?\]/i;
-                            const aTimeMatch = a.match(timeRegex);
-                            const bTimeMatch = b.match(timeRegex);
-                            if (aTimeMatch && bTimeMatch) {
-                                let aH = parseInt(aTimeMatch[1], 10);
-                                let aM = parseInt(aTimeMatch[2], 10);
-                                if (aTimeMatch[3]) {
-                                    const mer = aTimeMatch[3].toUpperCase();
-                                    if (mer === 'AM' && aH === 12) aH = 0;
-                                    if (mer === 'PM' && aH !== 12) aH += 12;
+                                    let current = rootNode;
+                                    for (let i = 0; i < parts.length; i++) {
+                                        const part = parts[i];
+                                        if (!current.children.has(part)) {
+                                            const newNode = new TreeNode(part);
+                                            newNode.parent = current;
+                                            current.children.set(part, newNode);
+                                        }
+                                        current = current.children.get(part);
+                                        if (i === parts.length - 1) {
+                                            current.item = item;
+                                        }
+                                    }
                                 }
-                                let bH = parseInt(bTimeMatch[1], 10);
-                                let bM = parseInt(bTimeMatch[2], 10);
-                                if (bTimeMatch[3]) {
-                                    const mer = bTimeMatch[3].toUpperCase();
-                                    if (mer === 'AM' && bH === 12) bH = 0;
-                                    if (mer === 'PM' && bH !== 12) bH += 12;
-                                }
-                                return (aH * 60 + aM) - (bH * 60 + bM);
-                            }
-                        }
-                        
-                        // Fallback to alphabetical sort
-                        return a.localeCompare(b);
-                    };
 
-                    // Build the hierarchy tree for this lorebook
-                    const rootNode = new TreeNode('');
-                    for (const item of items) {
-                        const parts = getEntryParts(item);
-                        if (parts.length === 0) continue;
-                        
-                        let current = rootNode;
-                        for (let i = 0; i < parts.length; i++) {
-                            const part = parts[i];
-                            if (!current.children.has(part)) {
-                                const newNode = new TreeNode(part);
-                                newNode.parent = current;
-                                current.children.set(part, newNode);
-                            }
-                            current = current.children.get(part);
-                            if (i === parts.length - 1) {
-                                current.item = item;
-                            }
-                        }
-                    }
+                                // Recursive function to render a node
+                                const renderNode = (node, parentElement) => {
+                                    const hasChildren = node.children.size > 0;
+                                    const nodePath = getNodePath(node, bookName);
+                                    const isDirty = node.item ? _dirtyEntries.has(node.item.id) : false;
 
-                    // Recursive function to render a node
-                    const renderNode = (node, parentElement) => {
-                        const hasChildren = node.children.size > 0;
-                        const nodePath = getNodePath(node, bookName);
-                        const isDirty = node.item ? _dirtyEntries.has(node.item.id) : false;
-                        
-                        const entryEl = document.createElement('div');
-                        entryEl.className = 'rt-agent-entry-el';
-                        entryEl.style.cssText = 'flex-shrink:0; border-radius:3px;';
+                                    const entryEl = document.createElement('div');
+                                    entryEl.className = 'rt-agent-entry-el';
+                                    entryEl.style.cssText = 'flex-shrink:0; border-radius:3px;';
 
-                        const entryHdr = document.createElement('div');
-                        entryHdr.className = 'rt-agent-entry-hdr';
-                        entryHdr.style.cssText = 'display:flex; align-items:center; gap:5px; padding:3px 4px; cursor:pointer; border-radius:3px;';
+                                    const entryHdr = document.createElement('div');
+                                    entryHdr.className = 'rt-agent-entry-hdr';
+                                    entryHdr.style.cssText = 'display:flex; align-items:center; gap:5px; padding:3px 4px; cursor:pointer; border-radius:3px;';
 
-                        // Chevron toggle
-                        let chevronHtml = '';
-                        let childrenContainer = null;
-                        if (hasChildren) {
-                            const isSubOpen = _manifestOpenSubFolders.has(nodePath);
-                            chevronHtml = `<span class="rt-agent-subfolder-toggle" style="font-size:9px; opacity:0.5; width:10px; flex-shrink:0; font-family:monospace; text-align:center; cursor:pointer;">${isSubOpen ? '▼' : '▶'}</span>`;
-                            
-                            childrenContainer = document.createElement('div');
-                            childrenContainer.className = 'rt-agent-entry-children';
-                            childrenContainer.style.cssText = `display:${isSubOpen ? 'flex' : 'none'}; flex-direction:column; border-left:1px solid rgba(255,255,255,0.07); margin-left:10px; padding-left:6px; gap:1px; padding-top:2px; padding-bottom:2px;`;
-                        } else {
-                            chevronHtml = `<span style="width:10px; flex-shrink:0;"></span>`;
-                        }
+                                    // Chevron toggle
+                                    let chevronHtml = '';
+                                    let childrenContainer = null;
+                                    if (hasChildren) {
+                                        const isSubOpen = _manifestOpenSubFolders.has(nodePath);
+                                        chevronHtml = `<span class="rt-agent-subfolder-toggle" style="font-size:9px; opacity:0.5; width:10px; flex-shrink:0; font-family:monospace; text-align:center; cursor:pointer;">${isSubOpen ? '▼' : '▶'}</span>`;
 
-                        // Status dot
-                        const bookNameLower = (bookName || '').toLowerCase();
-                        const isEventsBook = bookNameLower.includes('events') || bookNameLower.includes('event');
-                        const isDayNode = isEventsBook && (/^Day\s+\d+$/i.test(node.name) || /^\d{1,2}\/\d{1,2}\/\d+$/.test(node.name));
+                                        childrenContainer = document.createElement('div');
+                                        childrenContainer.className = 'rt-agent-entry-children';
+                                        childrenContainer.style.cssText = `display:${isSubOpen ? 'flex' : 'none'}; flex-direction:column; border-left:1px solid rgba(255,255,255,0.07); margin-left:10px; padding-left:6px; gap:1px; padding-top:2px; padding-bottom:2px;`;
+                                    } else {
+                                        chevronHtml = `<span style="width:10px; flex-shrink:0;"></span>`;
+                                    }
 
-                        let statusDotHtml = '';
-                        if (node.item) {
-                            const statusColor = node.item.is_active ? 'var(--rt-accent)' : 'rgba(255,255,255,0.18)';
-                            statusDotHtml = `<div style="width:5px; height:5px; border-radius:50%; background:${statusColor}; flex-shrink:0;" title="${node.item.is_active ? 'Active (visible to agent)' : 'Inactive'}"></div>`;
-                        } else if (!isDayNode) {
-                            statusDotHtml = `<div style="width:5px; height:5px; border-radius:50%; border:1px dashed rgba(255,255,255,0.25); box-sizing:border-box; flex-shrink:0;" title="Virtual parent placeholder (entry not created yet)"></div>`;
-                        }
+                                    // Status dot
+                                    const bookNameLower = (bookName || '').toLowerCase();
+                                    const isEventsBook = bookNameLower.includes('events') || bookNameLower.includes('event');
+                                    const isDayNode = isEventsBook && (/^Day\s+\d+$/i.test(node.name) || /^\d{1,2}\/\d{1,2}\/\d+$/.test(node.name));
 
-                        // Label style
-                        let labelStyle = '';
-                        if (node.item) {
-                            labelStyle = 'flex:1; font-size:10px; color:var(--rt-text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
-                        } else if (isDayNode) {
-                            labelStyle = 'flex:1; font-size:10px; color:var(--rt-text); font-weight:bold; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
-                        } else {
-                            labelStyle = 'flex:1; font-size:10px; color:var(--rt-text-muted); font-style:italic; opacity:0.6; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
-                        }
+                                    let statusDotHtml = '';
+                                    if (node.item) {
+                                        const statusColor = node.item.is_active ? 'var(--rt-accent)' : 'rgba(255,255,255,0.18)';
+                                        statusDotHtml = `<div style="width:5px; height:5px; border-radius:50%; background:${statusColor}; flex-shrink:0;" title="${node.item.is_active ? 'Active (visible to agent)' : 'Inactive'}"></div>`;
+                                    } else if (!isDayNode) {
+                                        statusDotHtml = `<div style="width:5px; height:5px; border-radius:50%; border:1px dashed rgba(255,255,255,0.25); box-sizing:border-box; flex-shrink:0;" title="Virtual parent placeholder (entry not created yet)"></div>`;
+                                    }
 
-                        // Tokens and action buttons
-                        let tokensHtml = '';
-                        let cleanHtml = '';
-                        let viewNpcHtml = '';
-                        let relStatsHtml = '';
-                        let editHtml = '';
-                        let deleteHtml = '';
+                                    // Label style
+                                    let labelStyle = '';
+                                    if (node.item) {
+                                        labelStyle = 'flex:1; font-size:10px; color:var(--rt-text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
+                                    } else if (isDayNode) {
+                                        labelStyle = 'flex:1; font-size:10px; color:var(--rt-text); font-weight:bold; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
+                                    } else {
+                                        labelStyle = 'flex:1; font-size:10px; color:var(--rt-text-muted); font-style:italic; opacity:0.6; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
+                                    }
 
-                        const isWorldBook = bookNameLower.endsWith('_world') || bookNameLower === 'world';
+                                    // Tokens and action buttons
+                                    let tokensHtml = '';
+                                    let cleanHtml = '';
+                                    let viewNpcHtml = '';
+                                    let relStatsHtml = '';
+                                    let editHtml = '';
+                                    let deleteHtml = '';
 
-                        if (node.item) {
-                            const entryTokens = Math.round((node.item.content || '').length / 4);
-                            tokensHtml = `<span style="font-size:8px; opacity:0.5; color:var(--rt-text-muted); margin-right:5px; flex-shrink:0; background:rgba(255,255,255,0.06); padding:1px 4px; border-radius:4px;" title="Estimated tokens">${entryTokens}t</span>`;
-                            if (isNpcBook) {
-                                viewNpcHtml = `<button class="rt-agent-entry-view-npc" data-id="${node.item.id}" style="background:rgba(212,169,64,0.12); border:1px solid rgba(212,169,64,0.35); border-radius:3px; color:#d4a940; cursor:pointer; font-size:10px; padding:1px 5px; flex-shrink:0; line-height:1.2;" title="View NPC CORE card"><i class="fa-solid fa-address-card"></i></button>`;
-                                if (s.npcRelationshipBars && renderCompactRelStats) {
-                                    relStatsHtml = renderCompactRelStats(node.item.id);
-                                }
-                            }
-                            cleanHtml = !isWorldBook ? `<button class="rt-agent-entry-clean" data-id="${node.item.id}" style="background:none; border:none; color:#e67e22; cursor:pointer; font-size:9px; padding:1px 3px; flex-shrink:0;" title="Run targeted cleanup for this entry"><i class="fa-solid fa-broom"></i></button>` : '';
-                            editHtml = `<button class="rt-agent-entry-edit" data-id="${node.item.id}" style="background:none; border:none; color:var(--rt-accent); cursor:pointer; font-size:9px; padding:1px 3px; flex-shrink:0;" title="Edit this lore entry"><i class="fa-solid fa-pen-to-square"></i></button>`;
-                            deleteHtml = `<button class="rt-agent-entry-delete" data-id="${node.item.id}" style="background:none; border:none; color:var(--rt-text-muted); cursor:pointer; font-size:9px; padding:1px 3px; flex-shrink:0;" title="Delete entry"><i class="fa-solid fa-trash"></i></button>`;
-                        }
+                                    const isWorldBook = bookNameLower.endsWith('_world') || bookNameLower === 'world';
 
-                        entryHdr.innerHTML = `
+                                    if (node.item) {
+                                        const entryTokens = Math.round((node.item.content || '').length / 4);
+                                        tokensHtml = `<span style="font-size:8px; opacity:0.5; color:var(--rt-text-muted); margin-right:5px; flex-shrink:0; background:rgba(255,255,255,0.06); padding:1px 4px; border-radius:4px;" title="Estimated tokens">${entryTokens}t</span>`;
+                                        if (isNpcBook) {
+                                            viewNpcHtml = `<button class="rt-agent-entry-view-npc" data-id="${node.item.id}" style="background:rgba(212,169,64,0.12); border:1px solid rgba(212,169,64,0.35); border-radius:3px; color:#d4a940; cursor:pointer; font-size:10px; padding:1px 5px; flex-shrink:0; line-height:1.2;" title="View NPC CORE card"><i class="fa-solid fa-address-card"></i></button>`;
+                                            if (s.npcRelationshipBars && renderCompactRelStats) {
+                                                relStatsHtml = renderCompactRelStats(node.item.id);
+                                            }
+                                        }
+                                        cleanHtml = !isWorldBook ? `<button class="rt-agent-entry-clean" data-id="${node.item.id}" style="background:none; border:none; color:#e67e22; cursor:pointer; font-size:9px; padding:1px 3px; flex-shrink:0;" title="Run targeted cleanup for this entry"><i class="fa-solid fa-broom"></i></button>` : '';
+                                        editHtml = `<button class="rt-agent-entry-edit" data-id="${node.item.id}" style="background:none; border:none; color:var(--rt-accent); cursor:pointer; font-size:9px; padding:1px 3px; flex-shrink:0;" title="Edit this lore entry"><i class="fa-solid fa-pen-to-square"></i></button>`;
+                                        deleteHtml = `<button class="rt-agent-entry-delete" data-id="${node.item.id}" style="background:none; border:none; color:var(--rt-text-muted); cursor:pointer; font-size:9px; padding:1px 3px; flex-shrink:0;" title="Delete entry"><i class="fa-solid fa-trash"></i></button>`;
+                                    }
+
+                                    entryHdr.innerHTML = `
                             ${chevronHtml}
                             ${viewNpcHtml}
                             ${statusDotHtml}
@@ -6328,108 +6668,108 @@ function createPanel() {
                             ${deleteHtml}
                         `;
 
-                        const viewNpcBtn = entryHdr.querySelector('.rt-agent-entry-view-npc');
-                        if (viewNpcBtn && node.item && openNpcDetailPopup && parseRelationship) {
-                            viewNpcBtn.addEventListener('click', (e) => {
-                                e.stopPropagation();
-                                openNpcDetailPopup(node.item, parseRelationship(node.item.id));
-                            });
-                        }
+                                    const viewNpcBtn = entryHdr.querySelector('.rt-agent-entry-view-npc');
+                                    if (viewNpcBtn && node.item && openNpcDetailPopup && parseRelationship) {
+                                        viewNpcBtn.addEventListener('click', (e) => {
+                                            e.stopPropagation();
+                                            openNpcDetailPopup(node.item, parseRelationship(node.item.id));
+                                        });
+                                    }
 
-                        let entryBody = null;
-                        if (node.item) {
-                            const dirtySnap = isDirty ? _dirtyEntries.get(node.item.id) : null;
-                            entryBody = buildEntryBody(node.item, entryHdr, {
-                                stale: !!isDirty,
-                                dirty: dirtySnap || null,
-                                isNpcEntry: isNpcBook,
-                            });
-                            if (_openEntries.has(node.item.id)) {
-                                entryBody.style.display = 'flex';
-                                entryHdr.style.background = 'rgba(255,255,255,0.05)';
-                                entryEl.classList.add('open');
-                            }
-                        }
+                                    let entryBody = null;
+                                    if (node.item) {
+                                        const dirtySnap = isDirty ? _dirtyEntries.get(node.item.id) : null;
+                                        entryBody = buildEntryBody(node.item, entryHdr, {
+                                            stale: !!isDirty,
+                                            dirty: dirtySnap || null,
+                                            isNpcEntry: isNpcBook,
+                                        });
+                                        if (_openEntries.has(node.item.id)) {
+                                            entryBody.style.display = 'flex';
+                                            entryHdr.style.background = 'rgba(255,255,255,0.05)';
+                                            entryEl.classList.add('open');
+                                        }
+                                    }
 
-                        // Event Listeners
-                        if (hasChildren) {
-                            const toggleBtn = entryHdr.querySelector('.rt-agent-subfolder-toggle');
-                            const toggleSubfolder = (e) => {
-                                e.stopPropagation();
-                                const opening = childrenContainer.style.display === 'none';
-                                childrenContainer.style.display = opening ? 'flex' : 'none';
-                                if (toggleBtn) {
-                                    toggleBtn.textContent = opening ? '▼' : '▶';
+                                    // Event Listeners
+                                    if (hasChildren) {
+                                        const toggleBtn = entryHdr.querySelector('.rt-agent-subfolder-toggle');
+                                        const toggleSubfolder = (e) => {
+                                            e.stopPropagation();
+                                            const opening = childrenContainer.style.display === 'none';
+                                            childrenContainer.style.display = opening ? 'flex' : 'none';
+                                            if (toggleBtn) {
+                                                toggleBtn.textContent = opening ? '▼' : '▶';
+                                            }
+                                            if (opening) {
+                                                _manifestOpenSubFolders.add(nodePath);
+                                            } else {
+                                                _manifestOpenSubFolders.delete(nodePath);
+                                            }
+                                        };
+                                        if (toggleBtn) {
+                                            toggleBtn.addEventListener('click', toggleSubfolder);
+                                        }
+                                        if (!node.item) {
+                                            entryHdr.addEventListener('click', toggleSubfolder);
+                                        }
+                                    }
+
+                                    if (node.item) {
+                                        entryHdr.addEventListener('click', (e) => {
+                                            if (/** @type {HTMLElement} */ (e.target).closest('.rt-agent-subfolder-toggle, .rt-agent-entry-delete, .rt-agent-entry-clean, .rt-agent-entry-edit, .rt-agent-entry-view-npc')) return;
+                                            const opening = entryBody.style.display === 'none';
+                                            entryBody.style.display = opening ? 'flex' : 'none';
+                                            entryHdr.style.background = opening ? 'rgba(255,255,255,0.05)' : '';
+                                            if (opening) {
+                                                _openEntries.add(node.item.id);
+                                                entryEl.classList.add('open');
+                                            } else {
+                                                _openEntries.delete(node.item.id);
+                                                entryEl.classList.remove('open');
+                                            }
+                                        });
+                                    }
+
+                                    entryEl.appendChild(entryHdr);
+                                    if (entryBody) {
+                                        entryEl.appendChild(entryBody);
+                                    }
+                                    if (hasChildren) {
+                                        entryEl.appendChild(childrenContainer);
+                                        const sortedKeys = Array.from(node.children.keys()).sort((a, b) => compareNodeKeys(a, b, bookName));
+                                        for (const key of sortedKeys) {
+                                            renderNode(node.children.get(key), childrenContainer);
+                                        }
+                                    }
+
+                                    parentElement.appendChild(entryEl);
+                                };
+
+                                // Render tree children under folderBody
+                                const sortedRootKeys = Array.from(rootNode.children.keys()).sort((a, b) => compareNodeKeys(a, b, bookName));
+                                for (const key of sortedRootKeys) {
+                                    renderNode(rootNode.children.get(key), folderBody);
                                 }
-                                if (opening) {
-                                    _manifestOpenSubFolders.add(nodePath);
-                                } else {
-                                    _manifestOpenSubFolders.delete(nodePath);
-                                }
-                            };
-                            if (toggleBtn) {
-                                toggleBtn.addEventListener('click', toggleSubfolder);
+
+                            } // end !useNpcCardView
+
+                            if (isNpcBook) {
+                                const addNpcBtn = document.createElement('div');
+                                addNpcBtn.className = 'rt-npc-add-btn';
+                                addNpcBtn.innerHTML = '<i class="fa-solid fa-user-plus"></i> Add NPC to Story';
+                                addNpcBtn.addEventListener('click', (e) => {
+                                    e.stopPropagation();
+                                    openNpcCreatorDialog(bookName, prefix);
+                                });
+                                folderBody.appendChild(addNpcBtn);
                             }
-                            if (!node.item) {
-                                entryHdr.addEventListener('click', toggleSubfolder);
-                            }
+
+                            folder.appendChild(folderHdr);
+                            folder.appendChild(folderBody);
+                            list.appendChild(folder);
                         }
-
-                        if (node.item) {
-                            entryHdr.addEventListener('click', (e) => {
-                                if (/** @type {HTMLElement} */ (e.target).closest('.rt-agent-subfolder-toggle, .rt-agent-entry-delete, .rt-agent-entry-clean, .rt-agent-entry-edit, .rt-agent-entry-view-npc')) return;
-                                const opening = entryBody.style.display === 'none';
-                                entryBody.style.display = opening ? 'flex' : 'none';
-                                entryHdr.style.background = opening ? 'rgba(255,255,255,0.05)' : '';
-                                if (opening) {
-                                    _openEntries.add(node.item.id);
-                                    entryEl.classList.add('open');
-                                } else {
-                                    _openEntries.delete(node.item.id);
-                                    entryEl.classList.remove('open');
-                                }
-                            });
-                        }
-
-                        entryEl.appendChild(entryHdr);
-                        if (entryBody) {
-                            entryEl.appendChild(entryBody);
-                        }
-                        if (hasChildren) {
-                            entryEl.appendChild(childrenContainer);
-                            const sortedKeys = Array.from(node.children.keys()).sort((a, b) => compareNodeKeys(a, b, bookName));
-                            for (const key of sortedKeys) {
-                                renderNode(node.children.get(key), childrenContainer);
-                            }
-                        }
-
-                        parentElement.appendChild(entryEl);
-                    };
-
-                    // Render tree children under folderBody
-                    const sortedRootKeys = Array.from(rootNode.children.keys()).sort((a, b) => compareNodeKeys(a, b, bookName));
-                    for (const key of sortedRootKeys) {
-                        renderNode(rootNode.children.get(key), folderBody);
-                    }
-
-                    } // end !useNpcCardView
-
-                    if (isNpcBook) {
-                        const addNpcBtn = document.createElement('div');
-                        addNpcBtn.className = 'rt-npc-add-btn';
-                        addNpcBtn.innerHTML = '<i class="fa-solid fa-user-plus"></i> Add NPC to Story';
-                        addNpcBtn.addEventListener('click', (e) => {
-                            e.stopPropagation();
-                            openNpcCreatorDialog(bookName, prefix);
-                        });
-                        folderBody.appendChild(addNpcBtn);
-                    }
-
-                    folder.appendChild(folderHdr);
-                    folder.appendChild(folderBody);
-                    list.appendChild(folder);
-                }
-                    } catch(e) {
+                    } catch (e) {
                         if (gen !== _manifestRenderGen) return;
                         console.error('[RPG Tracker] getLorebookManifest decoupled failed:', e);
                         const existingLoading = list.querySelector('#rt-agent-manifest-loading');
@@ -6477,7 +6817,7 @@ function createPanel() {
             const s = getSettings();
             let name = charCard.name || 'Unnamed NPC';
             let keys = [name];
-            
+
             const firstName = name.split(/\s+/)[0];
             if (firstName && firstName !== name) keys.push(firstName);
 
@@ -6497,10 +6837,15 @@ function createPanel() {
                     content = adaptedContent;
                 }
             } else {
-                // Direct add: use name, description, personality (NOT scenario/first_mes)
+                // Literal add: take the card's description field verbatim — the card
+                // already has its content figured out. Wrap it in [CORE][/CORE] as-is.
                 const parts = ['[CORE]'];
-                if (charCard.description) parts.push(charCard.description.substring(0, 1500));
-                if (charCard.personality) parts.push(`Personality: ${charCard.personality.substring(0, 500)}`);
+                if (charCard.description) parts.push(charCard.description.substring(0, 3000));
+                // Append personality only if it exists as a separate field AND doesn't
+                // look like it's already included in the description.
+                if (charCard.personality && !charCard.description?.includes(charCard.personality.substring(0, 40))) {
+                    parts.push(charCard.personality.substring(0, 1000));
+                }
                 parts.push('[/CORE]');
                 content = parts.join('\n');
             }
@@ -6509,7 +6854,7 @@ function createPanel() {
             if (s.npcRelationshipBars && adaptedContent && !/Friendship\/Rapport:/i.test(content)) {
                 // Legacy: adapted content from old prompt may still include bars text — strip it
                 content = content.replace(/\s*Friendship\/Rapport:[^\n]*/gi, '')
-                                 .replace(/\s*Affection\/Interest:[^\n]*/gi, '');
+                    .replace(/\s*Affection\/Interest:[^\n]*/gi, '');
             }
 
             // Ensure the content has a [CORE] wrap around the persistent sections
@@ -6534,7 +6879,7 @@ function createPanel() {
 
             // Load or create the book
             let bookData = null;
-            try { bookData = await ctx.loadWorldInfo(bookName); } catch (_) {}
+            try { bookData = await ctx.loadWorldInfo(bookName); } catch (_) { }
             if (!bookData) {
                 try {
                     const res = await fetch('/api/worldinfo/get', {
@@ -6542,7 +6887,7 @@ function createPanel() {
                         body: JSON.stringify({ name: bookName })
                     });
                     if (res.ok) { const d = await res.json(); if (d?.entries) bookData = d; }
-                } catch (_) {}
+                } catch (_) { }
             }
             if (!bookData) {
                 bookData = { entries: {}, name: bookName, scan_depth: 4, token_budget: 400, recursive: false, extensions: {} };
@@ -6590,7 +6935,7 @@ function createPanel() {
 
             // Sync in-memory cache
             if (typeof ctx.saveWorldInfo === 'function') {
-                try { await ctx.saveWorldInfo(bookName, bookData); } catch (_) {}
+                try { await ctx.saveWorldInfo(bookName, bookData); } catch (_) { }
             }
 
             // Activate the book
@@ -6631,6 +6976,71 @@ function createPanel() {
          * @param {object} charCard
          * @returns {Promise<string|null>}
          */
+        /**
+         * Applies a minimal AI review to a character card — fixes only logical world/era
+         * impossibilities. Preserves original writing as completely as possible.
+         * Returns an [[NPC: ...]] string on success, or null on failure.
+         * @param {object} charCard
+         */
+        const minimalReviewNpcWithAI = async (charCard) => {
+            const s = getSettings();
+            const ctx = SillyTavern.getContext();
+            const name = charCard.name || 'Unnamed';
+
+            const contextParts = [];
+            contextParts.push(`CHARACTER CARD:\nName: ${name}\nDescription: ${(charCard.description || '').substring(0, 3000)}\nPersonality: ${(charCard.personality || '').substring(0, 1000)}`);
+            if (s.currentMemo) contextParts.push(`CURRENT GAME STATE:\n${s.currentMemo.substring(0, 2000)}`);
+            if (ctx.chat && Array.isArray(ctx.chat)) {
+                const msgs = ctx.chat.filter(m => !m.is_system && m.mes?.trim()).slice(-8);
+                if (msgs.length > 0) {
+                    contextParts.push(`RECENT CHAT (for setting context):\n${msgs.map(m => `${m.name || (m.is_user ? 'User' : 'Character')}: ${m.mes}`).join('\n\n').substring(0, 4000)}`);
+                }
+            }
+            try {
+                const charData = ctx.characters?.[ctx.characterId];
+                if (charData?.description) contextParts.push(`NARRATOR/WORLD CARD:\n${charData.description.substring(0, 1500)}`);
+            } catch (_) { }
+
+            const systemPrompt = `${s.routerSystemPromptTemplate || ''}
+
+---
+
+You are an NPC Minimal Review Agent. Your ONLY job is to fix logical impossibilities caused by world or era mismatches (e.g. a character has a smartphone in a medieval fantasy setting, or uses modern slang in a historical world).
+
+RULES:
+- Preserve the original character card writing as faithfully as possible.
+- Do NOT restructure, rewrite, or expand the content.
+- Do NOT change the character's personality, motivations, backstory, or relationships unless they are logically impossible in this setting.
+- ONLY change specific terminology, equipment names, or references that are a hard logical impossibility.
+- If the card fits fine or has only minor style mismatches, output it almost entirely unchanged.
+- Wrap the full content in a [CORE] and [/CORE] block.
+- Your output MUST be strictly formatted as:
+  [[NPC: Name | Description | keywords]]
+- Output ONLY this single [[NPC: ...]] tag. No preamble or explanation.
+- Do NOT use the "|\'" character inside the Description; use newlines to separate internal sections.`;
+
+            const userPrompt = contextParts.join('\n\n---\n\n');
+            const aiSettings = {
+                connectionSource: s.routerConnectionSource ?? 'default',
+                connectionProfileId: s.routerConnectionProfileId || '',
+                completionPresetId: s.routerCompletionPresetId || '',
+                ollamaUrl: s.routerOllamaUrl || 'http://localhost:11434',
+                ollamaModel: s.routerOllamaModel || '',
+                openaiUrl: s.routerOpenaiUrl || '',
+                openaiKey: s.routerOpenaiKey || '',
+                openaiModel: s.routerOpenaiModel || '',
+                maxTokens: s.routerMaxTokens || 0,
+                debugMode: s.debugMode,
+            };
+            try {
+                const result = await sendStateRequest(aiSettings, systemPrompt, userPrompt);
+                return (result || '').trim() || null;
+            } catch (err) {
+                toastr['error'](`AI review failed: ${String(err.message || err).substring(0, 120)}`, 'NPC Import');
+                return null;
+            }
+        };
+
         const adaptNpcWithAI = async (charCard) => {
             const s = getSettings();
             const ctx = SillyTavern.getContext();
@@ -6640,11 +7050,11 @@ function createPanel() {
             const contextParts = [];
 
             // Character card data
-            contextParts.push(`CHARACTER CARD:\nName: ${name}\nDescription: ${(charCard.description || '').substring(0, 2000)}\nPersonality: ${(charCard.personality || '').substring(0, 500)}`);
+            contextParts.push(`CHARACTER CARD:\nName: ${name}\nDescription: ${(charCard.description || '')}\nPersonality: ${(charCard.personality || '')}`);
 
             // Current game state
             if (s.currentMemo) {
-                contextParts.push(`CURRENT GAME STATE:\n${s.currentMemo.substring(0, 2000)}`);
+                contextParts.push(`CURRENT GAME STATE:\n${s.currentMemo}`);
             }
 
             // Recent chat
@@ -6660,9 +7070,9 @@ function createPanel() {
             try {
                 const charData = ctx.characters?.[ctx.characterId];
                 if (charData?.description) {
-                    contextParts.push(`NARRATOR/WORLD CARD:\n${charData.description.substring(0, 1500)}`);
+                    contextParts.push(`NARRATOR/WORLD CARD:\n${charData.description}`);
                 }
-            } catch (_) {}
+            } catch (_) { }
 
             // Existing lorebook summaries for setting context
             try {
@@ -6673,13 +7083,18 @@ function createPanel() {
                         const [bk, uid] = k.split('::');
                         if (!loaded[bk]) loaded[bk] = await ctx.loadWorldInfo(bk);
                         const entry = loaded[bk]?.entries?.[uid];
-                        if (entry) summaries.push(`[${entry.comment || 'Entry'}]: ${(entry.content || '').substring(0, 200)}`);
+                        if (entry) summaries.push(`[${entry.comment || 'Entry'}]: ${(entry.content || '')}`);
                     }
                     if (summaries.length > 0) {
                         contextParts.push(`ACTIVE LOREBOOK ENTRIES (world context):\n${summaries.join('\n')}`);
                     }
                 }
-            } catch (_) {}
+            } catch (_) { }
+
+            const npcInstruction = buildNpcInstruction(s.npcMajorWords || 25, s.npcMinorWords || 15, !!s.ignoreNpcImportLimits);
+
+            const coreSections = s.npcCoreSections && Array.isArray(s.npcCoreSections) && s.npcCoreSections.length > 0 ? s.npcCoreSections : DEFAULT_NPC_SECTIONS;
+            const sectionNamesList = coreSections.map(sec => sec.name).join(', ');
 
             const systemPrompt = `${s.routerSystemPromptTemplate || ''}
 
@@ -6688,17 +7103,18 @@ function createPanel() {
 You are an NPC Adaptation Agent. Given a character card from a different source and the current RPG campaign context, adapt the character to fit naturally into the ongoing story.
 
 <npc_instructions>
-${s.routerModules?.npc?.instruction || ''}
+${npcInstruction}
 </npc_instructions>
 
 Rules:
 - If the character is from a different era/genre (e.g., modern character in a medieval fantasy), translate their skills, equipment, backstory, and background to fit the current world setting.
-- Preserve the character's core personality, motivations, and distinguishing traits.
+- Preserve the character's core personality, motivations, and distinguishing traits.${s.ignoreNpcImportLimits ? `\n- MATCH LENGTH: Aim to make your output approximately the same length/word count as the original character card.` : ''}
 - Write a concise NPC lorebook entry following the exact <npc_instructions> provided above.
 - Your output MUST be strictly formatted as a lorebook entry tag. It MUST look EXACTLY like this:
   [[NPC: Name | Description | keywords]]
 - Replace "Name" with the character's name.
-- Replace "Description" with the full formatted description section. Wrap all the immutable identity sections (Appearance, Personality, Brief Background, Habits/Behaviors) inside a single [CORE] and [/CORE] tag block within the Description. DO NOT include a Relationship field. DO NOT use the "|" character inside the Description; separate the internal sections using newlines.
+- Replace "Description" with the full formatted description section. Wrap all the immutable identity sections (${sectionNamesList}) inside a single [CORE] and [/CORE] tag block within the Description. DO NOT include a Relationship field. DO NOT use the "|" character inside the Description; separate the internal sections using newlines.
+- CRITICAL: Do NOT blindly copy the formatting or sections of other characters found in ACTIVE MEMORY. You MUST strictly use ONLY the sections instructed below (${sectionNamesList}) and ignore any other sections.
 - Replace "keywords" with a comma-separated list of keywords including their name.
 - Output ONLY this single [[NPC: ...]] string. No preamble, no explanation, no other tags.`;
 
@@ -6736,7 +7152,7 @@ Rules:
             const ctx = SillyTavern.getContext();
             const parts = [];
             if (s.currentMemo) {
-                parts.push(`CURRENT GAME STATE:\n${s.currentMemo.substring(0, 2000)}`);
+                parts.push(`CURRENT GAME STATE:\n${s.currentMemo}`);
             }
             if (ctx.chat && Array.isArray(ctx.chat)) {
                 const msgs = ctx.chat.filter(m => !m.is_system && m.mes?.trim()).slice(-8);
@@ -6748,9 +7164,9 @@ Rules:
             try {
                 const charData = ctx.characters?.[ctx.characterId];
                 if (charData?.description) {
-                    parts.push(`NARRATOR/WORLD CARD:\n${charData.description.substring(0, 1500)}`);
+                    parts.push(`NARRATOR/WORLD CARD:\n${charData.description}`);
                 }
-            } catch (_) {}
+            } catch (_) { }
             try {
                 if (s.activeRouterKeys?.length > 0) {
                     const summaries = [];
@@ -6759,13 +7175,13 @@ Rules:
                         const [bk, uid] = k.split('::');
                         if (!loaded[bk]) loaded[bk] = await ctx.loadWorldInfo(bk);
                         const entry = loaded[bk]?.entries?.[uid];
-                        if (entry) summaries.push(`[${entry.comment || 'Entry'}]: ${(entry.content || '').substring(0, 180)}`);
+                        if (entry) summaries.push(`[${entry.comment || 'Entry'}]: ${(entry.content || '')}`);
                     }
                     if (summaries.length > 0) {
                         parts.push(`ACTIVE LOREBOOK ENTRIES (world context):\n${summaries.join('\n')}`);
                     }
                 }
-            } catch (_) {}
+            } catch (_) { }
             return parts;
         };
 
@@ -6786,6 +7202,9 @@ Rules:
                 ? `\nForbidden Names (Do NOT use these existing NPC/character names under any circumstances):\n${existingNpcNames.map(n => `- ${n}`).join('\n')}\n`
                 : '';
 
+            const coreSections = s.npcCoreSections && Array.isArray(s.npcCoreSections) && s.npcCoreSections.length > 0 ? s.npcCoreSections : DEFAULT_NPC_SECTIONS;
+            const sectionNamesList = coreSections.map(sec => sec.name).join(', ');
+
             const systemPrompt = `${s.routerSystemPromptTemplate || ''}
 
 ---
@@ -6804,7 +7223,8 @@ Rules:
 - Your output MUST be strictly formatted as a lorebook entry tag:
   [[NPC: Name | Description | keywords]]
 - Replace "Name" with the character's name.
-- Replace "Description" with the full formatted entry. Wrap all immutable identity sections (Appearance/Species, Personality, Brief Background, Habits/Behaviors) inside a single [CORE] and [/CORE] block. DO NOT use "|" inside Description. Use newlines.
+- Replace "Description" with the full formatted entry. Wrap all immutable identity sections (${sectionNamesList}) inside a single [CORE] and [/CORE] block. DO NOT use "|" inside Description. Use newlines.
+- CRITICAL: Do NOT blindly copy the formatting or sections of other characters found in ACTIVE MEMORY. You MUST strictly use ONLY the sections instructed below (${sectionNamesList}) and ignore any other sections.
 - Replace "keywords" with a comma-separated list including their name.
 - Output ONLY this single [[NPC: ...]] tag. No preamble, no explanation.`;
 
@@ -6848,6 +7268,9 @@ Rules:
                 ? `\nForbidden Names (Do NOT use these existing NPC/character names under any circumstances):\n${existingNpcNames.map(n => `- ${n}`).join('\n')}\n`
                 : '';
 
+            const coreSections = s.npcCoreSections && Array.isArray(s.npcCoreSections) && s.npcCoreSections.length > 0 ? s.npcCoreSections : DEFAULT_NPC_SECTIONS;
+            const sectionNamesList = coreSections.map(sec => sec.name).join(', ');
+
             const systemPrompt = `${s.routerSystemPromptTemplate || ''}
 
 ---
@@ -6866,7 +7289,8 @@ Rules:
 - Your output MUST be strictly formatted as a lorebook entry tag:
   [[NPC: Name | Description | keywords]]
 - Replace "Name" with the character's name.
-- Replace "Description" with the full formatted entry. Wrap all immutable identity sections (Appearance/Species, Personality, Brief Background, Habits/Behaviors) inside a single [CORE] and [/CORE] block. DO NOT use "|" inside Description. Use newlines.
+- Replace "Description" with the full formatted entry. Wrap all immutable identity sections (${sectionNamesList}) inside a single [CORE] and [/CORE] block. DO NOT use "|" inside Description. Use newlines.
+- CRITICAL: Do NOT blindly copy the formatting or sections of other characters found in ACTIVE MEMORY. You MUST strictly use ONLY the sections instructed below (${sectionNamesList}) and ignore any other sections.
 - Replace "keywords" with a comma-separated list including their name.
 - Output ONLY this single [[NPC: ...]] tag. No preamble, no explanation.`;
 
@@ -6903,7 +7327,7 @@ Rules:
                         .map(e => (e.comment || '').replace(/^\[.*?\]\s*/i, '').trim())
                         .filter(Boolean);
                 }
-            } catch (_) {}
+            } catch (_) { }
 
             // Fetch character list with timeout to prevent UI hang
             let allChars = [];
@@ -6922,10 +7346,10 @@ Rules:
                     allChars = (Array.isArray(raw) ? raw : []).map(c => ({
                         name: c.name || '',
                         avatar: c.avatar || '',
-                        description: (c.description || '').substring(0, 1500),
-                        personality: (c.personality || '').substring(0, 500),
-                        scenario: (c.scenario || '').substring(0, 500),
-                        first_mes: (c.first_mes || '').substring(0, 500),
+                        description: (c.description || ''),
+                        personality: (c.personality || ''),
+                        scenario: (c.scenario || ''),
+                        first_mes: (c.first_mes || ''),
                         date_added: c.date_added || 0,
                     }));
                     allChars.sort((a, b) => (b.date_added || 0) - (a.date_added || 0));
@@ -6961,7 +7385,7 @@ Rules:
             const tabBar = document.createElement('div');
             tabBar.className = 'rt-npc-creator-tabs';
             const tabDefs = [
-                { id: 'card',      label: '🗂️ From Card' },
+                { id: 'card', label: '🗂️ From Card' },
                 { id: 'freeform', label: '✍️ Freeform' },
                 { id: 'archetype', label: '🎭 Archetype' },
             ];
@@ -7005,7 +7429,7 @@ Rules:
                 // Check for duplicate
                 let isDuplicate = false;
                 let bookData = null;
-                try { bookData = await ctx.loadWorldInfo(bookName); } catch (_) {}
+                try { bookData = await ctx.loadWorldInfo(bookName); } catch (_) { }
                 if (bookData && bookData.entries) {
                     const cleanLabel = nameToAdd.toLowerCase().trim();
                     for (const [, entry] of Object.entries(bookData.entries)) {
@@ -7042,7 +7466,7 @@ Rules:
 
                     // Final duplicate verification
                     let finalBookData = null;
-                    try { finalBookData = await ctx.loadWorldInfo(bookName); } catch (_) {}
+                    try { finalBookData = await ctx.loadWorldInfo(bookName); } catch (_) { }
                     if (finalBookData && finalBookData.entries) {
                         const cleanLabel = finalName.toLowerCase().trim();
                         for (const [, entry] of Object.entries(finalBookData.entries)) {
@@ -7131,15 +7555,27 @@ Rules:
                         const directBtn = document.createElement('button');
                         directBtn.className = 'rt-charpicker-add-btn direct';
                         directBtn.textContent = '+ Add as is';
+                        directBtn.title = getSettings().npcAddAsIsMode === 'ai_review'
+                            ? 'AI Review mode: sends card to AI for a minimal logical review before adding (era/world conflicts only).'
+                            : 'Literal mode: wraps the card content in [CORE][/CORE] exactly as written. No AI involved.';
                         directBtn.addEventListener('click', async () => {
+                            const mode = getSettings().npcAddAsIsMode ?? 'ai_review';
                             directBtn.disabled = true;
-                            directBtn.textContent = '⏳ Adding...';
+                            directBtn.textContent = mode === 'ai_review' ? '⏳ Reviewing...' : '⏳ Adding...';
                             try {
-                                const ok = await createNpcFromCharCard(char, bookName);
-                                if (ok) {
-                                    toastr['success'](`Added "${char.name}" as NPC.`, 'NPC Creator');
-                                    overlay.remove();
-                                    await refreshManifest();
+                                if (mode === 'ai_review') {
+                                    // Minimal AI review pass — fix only world/era impossibilities
+                                    const reviewed = await minimalReviewNpcWithAI(char);
+                                    if (!reviewed) { directBtn.disabled = false; directBtn.textContent = '+ Add as is'; return; }
+                                    await showNpcPreviewAndAdd(reviewed, char.name, 'NPC Creator', char.avatar);
+                                } else {
+                                    // Literal — wrap verbatim, no AI
+                                    const ok = await createNpcFromCharCard(char, bookName);
+                                    if (ok) {
+                                        toastr['success'](`Added "${char.name}" as NPC.`, 'NPC Creator');
+                                        overlay.remove();
+                                        await refreshManifest();
+                                    }
                                 }
                             } catch (err) {
                                 toastr['error'](`Failed: ${String(err.message || err).substring(0, 100)}`, 'NPC Creator');
@@ -7253,15 +7689,15 @@ Rules:
                 archetypePanel.appendChild(hintEl);
 
                 const archetypes = [
-                    { id: 'Enemy',              icon: '⚔️' },
-                    { id: 'Arch Nemesis',        icon: '💀' },
-                    { id: 'Lover',               icon: '❤️' },
-                    { id: 'Family Relative',     icon: '👨‍👩‍👧' },
-                    { id: 'Companion / Ally',    icon: '🛡️' },
-                    { id: 'Merchant',            icon: '🪙' },
+                    { id: 'Enemy', icon: '⚔️' },
+                    { id: 'Arch Nemesis', icon: '💀' },
+                    { id: 'Lover', icon: '❤️' },
+                    { id: 'Family Relative', icon: '👨‍👩‍👧' },
+                    { id: 'Companion / Ally', icon: '🛡️' },
+                    { id: 'Merchant', icon: '🪙' },
                     { id: 'Mysterious Stranger', icon: '🎭' },
-                    { id: 'Rival',               icon: '🧙' },
-                    { id: 'Custom',              icon: '✍️' },
+                    { id: 'Rival', icon: '🧙' },
+                    { id: 'Custom', icon: '✍️' },
                 ];
 
                 let selectedArchetype = '';
@@ -7269,12 +7705,12 @@ Rules:
                 grid.className = 'rt-archetype-grid';
                 grid.style.marginBottom = '10px';
                 const chipMap = {};
-                
+
                 const customLabel = document.createElement('label');
                 customLabel.className = 'rt-npc-form-label';
                 customLabel.textContent = 'Custom Archetype / Role *';
                 customLabel.style.display = 'none';
-                
+
                 const customInput = document.createElement('input');
                 customInput.className = 'rt-npc-form-input';
                 customInput.type = 'text';
@@ -7288,7 +7724,7 @@ Rules:
                     chip.innerHTML = `<span class="rt-archetype-chip-icon">${icon}</span> ${id}`;
                     chip.addEventListener('click', () => {
                         selectedArchetype = id;
-                        
+
                         if (id === 'Custom') {
                             customLabel.style.display = 'block';
                             customInput.style.display = 'block';
@@ -7299,7 +7735,7 @@ Rules:
                             customInput.style.display = 'none';
                             customInput.value = id;
                         }
-                        
+
                         for (const [cid, cel] of Object.entries(chipMap)) {
                             cel.classList.toggle('selected', cid === selectedArchetype);
                         }
@@ -7307,7 +7743,7 @@ Rules:
                     grid.appendChild(chip);
                     chipMap[id] = chip;
                 }
-                
+
                 customInput.addEventListener('input', () => {
                     selectedArchetype = customInput.value.trim();
                 });
@@ -7772,14 +8208,14 @@ Rules:
             radio.addEventListener('change', () => {
                 const s = getSettings();
                 const mode = /** @type {HTMLInputElement} */ (radio).value;
-                s.routerLookbackSinceLastRun  = mode === 'since_last_run';
+                s.routerLookbackSinceLastRun = mode === 'since_last_run';
                 s.routerLookbackSinceLastUser = mode === 'since_last_user';
                 applyPanelLookbackContainer(mode);
 
                 // Sync settings drawer radio group
                 const targetId = mode === 'since_last_run' ? 'rpg_tracker_router_lookback_since_last_run'
                     : mode === 'since_last_user' ? 'rpg_tracker_router_lookback_since_last_user'
-                    : 'rpg_tracker_router_lookback_fixed';
+                        : 'rpg_tracker_router_lookback_fixed';
                 const drawerRadio = $(`#${targetId}`);
                 if (drawerRadio.length) drawerRadio.prop('checked', true);
                 // Apply drawer numeric row state
@@ -8047,7 +8483,7 @@ Rules:
                     }
                     agentPanel.classList.remove('rt-detached-panel');
                     panel.appendChild(agentPanel);
-                    
+
                     // Style to cover the main panel content area when docked
                     agentPanel.style.left = '0';
                     agentPanel.style.top = '30px';
@@ -8057,7 +8493,7 @@ Rules:
                     agentPanel.style.position = 'absolute';
                     agentPanel.style.boxShadow = 'none';
                     agentPanel.style.border = 'none';
-                    
+
                     detachBtn.innerHTML = '⧉';
                     detachBtn.title = 'Detach Lorebook Agent';
 
@@ -8434,13 +8870,13 @@ Rules:
         const choice = await ctx.callGenericPopup(popupContent, ctx.POPUP_TYPE?.TEXT ?? 1, '', popupOpts);
         if (choice === 1001) {
             await autoGeneratePartyPortraits(refreshRenderedView);
-            if (typeof refreshManifest === 'function') void refreshManifest().catch(() => {});
+            if (typeof refreshManifest === 'function') void refreshManifest().catch(() => { });
         } else if (choice === 1002) {
             removeAllPortraits(refreshRenderedView);
-            if (typeof refreshManifest === 'function') void refreshManifest().catch(() => {});
+            if (typeof refreshManifest === 'function') void refreshManifest().catch(() => { });
         } else if (choice === 1003) {
             await autoGenerateEnemyPortraits(refreshRenderedView);
-            if (typeof refreshManifest === 'function') void refreshManifest().catch(() => {});
+            if (typeof refreshManifest === 'function') void refreshManifest().catch(() => { });
         }
     });
 
@@ -9973,6 +10409,77 @@ function tryBindConnectionProfileDropdown(selector, initialProfileId, onProfileI
             saveSettings();
         });
 
+        // ── Portrait Prompt Templates ──
+        $('#rpg_portrait_prompt_word_target').val(settings.portraitPromptWordTarget ?? 200).on('input', function () {
+            const raw = parseInt(String($(this).val() || ''), 10);
+            settings.portraitPromptWordTarget = isNaN(raw) ? 200 : Math.max(1, Math.min(2000, raw));
+            saveSettings();
+        });
+
+        $('#rpg_portrait_npc_system_prompt').val(settings.portraitNpcSystemPrompt).on('input', function () {
+            settings.portraitNpcSystemPrompt = String($(this).val() || '');
+            saveSettings();
+        });
+
+        $('#rpg_portrait_character_system_prompt').val(settings.portraitCharacterSystemPrompt).on('input', function () {
+            settings.portraitCharacterSystemPrompt = String($(this).val() || '');
+            saveSettings();
+        });
+
+        $('#rpg_portrait_npc_btn_reset_prompt').on('click', function () {
+            if (!confirm('Reset NPC/PC Portrait Prompt to default?')) return;
+
+            const { extensionSettings } = SillyTavern.getContext();
+            if (extensionSettings[MODULE_NAME]) {
+                delete extensionSettings[MODULE_NAME].portraitNpcSystemPrompt;
+            }
+            const freshDefault = getSettings().portraitNpcSystemPrompt;
+
+            const s = getSettings();
+            s.portraitNpcSystemPrompt = freshDefault;
+
+            $('#rpg_portrait_npc_system_prompt').val(freshDefault);
+            saveSettings();
+            toastr['success']('NPC/PC Portrait Prompt reset to default.', 'RPG Tracker');
+        });
+
+        $('#rpg_portrait_character_btn_reset_prompt').on('click', function () {
+            if (!confirm('Reset Character/Party/Combat Portrait Prompt to default?')) return;
+
+            const { extensionSettings } = SillyTavern.getContext();
+            if (extensionSettings[MODULE_NAME]) {
+                delete extensionSettings[MODULE_NAME].portraitCharacterSystemPrompt;
+            }
+            const freshDefault = getSettings().portraitCharacterSystemPrompt;
+
+            const s = getSettings();
+            s.portraitCharacterSystemPrompt = freshDefault;
+
+            $('#rpg_portrait_character_system_prompt').val(freshDefault);
+            saveSettings();
+            toastr['success']('Character/Party/Combat Portrait Prompt reset to default.', 'RPG Tracker');
+        });
+
+        $('#rpg_portrait_prompt_preset_save_btn').on('click', function () {
+            const name = prompt('Enter a name for this portrait prompt setup:', 'My Portrait Prompts');
+            if (!name || !name.trim()) return;
+            const trimmedName = name.trim();
+            if (settings.savedPortraitPromptPresets && settings.savedPortraitPromptPresets[trimmedName]) {
+                if (!confirm(`A setup named "${trimmedName}" already exists. Overwrite?`)) return;
+            }
+            if (!settings.savedPortraitPromptPresets) settings.savedPortraitPromptPresets = {};
+            settings.savedPortraitPromptPresets[trimmedName] = {
+                npcSystemPrompt: settings.portraitNpcSystemPrompt,
+                characterSystemPrompt: settings.portraitCharacterSystemPrompt,
+                wordTarget: settings.portraitPromptWordTarget,
+            };
+            saveSettings();
+            refreshPortraitPromptPresetsList();
+            toastr['success'](`Saved "${trimmedName}" to library.`, 'Portrait Prompt Library');
+        });
+
+        refreshPortraitPromptPresetsList();
+
         // ── World Progression Connection Settings UI Bindings ──
         const worldSourceSelect = $('#rpg_world_connection_source');
         const worldProfileGroup = $('#rpg_world_profile_group');
@@ -10564,14 +11071,14 @@ function tryBindConnectionProfileDropdown(selector, initialProfileId, onProfileI
             }
 
             const existingTags = BLOCK_ORDER.concat((settings.customFields || []).map(f => f.tag.toUpperCase()));
-            
+
             let existingFieldsContext = "";
             BLOCK_ORDER.forEach(tag => {
                 if (tag === 'QUESTS' && settings.syspromptModules?.quests === false) return;
                 if (!settings.modules || settings.modules[tag] !== false) {
                     const modLower = tag === 'TIME' ? resolveTimePromptKey(settings) : tag.toLowerCase();
-                    const promptContent = (settings.stockPrompts && settings.stockPrompts[modLower]) 
-                        ? settings.stockPrompts[modLower] 
+                    const promptContent = (settings.stockPrompts && settings.stockPrompts[modLower])
+                        ? settings.stockPrompts[modLower]
                         : DEFAULT_STOCK_PROMPTS[modLower] || '';
                     existingFieldsContext += `[${tag}] (Stock Module)\nPrompt: ${promptContent}\n\n`;
                 }
@@ -10830,7 +11337,7 @@ RULES:
         $('#rt_btn_tag_library').on('click', async function () {
             const { Popup } = SillyTavern.getContext();
             const { tryRenderMarker } = await import('./renderer.js');
-            
+
             const escapeHtml = (unsafe) => (unsafe || '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 
             const panel = document.getElementById('rpg_tracker_memo_panel');
@@ -10920,6 +11427,13 @@ RULES:
             toastr['success']('Stock modules, order, and prompts reset to factory defaults.', 'RPG Tracker');
         });
 
+        $('#rpg_tracker_btn_edit_npc_sections').on('click', function () {
+            openNpcSectionEditor();
+        });
+
+        $('#rpg_tracker_btn_edit_pc_sections').on('click', function () {
+            openPcSectionEditor();
+        });
 
         // ── Game Systems (Wizard / Manage / System Prompt Control Room) ──
         // Heavy logic lives in game-systems.js; these are thin bindings only.
@@ -11519,7 +12033,7 @@ RULES:
 
         $('input[name="router_lookback_mode"]').on('change', function () {
             const mode = String($(this).val());
-            settings.routerLookbackSinceLastRun  = mode === 'since_last_run';
+            settings.routerLookbackSinceLastRun = mode === 'since_last_run';
             settings.routerLookbackSinceLastUser = mode === 'since_last_user';
             applyDrawerLookbackUI(mode);
 
@@ -11613,7 +12127,7 @@ RULES:
                     globalThis._rpgRenderAgentModules();
                 }
                 if (typeof refreshAgentManifest === 'function') {
-                    void refreshAgentManifest().catch(() => {});
+                    void refreshAgentManifest().catch(() => { });
                 }
                 refreshRenderedView();
             }, 1);
@@ -11649,6 +12163,20 @@ RULES:
             if (typeof globalThis._rpgRenderAgentModules === 'function') {
                 globalThis._rpgRenderAgentModules();
             }
+        });
+
+        // "Add as is" Import Mode — main settings panel radios
+        // Set initial checked state from saved setting
+        const _currentAddAsIsMode = settings.npcAddAsIsMode ?? 'ai_review';
+        $(`input[name="rpg_npc_add_as_is_mode_main"][value="${_currentAddAsIsMode}"]`).prop('checked', true);
+        // On change: save to settings and mirror to the quick-popup radios (if open)
+        $('input[name="rpg_npc_add_as_is_mode_main"]').on('change', function () {
+            if (!$(this).prop('checked')) return;
+            const newMode = $(this).val();
+            settings.npcAddAsIsMode = newMode;
+            saveSettings();
+            // Sync quick-popup radios (name="rt-npc-add-as-is-mode") if they exist in the DOM
+            $(`input[name="rt-npc-add-as-is-mode"][value="${newMode}"]`).prop('checked', true);
         });
 
         // New Entry Settings Bindings
@@ -11823,7 +12351,7 @@ RULES:
 
             const intervalHours = s.worldProgressionIntervalHours || 24;
             const intervalMinutes = intervalHours * 60;
-            
+
             let nextMins = -1;
             if (mins >= 0) {
                 nextMins = mins + intervalMinutes;
@@ -12494,7 +13022,7 @@ RULES:
 
         function syncSettingsUi() {
             const s = getSettings();
-            
+
             // RNG toggles
             let currentRngMode = 'hybrid';
             if (!s.rngEnabled) {
