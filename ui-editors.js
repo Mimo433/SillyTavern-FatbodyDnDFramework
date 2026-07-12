@@ -1463,6 +1463,7 @@ function openSectionEditor(targetType) {
                         </select>
                         <button id="rt_sec_se_preset_save_overwrite" class="menu_button interactable" style="padding:2px 8px; font-size:11px; background:rgba(100,180,255,0.12);${activePresetName ? '' : ' opacity:0.4; cursor:not-allowed;'}" title="${activePresetName ? `Overwrite preset '${activePresetName}' with current sections` : 'Select a preset first'}">Save</button>
                         <button id="rt_sec_se_preset_save" class="menu_button interactable" style="padding:2px 8px; font-size:11px; background:rgba(100,180,255,0.15);" title="Save current sections as a new or renamed preset">Save As…</button>
+                        <button id="rt_sec_se_reset" class="menu_button interactable" style="padding:2px 8px; font-size:11px; color:#ffaa00;" title="Reset current editor sections to default">Reset</button>
                         <button id="rt_sec_se_preset_delete" class="menu_button interactable" style="padding:2px 8px; font-size:11px; color:#ff5555;" title="Delete selected preset">Delete</button>
                     </div>
                     
@@ -1475,7 +1476,6 @@ function openSectionEditor(targetType) {
                     </button>
                 </div>
                 <div class="popup-footer flex-container gap-1 justifycontentend" style="padding:10px 14px; border-top:1px solid rgba(255,255,255,0.08); flex-shrink:0;">
-                    <button id="rt_sec_se_reset" class="menu_button interactable" style="font-size:12px; margin-right:auto; color:#ffaa00;"><i class="fa-solid fa-arrow-rotate-left"></i> Factory Reset</button>
                     <button id="rt_sec_se_cancel" class="menu_button interactable" style="font-size:12px;">Cancel</button>
                     <button id="rt_sec_se_save" class="menu_button interactable" style="font-size:12px; background:rgba(180,100,255,0.15); border-color:rgba(180,100,255,0.4);">Save &amp; Rebuild</button>
                 </div>
@@ -1544,16 +1544,12 @@ function openSectionEditor(targetType) {
         };
         
         document.getElementById('rt_sec_se_reset').onclick = () => {
-            if (confirm("Reset to default sections? This will overwrite your current sections and save immediately.")) {
+            if (confirm("Reset editor sections to default? (This will overwrite current edits in the list below; click Save & Rebuild to apply changes to the game, or Save As... to save as a preset.)")) {
                 workingSections = JSON.parse(JSON.stringify(defaultSections));
-                s[settingsKey] = JSON.parse(JSON.stringify(workingSections));
                 activePresetName = '';
                 s[_activeKey] = '';
-                saveSettings();
-                rebuildNpcInstructionIfNeeded();
-                refreshRenderedView();
                 render();
-                toastr['success'](`${isNPC ? 'NPC Identity' : 'PC Persona'} sections reset to default!`, isNPC ? 'NPC Settings' : 'PC Settings');
+                toastr['info']("Editor sections reset to default.");
             }
         };
 
