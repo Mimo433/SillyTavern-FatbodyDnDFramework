@@ -2739,7 +2739,7 @@ export function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRe
                 char_roll: '🎲 Rolling...'
             };
 
-            const CHARACTER_FORMAT_HINT = `\n\nCRITICAL TAG WRAPPING RULE: Every block you output MUST be enclosed in matching opening and closing tags. You must output the closing tag for every block (${_closingTags}).
+            const CHARACTER_FORMAT_HINT = `\n\nCRITICAL TAG WRAPPING RULE: Every block you output MUST be enclosed in matching opening and closing tags. You must output the closing tag for every block (${_closingTags}).\nCRITICAL PARTY RULE: Do NOT output a [PARTY] block under any circumstances unless explicitly instructed.
 
 Use this exact style:
 [CHARACTER]

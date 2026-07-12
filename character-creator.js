@@ -462,7 +462,7 @@ async function handleCharRollGenerate(el, panel) {
     // Build the dynamic block list for the closing-tag rule (only active blocks)
     const activeBlocks = ['CHARACTER', ...(hasInventory ? ['INVENTORY'] : []), ...(hasAbilities ? ['ABILITIES'] : []), ...(hasSpells ? ['SPELLS'] : []), ...(hasXp ? ['XP'] : []), ...(hasTime ? ['TIME'] : [])];
     const closingTagExamples = activeBlocks.map(b => `[/${b}]`).join(', ');
-    const CHARACTER_FORMAT_HINT = `\n\nCRITICAL TAG WRAPPING RULE: Every block you output MUST be enclosed in matching opening and closing tags (${closingTagExamples}).`;
+    const CHARACTER_FORMAT_HINT = `\n\nCRITICAL TAG WRAPPING RULE: Every block you output MUST be enclosed in matching opening and closing tags (${closingTagExamples}).\nCRITICAL PARTY RULE: Do NOT output a [PARTY] block under any circumstances unless explicitly instructed.`;
 
     // Build the "Output X, Y, Z blocks" instruction
     const blockListStr = activeBlocks.join(', ');
@@ -501,6 +501,7 @@ ${cardSnippet ? `\n--- CHARACTER CARD CONTEXT ---${cardSnippet}` : ''}
 • Fill every blank field above with creative, setting-appropriate content. No field may be empty, "Unknown", "N/A", or a placeholder.
 • The name must be original and fitting. NEVER write "User" or any variation.
 • Output the following blocks: ${blockListStr}.${spellsClause}
+• Do NOT output a [PARTY] block under any circumstances unless explicitly instructed.
 • ${isOther || isStoryFitting ? 'Invent the most fitting class for the setting and context.' : `Use the chosen class "${classRaw}" exactly as given — do not rename or substitute it.`}
 • If the setting is non-fantasy and no class was specified, create a class that feels natural to the world — not a fantasy D&D class name.
 • All stats, gear, and saves${hasXp ? ', and XP' : ''} must be consistent with Level ${level}.
