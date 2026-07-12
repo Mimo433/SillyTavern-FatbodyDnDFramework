@@ -1,4 +1,4 @@
-import { getSettings, getNpcRelationshipMaxDefault, DEFAULT_NPC_SECTIONS, DEFAULT_PC_SECTIONS } from './state-manager.js';
+﻿import { getSettings, getNpcRelationshipMaxDefault, DEFAULT_NPC_SECTIONS, DEFAULT_PC_SECTIONS } from './state-manager.js';
 import { sendStateRequest } from './llm-client.js';
 import { BLOCK_ICONS, BLOCK_ORDER, DEFAULT_STOCK_PROMPTS, PAGE_SIZE, resolveTimePromptKey, resolveTimePromptDisplayTag } from './constants.js';
 import { escapeHtml } from './memo-processor.js';
@@ -1385,6 +1385,11 @@ function openSectionEditor(targetType) {
     if (!s[settingsKey] || !Array.isArray(s[settingsKey]) || s[settingsKey].length === 0) s[settingsKey] = JSON.parse(JSON.stringify(defaultSections));
     let workingSections = JSON.parse(JSON.stringify(s[settingsKey]));
 
+    // Tracks which preset is currently "active" so render() never resets the dropdown.
+    // Persisted between opens by stashing on the settings object under a side-channel key.
+    const _activeKey = `_activePreset_${presetsKey}`;
+    let activePresetName = s[_activeKey] || '';
+
     let overlay = document.getElementById('rt_sec_se_overlay');
     let inner;
     if (!overlay) {
@@ -1429,7 +1434,16 @@ function openSectionEditor(targetType) {
         `).join('');
     };
 
+    // Helper: does the current workingSections differ from what the preset stores?
+    const hasUnsavedChanges = () => {
+        if (!activePresetName || !s[presetsKey][activePresetName]) return false;
+        return JSON.stringify(workingSections) !== JSON.stringify(s[presetsKey][activePresetName]);
+    };
+
     const render = () => {
+        // Ensure activePresetName still exists (preset may have been deleted)
+        if (activePresetName && !s[presetsKey][activePresetName]) activePresetName = '';
+
         inner.innerHTML = `
             <div class="popup shadowBase" style="min-width: 480px; max-width: 600px; max-height: 85vh; display: flex; flex-direction: column;">
                 <div class="popup-header" style="flex-shrink:0;">
@@ -1442,13 +1456,12 @@ function openSectionEditor(targetType) {
                     </div>
                     
                     <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px; padding-bottom:10px; border-bottom: 1px solid rgba(255,255,255,0.08);">
-                        <strong style="font-size:0.85em; opacity:0.8;">Presets</strong>
+                        <strong style="font-size:0.85em; opacity:0.8;">Preset</strong>
                         <select id="rt_sec_se_preset_select" class="text_pole" style="flex:1; font-size:12px; height:24px; padding:2px 4px;">
-                            <option value="">-- Select Preset --</option>
-                            ${Object.keys(s[presetsKey]).map(k => `<option value="${escapeHtml(k)}">${escapeHtml(k)}</option>`).join('')}
+                            <option value="">-- No Preset --</option>
+                            ${Object.keys(s[presetsKey]).map(k => `<option value="${escapeHtml(k)}"${k === activePresetName ? ' selected' : ''}>${escapeHtml(k)}</option>`).join('')}
                         </select>
-                        <button id="rt_sec_se_preset_load" class="menu_button interactable" style="padding:2px 8px; font-size:11px;" title="Load selected preset">Load</button>
-                        <button id="rt_sec_se_preset_save" class="menu_button interactable" style="padding:2px 8px; font-size:11px; background:rgba(100,180,255,0.15);" title="Save current sections as a new preset">Save</button>
+                        <button id="rt_sec_se_preset_save" class="menu_button interactable" style="padding:2px 8px; font-size:11px; background:rgba(100,180,255,0.15);" title="Save current sections as a preset">Save</button>
                         <button id="rt_sec_se_preset_delete" class="menu_button interactable" style="padding:2px 8px; font-size:11px; color:#ff5555;" title="Delete selected preset">Delete</button>
                     </div>
                     
@@ -1463,7 +1476,7 @@ function openSectionEditor(targetType) {
                 <div class="popup-footer flex-container gap-1 justifycontentend" style="padding:10px 14px; border-top:1px solid rgba(255,255,255,0.08); flex-shrink:0;">
                     <button id="rt_sec_se_reset" class="menu_button interactable" style="font-size:12px; margin-right:auto; color:#ffaa00;"><i class="fa-solid fa-arrow-rotate-left"></i> Factory Reset</button>
                     <button id="rt_sec_se_cancel" class="menu_button interactable" style="font-size:12px;">Cancel</button>
-                    <button id="rt_sec_se_save" class="menu_button interactable" style="font-size:12px; background:rgba(180,100,255,0.15); border-color:rgba(180,100,255,0.4);">Save & Rebuild</button>
+                    <button id="rt_sec_se_save" class="menu_button interactable" style="font-size:12px; background:rgba(180,100,255,0.15); border-color:rgba(180,100,255,0.4);">Save &amp; Rebuild</button>
                 </div>
             </div>
         `;
@@ -1471,28 +1484,35 @@ function openSectionEditor(targetType) {
         // Bindings
         document.getElementById('rt_sec_se_close').onclick = close;
         document.getElementById('rt_sec_se_cancel').onclick = close;
-        
-        document.getElementById('rt_sec_se_preset_load').onclick = () => {
-            const presetName = document.getElementById('rt_sec_se_preset_select').value;
-            if (!presetName || !s[presetsKey][presetName]) return;
-            if (confirm(`Load preset "${presetName}"? This will overwrite your current sections.`)) {
-                workingSections = JSON.parse(JSON.stringify(s[presetsKey][presetName]));
-                render();
-                document.getElementById('rt_sec_se_preset_select').value = presetName;
-                toastr['success'](`Loaded preset: ${presetName}`);
+
+        // Preset select: load immediately on change
+        document.getElementById('rt_sec_se_preset_select').onchange = (e) => {
+            const chosen = e.target.value;
+            if (!chosen) { activePresetName = ''; s[_activeKey] = ''; return; }
+            if (!s[presetsKey][chosen]) return;
+            if (hasUnsavedChanges() && !confirm(`Load preset "${chosen}"? Unsaved changes to the current sections will be lost.`)) {
+                // Revert dropdown to old value
+                e.target.value = activePresetName;
+                return;
             }
+            workingSections = JSON.parse(JSON.stringify(s[presetsKey][chosen]));
+            activePresetName = chosen;
+            s[_activeKey] = chosen;
+            render();
+            toastr['success'](`Loaded preset: ${chosen}`);
         };
 
         document.getElementById('rt_sec_se_preset_save').onclick = () => {
-            const presetName = prompt("Enter a name for this preset:");
+            const presetName = prompt("Enter a name for this preset:", activePresetName || '');
             if (!presetName || !presetName.trim()) return;
             const nameTrimmed = presetName.trim();
             s[presetsKey][nameTrimmed] = JSON.parse(JSON.stringify(workingSections));
             // Force top-level reassignment so SillyTavern's shallow proxy detects the change
             s[presetsKey] = { ...s[presetsKey] };
+            activePresetName = nameTrimmed;
+            s[_activeKey] = nameTrimmed;
             saveSettings();
             render();
-            document.getElementById('rt_sec_se_preset_select').value = nameTrimmed;
             toastr['success'](`Saved preset: ${nameTrimmed}`);
         };
 
@@ -1503,6 +1523,7 @@ function openSectionEditor(targetType) {
                 delete s[presetsKey][presetName];
                 // Force top-level reassignment so SillyTavern's shallow proxy detects the change
                 s[presetsKey] = { ...s[presetsKey] };
+                if (activePresetName === presetName) { activePresetName = ''; s[_activeKey] = ''; }
                 saveSettings();
                 render();
                 toastr['info'](`Deleted preset: ${presetName}`);
@@ -1513,6 +1534,8 @@ function openSectionEditor(targetType) {
             if (confirm("Reset to default sections? This will overwrite your current sections and save immediately.")) {
                 workingSections = JSON.parse(JSON.stringify(defaultSections));
                 s[settingsKey] = JSON.parse(JSON.stringify(workingSections));
+                activePresetName = '';
+                s[_activeKey] = '';
                 saveSettings();
                 rebuildNpcInstructionIfNeeded();
                 refreshRenderedView();
