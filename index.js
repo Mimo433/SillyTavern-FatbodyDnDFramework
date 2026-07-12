@@ -2700,7 +2700,24 @@ export function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRe
                 : 'Day 1';
             const customInstructions = el.querySelector('#rt-onboarding-custom-instructions')?.value.trim() || '';
             const levelPrefix = `STARTING LEVEL: ${level} (mandatory — the character MUST be exactly Level ${level}).`;
-            const xpHint = buildOnboardingXpHint(level);
+
+            // Gate optional blocks on enabled modules
+            const _mods = getSettings().modules || {};
+            const _hasXp        = !!_mods['xp'];
+            const _hasTime      = !!_mods['time'];
+            const _hasInventory = !!_mods['inventory'];
+            const _hasAbilities = !!_mods['abilities'];
+            const _hasSpells    = !!_mods['spells'];
+
+            const xpHint = _hasXp ? buildOnboardingXpHint(level) : '';
+            const TIME_FORMAT_HINT = _hasTime
+                ? `\n\n[TIME]\nLast Rest: 12:00 AM, ${isCalendar ? startDateVal : 'Day 0'}\nCurrent Time: 08:00 AM, ${startDateVal}\n[/TIME]`
+                : '';
+
+            // Dynamic block list (only enabled modules)
+            const _activeBlocks = ['CHARACTER', ...(_hasInventory ? ['INVENTORY'] : []), ...(_hasAbilities ? ['ABILITIES'] : []), ...(_hasSpells ? ['SPELLS'] : []), ...(_hasXp ? ['XP'] : []), ...(_hasTime ? ['TIME'] : [])];
+            const _blockListStr  = _activeBlocks.join(', ');
+            const _closingTags   = _activeBlocks.map(b => `[/${b}]`).join(', ');
 
             const labels = {
                 magic: '✨ Casting...',
@@ -2720,7 +2737,7 @@ export function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRe
                 char_roll: '🎲 Rolling...'
             };
 
-            const CHARACTER_FORMAT_HINT = `\n\nCRITICAL TAG WRAPPING RULE: Every block you output MUST be enclosed in matching opening and closing tags. You must output the closing tag for every block (e.g. [/CHARACTER], [/INVENTORY], [/ABILITIES], [/SPELLS], [/XP], [/TIME]).
+            const CHARACTER_FORMAT_HINT = `\n\nCRITICAL TAG WRAPPING RULE: Every block you output MUST be enclosed in matching opening and closing tags. You must output the closing tag for every block (${_closingTags}).
 
 Use this exact style:
 [CHARACTER]
@@ -2729,20 +2746,17 @@ Combat: BAB: +4 | Ranged: +6 | Melee: +5
 Gear: Cutlass (1d6+2 Slashing) [E], AC: 14 (Leather Jerkin)
 Attr: STR 14 (+2), DEX 15 (+2), CON 14 (+2), INT 12 (+1), WIS 10 (+0), CHA 14 (+2)
 Saves: Fort +6 | Ref +6 | Will +1
-[/CHARACTER]
+[/CHARACTER]${_hasInventory ? `
 
 [INVENTORY]
 Gear:
 - 🗡️ [Common] [E] Cutlass (1d6+2 Slashing)
-[/INVENTORY]
+[/INVENTORY]` : ''}${_hasAbilities ? `
 
 [ABILITIES]
 - Dirty Fighting
-[/ABILITIES]`;
+[/ABILITIES]` : ''}`;
 
-            const initDateVal = startDateVal;
-            const initRestVal = isCalendar ? startDateVal : 'Day 0';
-            const TIME_FORMAT_HINT = `\n\n[TIME]\nLast Rest: 12:00 AM, ${initRestVal}\nCurrent Time: 08:00 AM, ${initDateVal}\n[/TIME]`;
 
             const REALISTIC_HINT = `\n\nCRITICAL REALISM RULE: This is a realistic/non-fantasy setting.
 - Do NOT output a [SPELLS] block under any circumstances. Avoid all magic, spells, or magical powers.
@@ -2763,18 +2777,18 @@ Gear:
 - Wing it and homebrew fitting capabilities: adapt attributes, saves, gear, and skills for a tense horror survival setting.`;
 
             const prompts = {
-                magic: `${levelPrefix} Generate a random Level ${level} D&D Magic User (Wizard, Sorcerer, or Warlock). Give them a random fantasy name (do NOT use {{user}}). Output [CHARACTER], [SPELLS], [INVENTORY], [ABILITIES], [XP], and [TIME] blocks. Include appropriate spells (using 'Cantrips:' for level 0 spells), items, and attributes consistent with Level ${level}.${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}`,
-                melee: `${levelPrefix} Generate a random Level ${level} D&D Melee Fighter (Fighter, Barbarian, or Paladin). Give them a random fantasy name (do NOT use {{user}}). Output [CHARACTER], [INVENTORY], [ABILITIES], [XP], and [TIME] blocks. Focus on high physical attributes, heavy armor, and signature weapons consistent with Level ${level}.${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}`,
-                rogue: `${levelPrefix} Generate a random Level ${level} D&D Rogue or Thief-style character. Give them a random fantasy name (do NOT use {{user}}). Output [CHARACTER], [INVENTORY], [ABILITIES], [XP], and [TIME] blocks. Focus on high Dexterity, stealth-related equipment (thieves' tools, daggers), and class features like Sneak Attack consistent with Level ${level}.${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}`,
-                professional: `${levelPrefix} Generate a random Level ${level} modern professional/specialist character (e.g. detective, agent, scientist, doctor, law enforcement, or investigator). Give them a realistic name (do NOT use {{user}}). Output [CHARACTER], [INVENTORY], [ABILITIES], [XP], and [TIME] blocks. Focus on specialized professional skills, modern gear, and attributes consistent with a Level ${level} specialist.${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}${REALISTIC_HINT}`,
-                survivor: `${levelPrefix} Generate a random Level ${level} survivor character (e.g. survivalist, soldier, athlete, or civilian). Give them a realistic name (do NOT use {{user}}). Output [CHARACTER], [INVENTORY], [ABILITIES], [XP], and [TIME] blocks. Focus on physical resilience, survival/scavenged gear, and attributes consistent with a Level ${level} survivor.${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}${REALISTIC_HINT}`,
-                scholar: `${levelPrefix} Generate a random Level ${level} intellectual/scholar character (e.g. occultist, inventor, academic, hacker, or historian). Give them a realistic name (do NOT use {{user}}). Output [CHARACTER], [INVENTORY], [ABILITIES], [XP], and [TIME] blocks. Focus on intelligence, knowledge-based traits, research tools/gear, and attributes consistent with an intellectual Level ${level} scholar.${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}${REALISTIC_HINT}`,
-                scifi_pilot: `${levelPrefix} Generate a random Level ${level} sci-fi pilot/ace character (starfighter pilot, freighter captain, or mech pilot). Give them a realistic or sci-fi-style name (do NOT use {{user}}). Output [CHARACTER], [INVENTORY], [ABILITIES], [XP], and [TIME] blocks. Focus on piloting skills, a signature ship/vehicle callsign, and sidearm/survival gear consistent with Level ${level}.${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}${SCIFI_HINT}`,
-                scifi_engineer: `${levelPrefix} Generate a random Level ${level} sci-fi engineer/technician character (ship engineer, hacker, or robotics specialist). Give them a realistic or sci-fi-style name (do NOT use {{user}}). Output [CHARACTER], [INVENTORY], [ABILITIES], [XP], and [TIME] blocks. Focus on technical skills, tools/gadgets, and gear consistent with a Level ${level} engineer.${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}${SCIFI_HINT}`,
-                scifi_marine: `${levelPrefix} Generate a random Level ${level} sci-fi combat marine/soldier character. Give them a realistic or sci-fi-style name (do NOT use {{user}}). Output [CHARACTER], [INVENTORY], [ABILITIES], [XP], and [TIME] blocks. Focus on combat training, powered armor or tactical gear, and weaponry consistent with a Level ${level} marine.${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}${SCIFI_HINT}`,
-                horror_investigator: `${levelPrefix} Generate a random Level ${level} horror investigator character (detective, paranormal investigator, or journalist chasing the truth). Give them a realistic name (do NOT use {{user}}). Output [CHARACTER], [INVENTORY], [ABILITIES], [XP], and [TIME] blocks. Focus on investigative skills, mundane gear, and a fraying grip on sanity consistent with Level ${level}.${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}${HORROR_HINT}`,
-                horror_occultist: `${levelPrefix} Generate a random Level ${level} occultist character with forbidden knowledge (cultist-hunter, occult scholar, or dabbler in the unknown). Give them a realistic name (do NOT use {{user}}). Output [CHARACTER], [INVENTORY], [ABILITIES], [XP], and [TIME] blocks. Represent any ritual or occult knowledge as entries in [ABILITIES] rather than spells, consistent with Level ${level}.${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}${HORROR_HINT}`,
-                horror_survivor: `${levelPrefix} Generate a random Level ${level} horror survivor character (ordinary person thrust into a nightmare — final girl/guy archetype, small-town resident, or camp counselor). Give them a realistic name (do NOT use {{user}}). Output [CHARACTER], [INVENTORY], [ABILITIES], [XP], and [TIME] blocks. Focus on resourcefulness, improvised weapons/tools, and fragile but resilient stats consistent with Level ${level}.${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}${HORROR_HINT}`
+                magic:            `${levelPrefix} Generate a random Level ${level} D&D Magic User (Wizard, Sorcerer, or Warlock). Give them a random fantasy name (do NOT use {{user}}). Output ${_blockListStr} blocks${_hasSpells ? " (using 'Cantrips:' for level 0 spells)" : ''}. Include appropriate${_hasSpells ? ' spells,' : ''} items, and attributes consistent with Level ${level}.${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}`,
+                melee:            `${levelPrefix} Generate a random Level ${level} D&D Melee Fighter (Fighter, Barbarian, or Paladin). Give them a random fantasy name (do NOT use {{user}}). Output ${_blockListStr} blocks. Focus on high physical attributes, heavy armor, and signature weapons consistent with Level ${level}.${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}`,
+                rogue:            `${levelPrefix} Generate a random Level ${level} D&D Rogue or Thief-style character. Give them a random fantasy name (do NOT use {{user}}). Output ${_blockListStr} blocks. Focus on high Dexterity, stealth-related equipment, and class features consistent with Level ${level}.${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}`,
+                professional:     `${levelPrefix} Generate a random Level ${level} modern professional/specialist character. Give them a realistic name (do NOT use {{user}}). Output ${_blockListStr} blocks. Focus on specialized professional skills, modern gear, and attributes consistent with a Level ${level} specialist.${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}${REALISTIC_HINT}`,
+                survivor:         `${levelPrefix} Generate a random Level ${level} survivor character. Give them a realistic name (do NOT use {{user}}). Output ${_blockListStr} blocks. Focus on physical resilience, survival/scavenged gear, and attributes consistent with a Level ${level} survivor.${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}${REALISTIC_HINT}`,
+                scholar:          `${levelPrefix} Generate a random Level ${level} intellectual/scholar character. Give them a realistic name (do NOT use {{user}}). Output ${_blockListStr} blocks. Focus on intelligence, knowledge-based traits, research tools/gear, and attributes consistent with an intellectual Level ${level} scholar.${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}${REALISTIC_HINT}`,
+                scifi_pilot:      `${levelPrefix} Generate a random Level ${level} sci-fi pilot/ace character. Give them a realistic or sci-fi-style name (do NOT use {{user}}). Output ${_blockListStr} blocks. Focus on piloting skills, a signature ship/vehicle callsign, and sidearm/survival gear consistent with Level ${level}.${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}${SCIFI_HINT}`,
+                scifi_engineer:   `${levelPrefix} Generate a random Level ${level} sci-fi engineer/technician character. Give them a realistic or sci-fi-style name (do NOT use {{user}}). Output ${_blockListStr} blocks. Focus on technical skills, tools/gadgets, and gear consistent with a Level ${level} engineer.${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}${SCIFI_HINT}`,
+                scifi_marine:     `${levelPrefix} Generate a random Level ${level} sci-fi combat marine/soldier character. Give them a realistic or sci-fi-style name (do NOT use {{user}}). Output ${_blockListStr} blocks. Focus on combat training, powered armor or tactical gear, and weaponry consistent with a Level ${level} marine.${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}${SCIFI_HINT}`,
+                horror_investigator: `${levelPrefix} Generate a random Level ${level} horror investigator character. Give them a realistic name (do NOT use {{user}}). Output ${_blockListStr} blocks. Focus on investigative skills, mundane gear, and a fraying grip on sanity consistent with Level ${level}.${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}${HORROR_HINT}`,
+                horror_occultist: `${levelPrefix} Generate a random Level ${level} occultist character with forbidden knowledge. Give them a realistic name (do NOT use {{user}}). Output ${_blockListStr} blocks.${_hasAbilities ? ' Represent any ritual or occult knowledge as entries in [ABILITIES] rather than spells,' : ''} consistent with Level ${level}.${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}${HORROR_HINT}`,
+                horror_survivor:  `${levelPrefix} Generate a random Level ${level} horror survivor character. Give them a realistic name (do NOT use {{user}}). Output ${_blockListStr} blocks. Focus on resourcefulness, improvised weapons/tools, and fragile but resilient stats consistent with Level ${level}.${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}${HORROR_HINT}`
             };
 
             // ── Custom archetype: freeform character based entirely on custom instructions ──
@@ -2785,7 +2799,7 @@ Gear:
                 }
                 el.querySelectorAll('.rt-random-char-btn').forEach(b => b.disabled = true);
                 btn.textContent = labels.custom;
-                let customPrompt = `${levelPrefix} Generate a random Level ${level} character based entirely on these custom instructions: "${customInstructions}". Output [CHARACTER], [INVENTORY], [ABILITIES], [XP], and [TIME] blocks (and [SPELLS] if appropriate for the class, using 'Cantrips:' for level 0 spells). Adapt all attributes, skills, saves, descriptions, and gear to match the setting and instructions perfectly.${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}`;
+                let customPrompt = `${levelPrefix} Generate a random Level ${level} character based entirely on these custom instructions: "${customInstructions}". Output ${_blockListStr} blocks${_hasSpells ? " (and [SPELLS] if appropriate for the class, using 'Cantrips:' for level 0 spells)" : ''}. Adapt all attributes, skills, saves, descriptions, and gear to match the setting and instructions perfectly.${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}`;
                 if (isCalendar) {
                     customPrompt += `\n\nCRITICAL REALISM RULE: This is a realistic/non-fantasy setting. Do NOT output a [SPELLS] block. Use realistic modern/historical currencies instead of GP/SP/CP.`;
                 }
@@ -2806,7 +2820,7 @@ Gear:
                 }
                 el.querySelectorAll('.rt-random-char-btn').forEach(b => b.disabled = true);
                 btn.textContent = labels.persona;
-                let personaPrompt = `${levelPrefix} Using the following persona description as the basis for the player character, create a Level ${level} character that faithfully embodies this persona. Translate the personality, background, and traits into appropriate stats, class, race, and equipment. Output [CHARACTER], [INVENTORY], [ABILITIES], [XP], and [TIME] blocks (and [SPELLS] if the class is a spellcaster, using 'Cantrips:' for level 0 spells). All attributes and gear should be consistent with Level ${level}.${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}\n\nPersona:\n${resolvedPersona}`;
+                let personaPrompt = `${levelPrefix} Using the following persona description as the basis for the player character, create a Level ${level} character that faithfully embodies this persona. Translate the personality, background, and traits into appropriate stats, class, race, and equipment. Output ${_blockListStr} blocks${_hasSpells ? " (and [SPELLS] if the class is a spellcaster, using 'Cantrips:' for level 0 spells)" : ''}. All attributes and gear should be consistent with Level ${level}.${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}\n\nPersona:\n${resolvedPersona}`;
                 if (customInstructions) {
                     personaPrompt += `\n\nAdditional setting/instruction constraints: ${customInstructions}. Adapt the name, attributes, description, gear, and spells (if any) to match this setting/instruction perfectly.`;
                 }

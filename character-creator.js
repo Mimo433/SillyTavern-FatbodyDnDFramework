@@ -442,14 +442,33 @@ async function handleCharRollGenerate(el, panel) {
         : 'Day 1';
     const initRestVal = isCalendar ? startDateVal : 'Day 0';
     const levelPrefix = `STARTING LEVEL: ${level} (mandatory — the character MUST be exactly Level ${level}).`;
-    const xpHint = buildOnboardingXpHint(level);
-    const CHARACTER_FORMAT_HINT = `\n\nCRITICAL TAG WRAPPING RULE: Every block you output MUST be enclosed in matching opening and closing tags (e.g. [/CHARACTER], [/INVENTORY], [/ABILITIES], [/SPELLS], [/XP], [/TIME]).`;
-    const TIME_FORMAT_HINT = `\n\n[TIME]\nLast Rest: 12:00 AM, ${initRestVal}\nCurrent Time: 08:00 AM, ${startDateVal}\n[/TIME]`;
+
+    // Gate optional blocks on enabled modules
+    const mods = s.modules || {};
+    const hasXp        = !!mods['xp'];
+    const hasTime      = !!mods['time'];
+    const hasInventory = !!mods['inventory'];
+    const hasAbilities = !!mods['abilities'];
+    const hasSpells    = !!mods['spells'];
+
+    const xpHint = hasXp ? buildOnboardingXpHint(level) : '';
+    const TIME_FORMAT_HINT = hasTime
+        ? `\n\n[TIME]\nLast Rest: 12:00 AM, ${initRestVal}\nCurrent Time: 08:00 AM, ${startDateVal}\n[/TIME]`
+        : '';
+
+    // Build the dynamic block list for the closing-tag rule (only active blocks)
+    const activeBlocks = ['CHARACTER', ...(hasInventory ? ['INVENTORY'] : []), ...(hasAbilities ? ['ABILITIES'] : []), ...(hasSpells ? ['SPELLS'] : []), ...(hasXp ? ['XP'] : []), ...(hasTime ? ['TIME'] : [])];
+    const closingTagExamples = activeBlocks.map(b => `[/${b}]`).join(', ');
+    const CHARACTER_FORMAT_HINT = `\n\nCRITICAL TAG WRAPPING RULE: Every block you output MUST be enclosed in matching opening and closing tags (${closingTagExamples}).`;
+
+    // Build the "Output X, Y, Z blocks" instruction
+    const blockListStr = activeBlocks.join(', ');
+    const spellsClause = hasSpells ? " Only include [SPELLS] if the class genuinely uses magic." : '';
 
     const SETTING_HINTS = {
-        realistic: `\n\nCRITICAL REALISM RULE: This is a realistic/non-fantasy setting. Do NOT output a [SPELLS] block. Avoid fantasy classes and races. Use realistic currency (e.g. $, USD, GBP). Gear and weapons must be realistic.`,
-        scifi: `\n\nCRITICAL SCI-FI RULE: Science-fiction setting. No [SPELLS] block. No fantasy classes or races. Use Credits or equivalent currency. Gear should be futuristic.`,
-        horror: `\n\nCRITICAL HORROR RULE: Horror setting. No [SPELLS] block — occult abilities go in [ABILITIES]. No fantasy classes or races. Use realistic currency. Characters are grounded and vulnerable.`,
+        realistic: `\n\nCRITICAL REALISM RULE: This is a realistic/non-fantasy setting.${hasSpells ? ' Do NOT output a [SPELLS] block.' : ''} Avoid fantasy classes and races. Use realistic currency (e.g. $, USD, GBP). Gear and weapons must be realistic.`,
+        scifi: `\n\nCRITICAL SCI-FI RULE: Science-fiction setting.${hasSpells ? ' No [SPELLS] block.' : ''} No fantasy classes or races. Use Credits or equivalent currency. Gear should be futuristic.`,
+        horror: `\n\nCRITICAL HORROR RULE: Horror setting.${hasSpells ? ' No [SPELLS] block — occult abilities go in [ABILITIES].' : ''} No fantasy classes or races. Use realistic currency. Characters are grounded and vulnerable.`,
         fantasy: '',
     };
     const settingHint = SETTING_HINTS[genre] || '';
@@ -478,7 +497,7 @@ ${cardSnippet ? `\n--- CHARACTER CARD CONTEXT ---${cardSnippet}` : ''}
 --- REQUIREMENTS ---
 • Fill every blank field above with creative, setting-appropriate content. No field may be empty, "Unknown", "N/A", or a placeholder.
 • The name must be original and fitting. NEVER write "User" or any variation.
-• Output every currently active state-memo field (custom and default). Only include [SPELLS] if the class genuinely uses magic.
+• Output the following blocks: ${blockListStr}.${spellsClause}
 • ${isOther || isStoryFitting ? 'Invent the most fitting class for the setting and context.' : `Use the chosen class "${classRaw}" exactly as given — do not rename or substitute it.`}
 • If the setting is non-fantasy and no class was specified, create a class that feels natural to the world — not a fantasy D&D class name.
 • All stats, gear, saves, and XP must be consistent with Level ${level}.
