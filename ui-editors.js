@@ -1467,7 +1467,7 @@ function openSectionEditor(targetType) {
                         <button id="rt_sec_se_preset_delete" class="menu_button interactable" style="padding:2px 8px; font-size:11px; color:#ff5555;" title="Delete selected preset">Delete</button>
                     </div>
                 </div>
-                <div id="rt_sec_se_list" style="overflow-y:auto; flex:1; padding: 0 14px;">
+                <div id="rt_sec_se_list" style="overflow-y:auto; max-height:40vh; padding: 0 14px;">
                     ${renderList()}
                 </div>
                 <div style="padding: 8px 14px; flex-shrink:0;">
