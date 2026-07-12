@@ -1,4 +1,4 @@
-﻿import { getSettings, getNpcRelationshipMaxDefault, DEFAULT_NPC_SECTIONS, DEFAULT_PC_SECTIONS } from './state-manager.js';
+import { getSettings, getNpcRelationshipMaxDefault, DEFAULT_NPC_SECTIONS, DEFAULT_PC_SECTIONS } from './state-manager.js';
 import { sendStateRequest } from './llm-client.js';
 import { BLOCK_ICONS, BLOCK_ORDER, DEFAULT_STOCK_PROMPTS, PAGE_SIZE, resolveTimePromptKey, resolveTimePromptDisplayTag } from './constants.js';
 import { escapeHtml } from './memo-processor.js';
@@ -1461,7 +1461,8 @@ function openSectionEditor(targetType) {
                             <option value="">-- No Preset --</option>
                             ${Object.keys(s[presetsKey]).map(k => `<option value="${escapeHtml(k)}"${k === activePresetName ? ' selected' : ''}>${escapeHtml(k)}</option>`).join('')}
                         </select>
-                        <button id="rt_sec_se_preset_save" class="menu_button interactable" style="padding:2px 8px; font-size:11px; background:rgba(100,180,255,0.15);" title="Save current sections as a preset">Save</button>
+                        <button id="rt_sec_se_preset_save_overwrite" class="menu_button interactable" style="padding:2px 8px; font-size:11px; background:rgba(100,180,255,0.12);${activePresetName ? '' : ' opacity:0.4; cursor:not-allowed;'}" title="${activePresetName ? `Overwrite preset '${activePresetName}' with current sections` : 'Select a preset first'}">Save</button>
+                        <button id="rt_sec_se_preset_save" class="menu_button interactable" style="padding:2px 8px; font-size:11px; background:rgba(100,180,255,0.15);" title="Save current sections as a new or renamed preset">Save As…</button>
                         <button id="rt_sec_se_preset_delete" class="menu_button interactable" style="padding:2px 8px; font-size:11px; color:#ff5555;" title="Delete selected preset">Delete</button>
                     </div>
                     
@@ -1502,8 +1503,20 @@ function openSectionEditor(targetType) {
             toastr['success'](`Loaded preset: ${chosen}`);
         };
 
+        // Save — overwrite active preset silently
+        document.getElementById('rt_sec_se_preset_save_overwrite').onclick = () => {
+            if (!activePresetName) { toastr['warning']('Select a preset first, or use Save As… to create one.'); return; }
+            s[presetsKey][activePresetName] = JSON.parse(JSON.stringify(workingSections));
+            s[presetsKey] = { ...s[presetsKey] };
+            s[_activeKey] = activePresetName;
+            saveSettings();
+            render();
+            toastr['success'](`Preset saved: ${activePresetName}`);
+        };
+
+        // Save As… — prompt for a (new) name
         document.getElementById('rt_sec_se_preset_save').onclick = () => {
-            const presetName = prompt("Enter a name for this preset:", activePresetName || '');
+            const presetName = prompt('Enter a name for this preset:', activePresetName || '');
             if (!presetName || !presetName.trim()) return;
             const nameTrimmed = presetName.trim();
             s[presetsKey][nameTrimmed] = JSON.parse(JSON.stringify(workingSections));
