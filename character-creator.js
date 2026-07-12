@@ -441,7 +441,6 @@ async function handleCharRollGenerate(el, panel) {
         ? (s.initialDate && s.initialDate !== 'Day 1' ? s.initialDate : '01/01/2026')
         : 'Day 1';
     const initRestVal = isCalendar ? startDateVal : 'Day 0';
-    const levelPrefix = `STARTING LEVEL: ${level} (mandatory — the character MUST be exactly Level ${level}).`;
 
     // Gate optional blocks on enabled modules
     const mods = s.modules || {};
@@ -450,6 +449,10 @@ async function handleCharRollGenerate(el, panel) {
     const hasInventory = !!mods['inventory'];
     const hasAbilities = !!mods['abilities'];
     const hasSpells    = !!mods['spells'];
+
+    const levelPrefix = hasXp
+        ? `STARTING LEVEL: ${level} (mandatory — the character MUST be exactly Level ${level}).`
+        : `STARTING LEVEL: ${level} (mandatory — the character MUST be exactly Level ${level}; scale/adjust HP, stats, saves, and capabilities to Level ${level} accordingly, but do NOT output an [XP] block as it is disabled).`;
 
     const xpHint = hasXp ? buildOnboardingXpHint(level) : '';
     const TIME_FORMAT_HINT = hasTime
@@ -500,7 +503,7 @@ ${cardSnippet ? `\n--- CHARACTER CARD CONTEXT ---${cardSnippet}` : ''}
 • Output the following blocks: ${blockListStr}.${spellsClause}
 • ${isOther || isStoryFitting ? 'Invent the most fitting class for the setting and context.' : `Use the chosen class "${classRaw}" exactly as given — do not rename or substitute it.`}
 • If the setting is non-fantasy and no class was specified, create a class that feels natural to the world — not a fantasy D&D class name.
-• All stats, gear, saves, and XP must be consistent with Level ${level}.
+• All stats, gear, and saves${hasXp ? ', and XP' : ''} must be consistent with Level ${level}.
 ${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}${settingHint}`;
 
     el.querySelectorAll('.rt-random-char-btn').forEach(b => { /** @type {HTMLButtonElement} */ (b).disabled = true; });

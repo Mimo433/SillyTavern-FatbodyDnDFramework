@@ -2699,8 +2699,6 @@ export function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRe
                 ? (getSettings().initialDate && getSettings().initialDate !== 'Day 1' ? getSettings().initialDate : '01/01/2026')
                 : 'Day 1';
             const customInstructions = el.querySelector('#rt-onboarding-custom-instructions')?.value.trim() || '';
-            const levelPrefix = `STARTING LEVEL: ${level} (mandatory — the character MUST be exactly Level ${level}).`;
-
             // Gate optional blocks on enabled modules
             const _mods = getSettings().modules || {};
             const _hasXp        = !!_mods['xp'];
@@ -2708,6 +2706,10 @@ export function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRe
             const _hasInventory = !!_mods['inventory'];
             const _hasAbilities = !!_mods['abilities'];
             const _hasSpells    = !!_mods['spells'];
+
+            const levelPrefix = _hasXp
+                ? `STARTING LEVEL: ${level} (mandatory — the character MUST be exactly Level ${level}).`
+                : `STARTING LEVEL: ${level} (mandatory — the character MUST be exactly Level ${level}; scale/adjust HP, stats, saves, and capabilities to Level ${level} accordingly, but do NOT output an [XP] block as it is disabled).`;
 
             const xpHint = _hasXp ? buildOnboardingXpHint(level) : '';
             const TIME_FORMAT_HINT = _hasTime
