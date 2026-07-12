@@ -1045,6 +1045,13 @@ const CARTRIDGE_PAYLOAD_KEYS = [
     'pcCoreSections',
     'npcSectionPresets',
     'pcSectionPresets',
+    // ── Lorebook Agent (Researcher/Router) ────────────────────────────────
+    'routerSystemPromptTemplate',
+    'routerModularPromptTemplate',
+    'routerModules',
+    'routerCustomTags',
+    // ── World Progression ──────────────────────────────────────────────────────
+    'worldProgressionSystemPrompt',
 ];
 
 /**
@@ -1062,6 +1069,58 @@ export function getFactoryCartridgePayload() {
     }
     return payload;
 }
+
+/**
+ * Logical groups of cartridge payload keys used by the selective load dialog
+ * (game-cartridges.js). Each group has a human-readable label, a short
+ * description, and the list of payload keys that belong to it. The order here
+ * determines the display order in the dialog.
+ */
+export const CARTRIDGE_PAYLOAD_GROUPS = [
+    {
+        id: 'stateTracker',
+        label: 'State Tracker',
+        description: 'Extractor prompt, module toggles, block order, stock prompts, RNG & time-format flags',
+        keys: [
+            'systemPromptTemplate', 'modules', 'blockOrder', 'stockPrompts',
+            'syspromptModules', 'syspromptSectionOrder', 'customSyspromptLibrary',
+            'rngEnabled', 'diceFunctionTool', 'use24hTime', 'useDdMmYyFormat',
+        ],
+    },
+    {
+        id: 'gameSystems',
+        label: 'Game Systems & Custom Fields',
+        description: 'Custom game systems and custom tracker fields',
+        keys: ['gameSystems', 'customFields'],
+    },
+    {
+        id: 'characterSheets',
+        label: 'Character Sheets',
+        description: 'NPC/PC core sections, section presets, relationship bar toggle',
+        keys: ['npcCoreSections', 'pcCoreSections', 'npcSectionPresets', 'pcSectionPresets', 'npcRelationshipBars'],
+    },
+    {
+        id: 'portraits',
+        label: 'Portrait Generator',
+        description: 'NPC and character portrait prompt templates, word target, saved presets',
+        keys: [
+            'portraitNpcSystemPrompt', 'portraitCharacterSystemPrompt',
+            'portraitPromptWordTarget', 'savedPortraitPromptPresets',
+        ],
+    },
+    {
+        id: 'lorebookAgent',
+        label: 'Lorebook Agent',
+        description: 'Researcher agent system prompt, modular format prompt, module definitions, custom tags',
+        keys: ['routerSystemPromptTemplate', 'routerModularPromptTemplate', 'routerModules', 'routerCustomTags'],
+    },
+    {
+        id: 'worldProgression',
+        label: 'World Progression',
+        description: 'Report Generation Prompt used by the World Progression Engine',
+        keys: ['worldProgressionSystemPrompt'],
+    },
+];
 
 /**
  * Compares two dotted version strings numerically (segment-by-segment), so

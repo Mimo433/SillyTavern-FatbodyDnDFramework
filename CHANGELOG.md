@@ -2,6 +2,23 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [5.1.4] - 2026-07-13
+
+### Added
+- **Inline Rendering Tag Colors**: Any rendering tag now optionally supports a custom color override directly in the marker, e.g. `((PLS - #E5FFCC))` or `((BADGE - #ff6699))`. Bar-type tags (`((BAR))`, `((XPBAR))`, `((PROGRESS))`) additionally support a two-color gradient: `((BAR - #E5FFCC #003300))`. Colors are strictly validated as 6-digit `#RRGGBB` hex to prevent malformed/unsafe CSS.
+- **GM State Memo Formatting Tag Stripper**: Strips all `((...))` rendering markers from the outgoing memo block passed to the GM, leaving clean mechanical data while preserving full visual marker rendering in the player-facing State Tracker panel.
+- **Game Cartridges Selective Load Checkbox UI**: Added a checklist dialog when loading a cartridge, allowing users to import only specific groups of settings: State Tracker, Game Systems & Custom Fields, Character Sheets, Portrait Generator, and Lorebook Agent.
+- **Lorebook Agent Cartridges Integration**: Added Lorebook Agent prompts (`routerSystemPromptTemplate`, `routerModularPromptTemplate`), modules (`routerModules`), and custom tags (`routerCustomTags`) to the cartridge payload keys, so they are saved and loaded alongside the rest of the configuration.
+- **World Progression Prompt Cartridges Integration**: Added the World Progression Report Generation Prompt (`worldProgressionSystemPrompt`) to the cartridge payload. It appears as a dedicated **World Progression** group in the selective load dialog.
+- **Lorebook Agent UI Auto-Refresh**: Exposed a re-rendering hook `_rpgRenderAgentCustomTags` to `globalThis`, and wired both custom tags and module lists to refresh in real-time when settings are synced (such as when importing/loading a Game Cartridge).
+
+### Removed
+- **Prompt Instruction Cleanup**: Removed the now redundant `- Ignore any formatting data such as ((PLS))` and `- Ignore any formatting data such as ((PILLS))` guidelines from the default system prompts (`constants.js`, `sysprompt.txt`, `sysprompt_legacy.txt`) since formatting markers are now cleanly stripped programmatically on the GM path before injection.
+
+### Changed
+- **Simplified GM Marker Stripper**: `memoForGmContext()` now unconditionally removes any `((...))` token in full — no per-tag parsing, no color-suffix special-casing — so new marker syntax (including inline colors) can never leak into GM context.
+- **Improved Contrast on Default "Stock" Badges**: Enhanced visual contrast for the `~ stock ~` label badge inside the load checklist dialog by inheriting theme-aware text colors and using adaptive background/borders.
+
 ## [4.9.1] - 2026-07-11
 
 ### Added

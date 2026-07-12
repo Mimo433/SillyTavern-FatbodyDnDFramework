@@ -2,14 +2,15 @@
 // Game Cartridges — save/load/export/import the entire "configuration
 // surface" of the framework (system prompt sections/order/toggles, Game
 // Systems, tracker modules, block order, stock prompts, State Tracker
-// extractor prompt, RNG/format flags) as named, shareable bundles.
+// extractor prompt, Lorebook Agent prompts & modules, RNG/format flags)
+// as named, shareable bundles.
 //
 // The shipped defaults are exposed as a virtual, non-deletable "Stock"
 // cartridge so the framework reads as a moddable platform: Stock is just
 // the pack that ships in the box.
 // ─────────────────────────────────────────────────────────────────────────
 
-import { getSettings, getFactoryCartridgePayload } from './state-manager.js';
+import { getSettings, getFactoryCartridgePayload, CARTRIDGE_PAYLOAD_GROUPS } from './state-manager.js';
 import { escapeHtml } from './memo-processor.js';
 import { refreshOrderList } from './ui-editors.js';
 import {
@@ -113,6 +114,42 @@ export function applyCartridgePayload(settings, payload) {
     delete settings['_activePreset_pcSectionPresets'];
 }
 
+/**
+ * Applies only the keys listed in `keysToApply` from `payload` into live
+ * settings. Any key missing from the payload is backfilled from factory
+ * defaults. Keys not in `keysToApply` are left completely untouched.
+ * Used by the selective load dialog to apply only the groups the user checked.
+ * @param {object} settings
+ * @param {object} payload
+ * @param {string[]} keysToApply
+ */
+function applyCartridgePayloadKeys(settings, payload, keysToApply) {
+    const factory = getFactoryCartridgePayload();
+    for (const key of keysToApply) {
+        const val = (payload && payload[key] !== undefined) ? payload[key] : factory[key];
+        settings[key] = JSON.parse(JSON.stringify(val));
+    }
+    // Only clear preset side-channel keys if the character-sheet group was applied.
+    if (keysToApply.includes('npcSectionPresets')) delete settings['_activePreset_npcSectionPresets'];
+    if (keysToApply.includes('pcSectionPresets'))  delete settings['_activePreset_pcSectionPresets'];
+}
+
+/**
+ * Returns true if any payload key belonging to `groupDef` differs from the
+ * corresponding factory default (JSON-stringify deep comparison). Used by the
+ * selective load dialog to badge groups as "modified" vs "stock".
+ * @param {{keys: string[]}} groupDef
+ * @param {object} payload
+ * @returns {boolean}
+ */
+function isGroupChangedFromDefaults(groupDef, payload) {
+    const factory = getFactoryCartridgePayload();
+    for (const key of groupDef.keys) {
+        if (JSON.stringify(payload[key]) !== JSON.stringify(factory[key])) return true;
+    }
+    return false;
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // Create / update / load / delete
 // ─────────────────────────────────────────────────────────────────────────
@@ -147,23 +184,98 @@ export function updateCartridgeFromCurrent(cartridge) {
 }
 
 /**
- * Loads a cartridge (or the virtual Stock cartridge), fully replacing the
- * current configuration after a strong confirmation. Returns true if the
- * load went through.
+ * Loads a cartridge (or the virtual Stock cartridge) via a selective import
+ * dialog. The user chooses which configuration groups to apply; each group is
+ * badged as "✏️ modified" or "~ stock ~" vs. factory defaults.
+ * Returns true if any groups were applied.
  * @param {{id:string, name:string, payload:object}} cartridge
  * @returns {Promise<boolean>}
  */
 export async function loadCartridge(cartridge) {
-    if (!confirm(
-        `Load "${cartridge.name}"?\n\n` +
-        `This will REPLACE your current system prompt sections, ordering, on/off toggles, ` +
-        `Game Systems, tracker modules, block order, stock tracker prompts, State Tracker ` +
-        `extractor prompt, and RNG/date-time format settings.\n\n` +
-        `This cannot be undone unless you saved your current setup as a cartridge first. Continue?`
-    )) return false;
+    const { Popup } = SillyTavern.getContext();
+
+    // Pre-compute modified status for every group so we can render badges.
+    const groupStatus = CARTRIDGE_PAYLOAD_GROUPS.map(g => ({
+        ...g,
+        isModified: isGroupChangedFromDefaults(g, cartridge.payload || {}),
+    }));
+
+    // Build the checklist HTML rows.
+    const rowsHtml = groupStatus.map(g => {
+        const badge = g.isModified
+            ? `<span style="font-size:9px; padding:1px 6px; border-radius:3px; background:rgba(255,180,60,0.25); color:#ffcc66; border:1px solid rgba(255,180,60,0.4); white-space:nowrap;">✏️ modified</span>`
+            : `<span style="font-size:9px; padding:1px 6px; border-radius:3px; background:rgba(120,120,120,0.25); border:1px solid rgba(120,120,120,0.35); opacity:0.85; white-space:nowrap;">~ stock ~</span>`;
+        return `
+        <label style="display:flex; align-items:center; gap:10px; padding:9px 10px; border:1px solid rgba(255,255,255,0.08); border-radius:6px; background:rgba(0,0,0,0.15); cursor:pointer;">
+            <input type="checkbox" class="rt-gc-load-group-cb" data-group-id="${g.id}" checked
+                style="width:15px; height:15px; flex-shrink:0; cursor:pointer; accent-color:#66bb88;">
+            <div style="flex:1; min-width:0;">
+                <div style="font-size:12px; font-weight:bold; display:flex; align-items:center; gap:6px;">
+                    ${escapeHtml(g.label)}
+                    ${badge}
+                </div>
+                <div style="font-size:10px; opacity:0.55; margin-top:2px;">${escapeHtml(g.description)}</div>
+            </div>
+        </label>`;
+    }).join('');
+
+    const content = `
+        <div style="display:flex; flex-direction:column; gap:8px; width:100%; box-sizing:border-box;">
+            <p style="margin:0 0 4px; font-size:12px; opacity:0.75; line-height:1.45;">
+                Choose which sections to import from <b>${escapeHtml(cartridge.name)}</b>.
+                Only checked sections will replace your current configuration.
+                <b style="color:#ffaa55;">✏️ modified</b> means the cartridge differs from factory defaults.
+            </p>
+            <div id="rt-gc-load-group-list" style="display:flex; flex-direction:column; gap:6px;">
+                ${rowsHtml}
+            </div>
+            <p style="margin:6px 0 0; font-size:10px; opacity:0.45;">
+                ⚠️ Checked sections will fully replace your current settings for those areas.
+                This cannot be undone unless you first saved your current setup as a cartridge.
+            </p>
+        </div>`;
+
+    // Keep track of which groups are checked in real-time.
+    const checkedGroups = {};
+    CARTRIDGE_PAYLOAD_GROUPS.forEach(g => {
+        checkedGroups[g.id] = true;
+    });
+
+    // Set up listeners in a timeout since the popup DOM generates asynchronously.
+    setTimeout(() => {
+        const checkboxes = document.querySelectorAll('.rt-gc-load-group-cb');
+        checkboxes.forEach(cb => {
+            const groupId = cb.getAttribute('data-group-id');
+            if (groupId) {
+                checkedGroups[groupId] = cb.checked;
+                cb.addEventListener('change', () => {
+                    checkedGroups[groupId] = cb.checked;
+                });
+            }
+        });
+    }, 100);
+
+    const result = await Popup.show.confirm(`🎮 Load Cartridge: ${escapeHtml(cartridge.name)}`, content, {
+        okButton: 'Load Selected',
+        cancelButton: 'Cancel',
+        ...GC_POPUP_LARGE,
+    });
+
+    if (!result) return false;
+
+    // Collect keys for all checked groups.
+    const keysToApply = [];
+    CARTRIDGE_PAYLOAD_GROUPS.forEach(g => {
+        if (checkedGroups[g.id]) keysToApply.push(...g.keys);
+    });
+
+    if (keysToApply.length === 0) {
+        toastr['warning']('No sections selected — nothing was changed.', 'Game Cartridges');
+        return false;
+    }
 
     const settings = getSettings();
-    applyCartridgePayload(settings, cartridge.payload);
+    applyCartridgePayloadKeys(settings, cartridge.payload, keysToApply);
     saveSettings();
     refreshOrderList();
     syncAllNarratorTogglesForUnlockState();

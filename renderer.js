@@ -81,11 +81,16 @@ export function getTimeOfDayInfo(str) {
 
         switch (rule.renderType) {
             case 'pills':
-                return `<div class="rt-entity-sub-line rt-units-container">${labelHtml} ${renderPills(value)}</div>`;
-            case 'badge':
-                return `<div class="rt-entity-sub-line rt-units-container">${labelHtml} <span class="rt-unit-pill no-desc"><span class="rt-unit-name">${escapeHtmlWithColor(value)}</span></span></div>`;
-            case 'highlight':
-                return `<div class="rt-entity-sub-line">${labelHtml} ${highlightParens(escapeHtmlWithColor(value))}</div>`;
+                return `<div class="rt-entity-sub-line rt-units-container">${labelHtml} ${renderPills(value, rule.color)}</div>`;
+            case 'badge': {
+                const badgeColorStyle = rule.color ? ` style="background:${rule.color}22;border-color:${rule.color}66;color:${rule.color};"` : '';
+                return `<div class="rt-entity-sub-line rt-units-container">${labelHtml} <span class="rt-unit-pill no-desc"${badgeColorStyle}><span class="rt-unit-name">${escapeHtmlWithColor(value)}</span></span></div>`;
+            }
+            case 'highlight': {
+                const highlighted = highlightParens(escapeHtmlWithColor(value));
+                const wrapped = rule.color ? `<span style="color:${rule.color};">${highlighted}</span>` : highlighted;
+                return `<div class="rt-entity-sub-line">${labelHtml} ${wrapped}</div>`;
+            }
             case 'numbers':
                 return `<div class="rt-entity-sub-line">${labelHtml} ${highlightNumbers(escapeHtmlWithColor(value))}</div>`;
             case 'hp_bar': {
@@ -160,11 +165,12 @@ export function getTimeOfDayInfo(str) {
                 return `<div class="rt-objective ${statusClass}">${labelHtml}<span class="rt-obj-icon">${icon}</span> <span class="rt-obj-text">${escapeHtmlWithColor(cleanVal)}</span></div>`;
             }
             case 'reward': {
-                return `<div class="rt-entity-sub-line"><span class="rt-reward-chip">${labelHtml ? labelHtml + ' ' : ''}🎁 ${escapeHtmlWithColor(value)}</span></div>`;
+                const rewardStyle = rule.color ? ` style="color:${rule.color};border-color:${rule.color}66;"` : '';
+                return `<div class="rt-entity-sub-line"><span class="rt-reward-chip"${rewardStyle}>${labelHtml ? labelHtml + ' ' : ''}🎁 ${escapeHtmlWithColor(value)}</span></div>`;
             }
             case 'difficulty': {
                 const diffColors = { 'very easy': '#2ecc71', 'easy': '#27ae60', 'medium': '#f1c40f', 'normal': '#f1c40f', 'hard': '#e67e22', 'very hard': '#e74c3c' };
-                const diffColor = diffColors[value.toLowerCase()] || '#aaa';
+                const diffColor = rule.color || diffColors[value.toLowerCase()] || '#aaa';
                 return `<div class="rt-entity-sub-line">${labelHtml}<span class="rt-difficulty-badge" style="background:${diffColor}22; color:${diffColor}; border:1px solid ${diffColor}55;">${escapeHtmlWithColor(value)}</span></div>`;
             }
             case 'progress': {
@@ -373,7 +379,9 @@ export function getTimeOfDayInfo(str) {
                 return `<div class="rt-entity-sub-line">${labelHtml} ${escapeHtmlWithColor(value)}</div>`;
             }
             case 'pill_colored': {
-                const pClass = rule.pillClass || '';
+                // A custom color override replaces the fixed buff/debuff/magic class entirely.
+                const pClass = rule.color ? '' : (rule.pillClass || '');
+                const colorStyle = rule.color ? ` style="background:${rule.color}1a;border-color:${rule.color}66;color:${rule.color};"` : '';
                 const pillHtml = splitSmart(value).map(p => {
                     p = p.trim();
                     const descMatch = p.match(/^(.*?)\s*\((.*?)\)$/);
@@ -382,7 +390,7 @@ export function getTimeOfDayInfo(str) {
                     const descHtml = desc ? `<div class="rt-unit-descr">${escapeHtml(desc)}</div>` : '';
                     const titleAttr = desc ? ` title="${escapeHtml(desc)}"` : '';
                     const noDescClass = desc ? '' : ' no-desc';
-                    return `<span class="rt-unit-pill ${pClass}${noDescClass}"${titleAttr}><span class="rt-unit-name">${escapeHtml(name)}</span>${descHtml}</span>`;
+                    return `<span class="rt-unit-pill ${pClass}${noDescClass}"${colorStyle}${titleAttr}><span class="rt-unit-name">${escapeHtml(name)}</span>${descHtml}</span>`;
                 }).join(' ');
                 return `<div class="rt-entity-sub-line rt-units-container">${labelHtml} ${pillHtml}</div>`;
             }
@@ -397,11 +405,17 @@ export function getTimeOfDayInfo(str) {
             }
             case 'dice_roll': {
                 // value is something like "1d20+5 = 18"
-                return `<div class="rt-entity-sub-line">${labelHtml}<span class="rt-dice-roll" style="background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); padding:2px 6px; border-radius:4px; font-family:monospace; display:inline-flex; align-items:center; gap:4px;"><i class="fa-solid fa-dice-d20" style="opacity:0.7"></i> ${escapeHtmlWithColor(value)}</span></div>`;
+                const diceStyle = rule.color
+                    ? `background:${rule.color}22; border:1px solid ${rule.color}66; color:${rule.color};`
+                    : 'background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2);';
+                return `<div class="rt-entity-sub-line">${labelHtml}<span class="rt-dice-roll" style="${diceStyle} padding:2px 6px; border-radius:4px; font-family:monospace; display:inline-flex; align-items:center; gap:4px;"><i class="fa-solid fa-dice-d20" style="opacity:0.7"></i> ${escapeHtmlWithColor(value)}</span></div>`;
             }
             case 'text':
-            default:
-                return `<div class="rt-entity-sub-line">${labelHtml} ${escapeHtmlWithColor(value)}</div>`;
+            default: {
+                const textHtml = escapeHtmlWithColor(value);
+                const wrapped = rule.color ? `<span style="color:${rule.color};">${textHtml}</span>` : textHtml;
+                return `<div class="rt-entity-sub-line">${labelHtml} ${wrapped}</div>`;
+            }
         }
     }
 
@@ -507,8 +521,39 @@ export function getTimeOfDayInfo(str) {
     }
 
     // Regex that matches the NEXT ((MARKER)) token anywhere in a string.
-    // Used iteratively by tokenizeMarkers.
-    export const MARKER_TOKEN_RE = new RegExp(`\\(\\((${Object.keys(MARKER_TYPE_MAP).join('|')})\\)\\)`, 'i');
+    // Used iteratively by tokenizeMarkers. Supports an optional inline color
+    // override suffix: ((TAG - #HEX)) for a solid color, or
+    // ((TAG - #HEX1 #HEX2)) for a two-color gradient (bar-like types only).
+    // Restricted to 6-digit #RRGGBB hex: several render paths concatenate an
+    // alpha suffix directly onto the color string (e.g. `${color}22`), which
+    // only produces valid CSS when the base color is exactly 6 hex digits.
+    const HEX_COLOR_PATTERN = '#[0-9a-fA-F]{6}';
+    export const MARKER_TOKEN_RE = new RegExp(`\\(\\((${Object.keys(MARKER_TYPE_MAP).join('|')})(?:\\s*-\\s*(${HEX_COLOR_PATTERN})(?:\\s+(${HEX_COLOR_PATTERN}))?)?\\)\\)`, 'i');
+
+    /** Render types whose default color is already a gradient/gradient-friendly bar fill. */
+    const GRADIENT_CAPABLE_RENDER_TYPES = new Set(['hp_bar', 'xp_bar', 'progress']);
+
+    /** Strictly validates a 6-digit #RRGGBB hex color to prevent CSS injection and malformed alpha-suffix concatenation. */
+    function isValidHexColor(str) {
+        return /^#[0-9a-fA-F]{6}$/.test(str || '');
+    }
+
+    /**
+     * Clones `baseRule` with `color` overridden from a parsed marker color suffix.
+     * Two valid colors on a gradient-capable render type (bars/progress) produce a
+     * linear-gradient; otherwise only the first color is used (second is ignored).
+     * Invalid hex values are ignored entirely, falling back to the base rule's color.
+     */
+    function applyMarkerColorOverride(baseRule, color1, color2) {
+        if (!isValidHexColor(color1)) return baseRule;
+        const rule = { ...baseRule };
+        if (color2 && isValidHexColor(color2) && GRADIENT_CAPABLE_RENDER_TYPES.has(rule.renderType)) {
+            rule.color = `linear-gradient(90deg, ${color1}, ${color2})`;
+        } else {
+            rule.color = color1;
+        }
+        return rule;
+    }
 
     /**
      * Splits `line` into an ordered array of segments wherever a ((MARKER))
@@ -531,9 +576,14 @@ export function getTimeOfDayInfo(str) {
 
             const preText = remaining.slice(0, m.index).trim();
             const markerType = m[1].toUpperCase();
+            const colorArg1 = m[2] || null;
+            const colorArg2 = m[3] || null;
             remaining = remaining.slice(m.index + m[0].length).trimStart();
 
-            segments.push({ preText, markerType, rule: MARKER_TYPE_MAP[markerType] || { renderType: 'text' } });
+            const baseRule = MARKER_TYPE_MAP[markerType] || { renderType: 'text' };
+            const rule = colorArg1 ? applyMarkerColorOverride(baseRule, colorArg1, colorArg2) : baseRule;
+
+            segments.push({ preText, markerType, rule });
         }
 
         // Assign each segment its content:
@@ -793,7 +843,8 @@ export function getTimeOfDayInfo(str) {
         return res;
     };
 
-    const renderPills = (text) => {
+    const renderPills = (text, customColor = null) => {
+        const colorStyle = customColor ? ` style="background:${customColor}1a;border-color:${customColor}66;color:${customColor};"` : '';
         return splitSmart(text).map(t => {
             // Detect buff/debuff prefix
             let pillClass = 'rt-unit-pill';
@@ -817,13 +868,13 @@ export function getTimeOfDayInfo(str) {
                     iconHtml = `<span class="rt-unit-icon">${escapeHtmlWithColor(resourceMatch[0])}</span>`;
                 }
 
-                return `<span class="${pillClass}">
+                return `<span class="${pillClass}"${colorStyle}>
                     <span class="rt-unit-name">${escapeHtmlWithColor(name)}</span>
                     ${iconHtml}
                     <span class="rt-unit-descr">(${escapeHtmlWithColor(desc)})</span>
                 </span>`;
             }
-            return `<span class="${pillClass} no-desc"><span class="rt-unit-name">${escapeHtmlWithColor(displayText)}</span></span>`;
+            return `<span class="${pillClass} no-desc"${colorStyle}><span class="rt-unit-name">${escapeHtmlWithColor(displayText)}</span></span>`;
         }).join('');
     };
 

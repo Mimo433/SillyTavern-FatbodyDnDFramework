@@ -8130,6 +8130,7 @@ Rules:
             });
         }
         renderAgentCustomTags();
+        globalThis._rpgRenderAgentCustomTags = renderAgentCustomTags;
 
 
 
@@ -11191,7 +11192,7 @@ ${existingFieldsContext.trim()}
 The user wants to create a new custom tracking field. Their description:
 "${description}"
 
-Available rendering tags (MUST use at least one in the template). Tags can be placed inline (e.g., 'Health: ((BAR)) 50/100'). Pill tags optionally support parenthesis text for descriptions (e.g. 'Status: ((PILLS)) Sleeping (Unconscious)'):
+Available rendering tags (MUST use at least one in the template). Tags can be placed inline (e.g., 'Health: ((BAR)) 50/100'). Pill tags optionally support parenthesis text for descriptions (e.g. 'Status: ((PILLS)) Sleeping (Unconscious)'). Any tag optionally supports an inline color override, e.g. 'Status: ((PILLS - #E5FFCC)) Sleeping' (use sparingly, only when the user specifically wants custom colors):
 ${RENDERING_TAGS_LIBRARY.map(t => '- ' + t).join('\n')}
 
 Return ONLY a valid JSON object with these fields:
@@ -11429,6 +11430,9 @@ RULES:
             const themeClass = panel ? Array.from(panel.classList).find(c => c.startsWith('rt-theme-')) || 'rt-theme-native' : 'rt-theme-native';
 
             let html = `<div class="rpg-tracker-panel ${themeClass}" style="display:flex; flex-direction:column; gap:8px; max-height:60vh; overflow-y:auto; padding-right:10px; position:relative; top:auto; right:auto; width:100%; height:auto; background:transparent; border:none; box-shadow:none; resize:none;">`;
+            html += `<div style="font-size:0.85em; opacity:0.85; padding:6px 8px; border:1px solid rgba(255,221,136,0.3); border-radius:6px; background:rgba(255,221,136,0.06);">
+                💡 Any tag above supports an optional inline color override: <code>((TAG - #RRGGBB))</code> (e.g. <code>((PLS - #E5FFCC))</code>). Bar-type tags (<code>((BAR))</code>, <code>((XPBAR))</code>, <code>((PROGRESS))</code>) also support a two-color gradient: <code>((BAR - #E5FFCC #003300))</code>. Use sparingly — extra color codes add tokens the tracker has to read back.
+            </div>`;
             for (let i = 0; i < RENDERING_TAGS_LIBRARY.length; i++) {
                 const item = RENDERING_TAGS_LIBRARY[i];
                 // Pass a unique per-item line index so preview entries that share
@@ -13183,6 +13187,14 @@ RULES:
             $('#rpg_tracker_router_modular_prompt').val(s.routerModularPromptTemplate || '');
             $('#rpg_world_progression_system_prompt').val(s.worldProgressionSystemPrompt || '');
             $('#rpg_world_progression_skeleton_system_prompt').val(s.worldProgressionSkeletonSystemPrompt || '');
+
+            // Refresh Agent modules & custom tags list in the UI if present
+            if (typeof globalThis._rpgRenderAgentModules === 'function') {
+                globalThis._rpgRenderAgentModules();
+            }
+            if (typeof globalThis._rpgRenderAgentCustomTags === 'function') {
+                globalThis._rpgRenderAgentCustomTags();
+            }
         }
         globalThis._rpgSyncSettingsUi = syncSettingsUi;
 

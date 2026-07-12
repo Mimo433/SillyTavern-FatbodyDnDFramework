@@ -891,12 +891,23 @@ export function memoForTrackerContext(memo) {
 
 /**
  * Prepares memo text for GM narrative context (STATE MEMO injection).
+ * Strips ((MARKER)) render tokens — they are display-only and meaningless to the GM.
+ * ((...)) is exclusively the marker delimiter syntax within the state memo (it is
+ * never used as prose punctuation there — that only happens in GM narrative, a
+ * separate channel). So any ((...)) found here — tag, payload, color suffix, or
+ * anything else inside the double-parens — is unconditionally removed in full.
+ * This is leak-proof by construction: there is no "preserve inner content" case
+ * to get wrong, so new marker syntax (like inline color overrides) never needs
+ * special-casing here.
  * @param {string} memo
  * @returns {string}
  */
 export function memoForGmContext(memo) {
     const stripped = (memo || '').replace(/\[QUESTS\][\s\S]*?\[\/QUESTS\]/gi, '').trim();
-    return compactBenchedPartyForContext(stripped);
+    const noMarkers = stripped
+        .replace(/\(\([^)]*\)\)/g, '')
+        .replace(/ {2,}/g, ' ');
+    return compactBenchedPartyForContext(noMarkers);
 }
 
 // ── Legacy quest text format ───────────────────────────────────────────────────

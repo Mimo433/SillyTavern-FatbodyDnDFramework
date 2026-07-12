@@ -531,7 +531,6 @@ EXAMPLE — end of a response where {{user}} complimented Elena:
 
 <state_memo>
 - ## TRACKER STATE 0 (Current) is passed on every turn; its mechanical data is absolute law.
-- Ignore any formatting data such as ((PLS)).
 </state_memo>
 
 <constraints>
@@ -864,7 +863,6 @@ EXAMPLE — end of a response where {{user}} complimented Elena:
 
 <state_memo>
 - ## TRACKER STATE 0 (Current) is passed on every turn; its mechanical data is absolute law.
-- Ignore any formatting data such as ((PILLS)).
 </state_memo>
 
 <constraints>
