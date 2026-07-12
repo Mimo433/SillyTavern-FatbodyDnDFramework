@@ -221,17 +221,6 @@ export function showCharacterRollPanel(el) {
         if (levelSelect) levelSelect.value = String(s.onboardingLevel || 1);
     }
 
-    // Gray out level selector when XP module is disabled
-    const applyLevelSelectState = () => {
-        if (!levelSelect) return;
-        const xpOn = !!(getSettings().modules?.['xp']);
-        levelSelect.disabled = !xpOn;
-        levelSelect.style.opacity = xpOn ? '' : '0.4';
-        levelSelect.style.cursor  = xpOn ? '' : 'not-allowed';
-        levelSelect.title = xpOn ? '' : 'Enable the XP module to set a starting level';
-    };
-    applyLevelSelectState();
-
     const nameInput = /** @type {HTMLInputElement|null} */ (panel.querySelector('#rt-cr-name'));
     const randomNameBtn = panel.querySelector('#rt-cr-random-name');
     if (randomNameBtn && nameInput && !randomNameBtn._bound) {
