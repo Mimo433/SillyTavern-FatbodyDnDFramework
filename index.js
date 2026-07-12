@@ -2634,6 +2634,12 @@ export function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRe
             getSettings().onboardingLevel = parseInt(levelSelect.value) || 1;
             saveSettings();
         });
+        // Gray out when XP module is disabled
+        const xpOn = !!(getSettings().modules?.['xp']);
+        levelSelect.disabled = !xpOn;
+        levelSelect.style.opacity = xpOn ? '' : '0.4';
+        levelSelect.style.cursor  = xpOn ? '' : 'not-allowed';
+        levelSelect.title = xpOn ? '' : 'Enable the XP module to set a starting level';
     }
 
     // Custom Instructions input & persistent preference save
