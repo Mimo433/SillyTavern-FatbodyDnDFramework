@@ -2,6 +2,7 @@ import { getSettings, getEffectiveRouterCampaignPrefix, persistWorldProgressionT
 import { sendStateRequest, sendAgentTurn } from './llm-client.js';
 import { getRequestHeaders } from '../../../../script.js';
 import { extractCurrentTimeStr, cleanMessageContent, parseInWorldTime, formatInWorldTime, findNthUserMessageStartIdx, formatAgentChatLogFromIndex, sanitizeLorebookRecordContent } from './memo-processor.js';
+import { recordSchedulerEvent } from './swipe-scheduler-debug.js';
 
 let _routerRunning = false;
 let _routerNormalRunCount = 0; // tracks completed normal (non-cleanup) passes for auto-cleanup interval
@@ -354,6 +355,9 @@ export async function runRouterPass(narrativeOutput, manualPrompt = null, custom
         }
 
         let archiveBooks = await fetchArchiveBooks();
+        let _routerTriggerMsg = null;
+        let _routerSnapshotRunId = null;
+        let _routerPrePassWatermark = 0;
 
         // ?? Snapshot state BEFORE this pass (for rollback) ??????????????????
         {
@@ -362,14 +366,24 @@ export async function runRouterPass(narrativeOutput, manualPrompt = null, custom
                 activeRouterKeys: JSON.parse(JSON.stringify(settings.activeRouterKeys || [])),
                 activeWorldKeys: JSON.parse(JSON.stringify(settings.activeWorldKeys || [])),
                 routerLastRunChatLength: settings.routerLastRunChatLength ?? 0,
-                bookSnapshots: {}
+                bookSnapshots: {},
+                runId: `${Date.now()}_${Math.random().toString(36).slice(2)}`,
             };
+            _routerSnapshotRunId = snapshot.runId;
+            _routerPrePassWatermark = snapshot.routerLastRunChatLength;
+            _routerTriggerMsg = [...(ctx.chat || [])].reverse().find(m => !m.is_user && !m.is_system);
             for (const [name, book] of Object.entries(archiveBooks)) {
                 snapshot.bookSnapshots[name] = JSON.parse(JSON.stringify(book));
             }
             if (!settings.routerHistory) settings.routerHistory = [];
             settings.routerHistory.unshift(snapshot);
             if (settings.routerHistory.length > 5) settings.routerHistory.length = 5;
+            recordSchedulerEvent('la_pass_snapshot', {
+                runId: snapshot.runId,
+                preWm: _routerPrePassWatermark,
+                historyLen: settings.routerHistory.length,
+                isManual,
+            });
             ctx.saveSettingsDebounced();
         }
         let activeEntriesFull = [];
@@ -1443,15 +1457,42 @@ ${adjustedSharedContext}`;
             persistRouterLastRunWatermark(ctx.chat.length);
         }
 
+        // Stamp the triggering AI message only after a successful pass so swipe-rollback
+        // can match this run to routerHistory and rewind the watermark if the user swipes
+        // away from the generation that triggered the agent.
+        if (manualPrompt !== '__CLEANUP__' && _routerTriggerMsg && _routerSnapshotRunId) {
+            const postWm = ctx.chat.length;
+            _routerTriggerMsg.extra = _routerTriggerMsg.extra || {};
+            _routerTriggerMsg.extra.rpgRouterRunId = _routerSnapshotRunId;
+            _routerTriggerMsg.extra.rpgRouterRanForSwipe = _routerTriggerMsg.swipe_id ?? 0;
+            _routerTriggerMsg.extra.rpgRouterPrePassWatermark = _routerPrePassWatermark;
+            _routerTriggerMsg.extra.rpgRouterPostPassWatermark = postWm;
+            if (typeof ctx.saveChatDebounced === 'function') ctx.saveChatDebounced();
+            recordSchedulerEvent('la_pass_stamped_message', {
+                runId: _routerSnapshotRunId,
+                swipeId: _routerTriggerMsg.swipe_id ?? 0,
+                preWm: _routerPrePassWatermark,
+                postWm,
+                isManual,
+            });
+        }
+
         // "Last ran at" display timestamp — updates for any completed pass (manual or auto).
         // Cleanup passes never reach this line (they return earlier), so no extra guard is needed.
         persistRouterLastRunTimestamp();
 
         // Manual passes don't go through onGenerationEnded's throttle reset — treat like an auto run.
         if (typeof globalThis._rpgResetRouterAutoTick === 'function') {
-            globalThis._rpgResetRouterAutoTick();
+            globalThis._rpgResetRouterAutoTick('lore_agent_pass_complete');
         }
         document.dispatchEvent(new CustomEvent('rt_generation_tick'));
+        recordSchedulerEvent('la_pass_complete', {
+            runId: _routerSnapshotRunId,
+            isManual,
+            usedSinceLastRun,
+            chatLength: ctx.chat.length,
+            watermark: settings.routerLastRunChatLength ?? 0,
+        });
 
         // Non-blocking bloat hint and auto-cleanup check
         {
@@ -1996,6 +2037,19 @@ async function applyAction(action, allBooks = {}, currentTime = '', breadcrumb =
     }
 
     // 5. Relationship deltas
+    // Track a rollback record on the last AI message for each applied delta, mirroring
+    // parseAndApplyNarrativeRelTags() in narrative-hooks.js. Without this, swipe rollback
+    // only undoes inline "(Friendship: Name +X)" narrative tags — Lorebook Agent-driven
+    // [[REL: ...]] deltas would silently survive a swipe since they're never recorded.
+    const relChat = ctx.chat;
+    const relLastAiMsg = relChat ? [...relChat].reverse().find(m => !m.is_user && !m.is_system) : null;
+    let relSwipeId = 0;
+    if (relLastAiMsg) {
+        relLastAiMsg.extra = relLastAiMsg.extra || {};
+        relSwipeId = relLastAiMsg.swipe_id ?? 0;
+        relLastAiMsg.extra.rpgRollbackData = relLastAiMsg.extra.rpgRollbackData || {};
+        relLastAiMsg.extra.rpgRollbackData[relSwipeId] = relLastAiMsg.extra.rpgRollbackData[relSwipeId] || [];
+    }
     for (const item of (action.rel || [])) {
         const { id, field, delta } = item;
         if (!id || !field || typeof delta !== 'number') {
@@ -2069,9 +2123,21 @@ async function applyAction(action, allBooks = {}, currentTime = '', breadcrumb =
         // Append to relationship change log (capped at 50 entries per NPC)
         if (!settings.npcRelationshipLog) settings.npcRelationshipLog = {};
         if (!settings.npcRelationshipLog[resolvedId]) settings.npcRelationshipLog[resolvedId] = [];
-        settings.npcRelationshipLog[resolvedId].unshift({ timestamp: Date.now(), field: f, delta, newValue, source: 'agent' });
+        const relLogTimestamp = Date.now();
+        settings.npcRelationshipLog[resolvedId].unshift({ timestamp: relLogTimestamp, field: f, delta, newValue, source: 'agent' });
         if (settings.npcRelationshipLog[resolvedId].length > 50) settings.npcRelationshipLog[resolvedId].length = 50;
         changed = true;
+
+        // Record rollback data so a swipe on this AI message can undo this delta (see comment above).
+        if (relLastAiMsg) {
+            relLastAiMsg.extra.rpgRollbackData[relSwipeId].push({
+                npcId: resolvedId,
+                field: f,
+                actualAppliedDelta: newValue - current,
+                expectedValue: newValue,
+                logTimestamp: relLogTimestamp
+            });
+        }
     }
 
     // 6. Core identity updates — surgical replacement of specified fields inside [CORE]

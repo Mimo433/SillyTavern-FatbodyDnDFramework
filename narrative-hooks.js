@@ -15,8 +15,9 @@
 import { getSettings, hydrateWorldProgressionFromChatState, persistWorldProgressionTimer, persistRouterLastRunWatermark, getNpcRelationshipMax, clampRelationshipValue, relationshipBarPct, getFriendshipTier, getAffectionTier, applyRelTierBadgeElement, saveChatState, getActiveChatId } from './state-manager.js';
 import { syncCombatProfile } from './llm-client.js';
 import { parseQuestsFromMemo, extractCurrentTimeStr, cleanMessageContent, formatInWorldTime, memoForGmContext } from './memo-processor.js';
-import { runRouterPass, saveSceneToLorebook, scanAssistantOutputForKeywords, parseInWorldMinutes, runWorldProgressionPass, updateLorebookEntry, getLorebookManifest } from './router.js';
+import { runRouterPass, saveSceneToLorebook, scanAssistantOutputForKeywords, parseInWorldMinutes, runWorldProgressionPass, updateLorebookEntry, getLorebookManifest, rollbackRouterPass, isRouterRunning } from './router.js';
 import { logTransaction } from './debug-viewer.js';
+import { recordSchedulerEvent } from './swipe-scheduler-debug.js';
 
 /** Resolve ST macros (e.g. {{user}}) in lore text at injection time — storage keeps macros verbatim. */
 function substituteLoreMacros(content) {
@@ -508,38 +509,18 @@ export function installInterceptor() {
         // Path 1 fires after this interceptor in the ST pipeline, so a scan here = same-turn lore.
         const skipInjection = !!globalThis._rpgPromptManagerInterceptorActive;
 
-        // ── Swipe rollback: restore memo BEFORE injection ─────────────────────────────
-        // Fires synchronously here so the restored memo is used when building the prompt
-        // (line ~550), replicating the game state from before the swiped-away generation.
-        if (getSettings().stateTrackerSwipeRollback !== false) {
-            const _stCtx = SillyTavern.getContext();
-            const _stChat = _stCtx?.chat;
-            const _stLastAi = _stChat ? [..._stChat].reverse().find(m => !m.is_user) : null;
-            if (_stLastAi && _stLastAi.extra) {
-                const _curSwipe = _stLastAi.swipe_id ?? 0;
-                const _prevSwipe = _stLastAi.extra.rpgActiveSwipe;
-                if (_prevSwipe !== undefined && _prevSwipe !== _curSwipe) {
-                    const _snap = _stLastAi.extra.rpgMemoRollback?.[_prevSwipe];
-                    if (typeof _snap === 'string') {
-                        const _s = getSettings();
-                        console.log(`[RPG Tracker] Swipe detected (${_prevSwipe}→${_curSwipe}): restoring memo snapshot before injection.`);
-                        _s.currentMemo = _snap;
-                        // Keep memoHistory consistent: drop the entry written for the old swipe
-                        if (Array.isArray(_s.memoHistory) && _s.memoHistory[0] !== _snap) {
-                            _s.memoHistory.shift();
-                            if (_s.historyIndex !== undefined && _s.historyIndex > 0) _s.historyIndex--;
-                        }
-                        // Clear the stale snapshot so the new generation can stamp a fresh one
-                        if (_stLastAi.extra.rpgMemoRollback) delete _stLastAi.extra.rpgMemoRollback[_curSwipe];
-                        // Advance the active swipe marker so this doesn't re-trigger next turn
-                        _stLastAi.extra.rpgActiveSwipe = _curSwipe;
-                        // Also reset processed-tags for the new swipe (relationship system)
-                        if (_stLastAi.extra.rpgProcessedTags) _stLastAi.extra.rpgProcessedTags[_curSwipe] = [];
-                        if (_stLastAi.extra.rpgRollbackData) _stLastAi.extra.rpgRollbackData[_curSwipe] = [];
-                        // Update memo pane immediately
-                        if (typeof globalThis._rpgUpdateUIMemo === 'function') globalThis._rpgUpdateUIMemo(_snap);
-                    }
-                }
+        // ── Swipe rollback: memo, then relationships, then lorebook agent ─────────────
+        const _rbCtx = SillyTavern.getContext();
+        const _rbChat = _rbCtx?.chat;
+        const _rbLastAi = _rbChat ? [..._rbChat].reverse().find(m => !m.is_user && !m.is_system) : null;
+        if (_rbLastAi) {
+            applyMemoSwipeRollback(_rbLastAi, settings);
+            if (settings.npcRelationshipBars) {
+                const _relRb = applyRelationshipSwipeRollback(_rbLastAi, settings);
+                if (_relRb.anyChanged) refreshRelationshipBarsDOM(settings);
+            }
+            if (settings.routerEnabled) {
+                await maybeRollbackRouterPassForSwipe(_rbLastAi);
             }
         }
 
@@ -1006,6 +987,207 @@ async function fuzzyResolveNpcName(name) {
 }
 
 /**
+ * Restore the State Tracker memo when the user swipes to a different generation on the
+ * last AI message. Uses rpgMemoActiveSwipe (not rpgActiveSwipe) so memo rollback stays
+ * independent of the relationship swipe tracker.
+ * @returns {{ anyChanged: boolean }}
+ */
+function applyMemoSwipeRollback(lastAiMsg, settings) {
+    let anyChanged = false;
+    if (settings.stateTrackerSwipeRollback === false || !lastAiMsg) {
+        return { anyChanged };
+    }
+
+    lastAiMsg.extra = lastAiMsg.extra || {};
+    const swipeId = lastAiMsg.swipe_id ?? 0;
+    const prevSwipeId = lastAiMsg.extra.rpgMemoActiveSwipe ?? lastAiMsg.extra.rpgActiveSwipe;
+
+    if (prevSwipeId !== undefined && prevSwipeId !== swipeId) {
+        let targetMemo = lastAiMsg.extra.rpgMemoResult?.[swipeId];
+        if (typeof targetMemo !== 'string') {
+            targetMemo = lastAiMsg.extra.rpgMemoRollback?.[prevSwipeId] || lastAiMsg.extra.rpgMemoRollback?.[swipeId];
+        }
+
+        if (typeof targetMemo === 'string') {
+            console.log(`[RPG Tracker] State swipe detected (${prevSwipeId}→${swipeId}): restoring memo snapshot.`);
+            recordSchedulerEvent('memo_swipe_rollback', { prevSwipeId, swipeId, targetMemoLen: targetMemo.length });
+            settings.currentMemo = targetMemo;
+
+            if (Array.isArray(settings.memoHistory)) {
+                const baseMemo = lastAiMsg.extra.rpgMemoRollback?.[prevSwipeId] || lastAiMsg.extra.rpgMemoRollback?.[swipeId];
+                if (targetMemo === baseMemo) {
+                    if (settings.memoHistory[0] !== baseMemo) {
+                        settings.memoHistory.shift();
+                        if (settings.historyIndex !== undefined && settings.historyIndex > 0) settings.historyIndex--;
+                    }
+                } else {
+                    settings.memoHistory[0] = targetMemo;
+                }
+            }
+
+            if (lastAiMsg.extra.rpgMemoRollback) delete lastAiMsg.extra.rpgMemoRollback[swipeId];
+
+            if (typeof globalThis._rpgUpdateUIMemo === 'function') {
+                globalThis._rpgUpdateUIMemo(targetMemo);
+            }
+            anyChanged = true;
+        }
+    }
+
+    lastAiMsg.extra.rpgMemoActiveSwipe = swipeId;
+    return { anyChanged };
+}
+
+/**
+ * Undo/re-apply friendship/affection deltas when the user swipes between generations
+ * on the last AI message. Shared by MESSAGE_SWIPED and the pre-generation interceptor.
+ * @returns {{ anyChanged: boolean, bailEarly: boolean }}
+ */
+function applyRelationshipSwipeRollback(lastAiMsg, settings) {
+    let anyChanged = false;
+    if (!settings.npcRelationshipBars || !lastAiMsg) return { anyChanged, bailEarly: false };
+
+    lastAiMsg.extra = lastAiMsg.extra || {};
+    const swipeId = lastAiMsg.swipe_id ?? 0;
+    const relMax = getNpcRelationshipMax(settings);
+
+    if (Array.isArray(lastAiMsg.extra.rpgProcessedTags)) {
+        lastAiMsg.extra.rpgProcessedTags = { [swipeId]: lastAiMsg.extra.rpgProcessedTags };
+    } else if (!lastAiMsg.extra.rpgProcessedTags) {
+        lastAiMsg.extra.rpgProcessedTags = {};
+    }
+    lastAiMsg.extra.rpgRollbackData = lastAiMsg.extra.rpgRollbackData || {};
+
+    const alreadyScanned = lastAiMsg.extra.rpgProcessedTags[swipeId] !== undefined;
+
+    if (lastAiMsg.extra.rpgActiveSwipe !== undefined && lastAiMsg.extra.rpgActiveSwipe !== swipeId) {
+        const prevSwipeId = lastAiMsg.extra.rpgActiveSwipe;
+        console.log(`[RPG Tracker] Relationship swipe change: prev=${prevSwipeId}, current=${swipeId}`);
+        recordSchedulerEvent('relationship_swipe_change', { prevSwipeId, swipeId });
+
+        if (lastAiMsg.extra.rpgRollbackData[prevSwipeId]) {
+            console.log(`[RPG Tracker] Rolling back previous swipe ${prevSwipeId} relationship allocations.`);
+            for (const rb of lastAiMsg.extra.rpgRollbackData[prevSwipeId]) {
+                if (settings.npcRelationshipValues && settings.npcRelationshipValues[rb.npcId]) {
+                    const current = settings.npcRelationshipValues[rb.npcId][rb.field] ?? 0;
+                    if (rb.expectedValue !== undefined && current !== rb.expectedValue) {
+                        console.log(`[RPG Tracker] Aborting rollback for ${rb.npcId}: User manually edited slider.`);
+                        continue;
+                    }
+                    settings.npcRelationshipValues[rb.npcId][rb.field] = clampRelationshipValue(current - rb.actualAppliedDelta, relMax);
+                }
+                if (settings.npcRelationshipLog && Array.isArray(settings.npcRelationshipLog[rb.npcId])) {
+                    settings.npcRelationshipLog[rb.npcId] = settings.npcRelationshipLog[rb.npcId].filter(l => l.timestamp !== rb.logTimestamp);
+                }
+            }
+            anyChanged = true;
+        }
+
+        if (alreadyScanned) {
+            if (lastAiMsg.extra.rpgRollbackData[swipeId]?.length > 0) {
+                console.log(`[RPG Tracker] Re-applying saved allocations for swipe ${swipeId}`);
+                for (const rb of lastAiMsg.extra.rpgRollbackData[swipeId]) {
+                    if (settings.npcRelationshipValues && settings.npcRelationshipValues[rb.npcId]) {
+                        const current = settings.npcRelationshipValues[rb.npcId][rb.field] ?? 0;
+                        const newValue = clampRelationshipValue(current + rb.actualAppliedDelta, relMax);
+                        settings.npcRelationshipValues[rb.npcId][rb.field] = newValue;
+                        rb.expectedValue = newValue;
+                        rb.newValue = newValue;
+                    }
+                    if (settings.npcRelationshipLog) {
+                        settings.npcRelationshipLog[rb.npcId] = settings.npcRelationshipLog[rb.npcId] || [];
+                        const hasLog = settings.npcRelationshipLog[rb.npcId].some(l => l.timestamp === rb.logTimestamp);
+                        if (!hasLog) {
+                            settings.npcRelationshipLog[rb.npcId].push({
+                                timestamp: rb.logTimestamp,
+                                field: rb.field,
+                                delta: rb.delta,
+                                newValue: settings.npcRelationshipValues[rb.npcId][rb.field],
+                                source: 'Swipe restore'
+                            });
+                            if (settings.npcRelationshipLog[rb.npcId].length > 50) {
+                                settings.npcRelationshipLog[rb.npcId].shift();
+                            }
+                        }
+                    }
+                }
+                anyChanged = true;
+            }
+            lastAiMsg.extra.rpgActiveSwipe = swipeId;
+            return { anyChanged, bailEarly: true };
+        }
+
+        lastAiMsg.extra.rpgProcessedTags[swipeId] = [];
+        lastAiMsg.extra.rpgRollbackData[swipeId] = [];
+    }
+
+    lastAiMsg.extra.rpgActiveSwipe = swipeId;
+    lastAiMsg.extra.rpgProcessedTags[swipeId] = lastAiMsg.extra.rpgProcessedTags[swipeId] || [];
+    lastAiMsg.extra.rpgRollbackData[swipeId] = lastAiMsg.extra.rpgRollbackData[swipeId] || [];
+
+    return { anyChanged, bailEarly: false };
+}
+
+/**
+ * If the Lorebook Agent's most recent pass ran while `msg` was showing a swipe that is
+ * no longer active (i.e. the user swiped away from it), undo that pass and prime the
+ * run-every throttle so the agent fires again on the very next generation. This keeps
+ * "Run every N msgs" swipe-safe: without it, a discarded swipe's content would still
+ * count toward (and advance past) the "since last run" watermark, permanently skipping
+ * that segment of the conversation from the agent's view.
+ * @param {any} msg - The last AI message, as resolved by the caller.
+ */
+async function maybeRollbackRouterPassForSwipe(msg) {
+    if (!msg?.extra || msg.extra.rpgRouterRanForSwipe === undefined) return;
+
+    const currentSwipeId = msg.swipe_id ?? 0;
+    if (msg.extra.rpgRouterRanForSwipe === currentSwipeId) return;
+
+    if (isRouterRunning()) return;
+
+    const settings = getSettings();
+    const runId = msg.extra.rpgRouterRunId;
+    const postWm = msg.extra.rpgRouterPostPassWatermark;
+    const latest = settings.routerHistory?.[0];
+
+    // Only auto-rollback if this pass is still the most recent one in history.
+    let historyIndex = -1;
+    if (runId && latest?.runId === runId) {
+        historyIndex = 0;
+    } else if (!runId && postWm !== undefined && settings.routerLastRunChatLength === postWm) {
+        historyIndex = 0; // legacy passes stamped before runId existed
+    }
+
+    if (historyIndex < 0) {
+        console.log('[RPG Tracker] Lorebook Agent swipe rollback skipped: pass superseded or no matching history entry.');
+        recordSchedulerEvent('la_swipe_rollback_skipped', { reason: 'no_history_match', runId, postWm, currentSwipeId });
+        clearRouterSwipeMarkers(msg);
+        return;
+    }
+
+    console.log(`[RPG Tracker] Lorebook Agent pass was based on abandoned swipe ${msg.extra.rpgRouterRanForSwipe}→${currentSwipeId}; rolling back and re-priming run-every.`);
+    recordSchedulerEvent('la_swipe_rollback_attempt', { historyIndex, runId, fromSwipe: msg.extra.rpgRouterRanForSwipe, toSwipe: currentSwipeId });
+    const ok = await rollbackRouterPass(historyIndex);
+    if (ok) {
+        clearRouterSwipeMarkers(msg);
+        const primeTo = Math.max(0, (settings.routerRunEvery || 1) - 1);
+        setRouterAutoTick(primeTo, 'swipe_la_rollback_prime', { runEvery: settings.routerRunEvery || 1 });
+        recordSchedulerEvent('la_swipe_rollback_ok', { primedTick: primeTo });
+    } else {
+        console.warn('[RPG Tracker] Auto-rollback of Lorebook Agent pass failed; markers kept for retry.');
+        recordSchedulerEvent('la_swipe_rollback_failed', { historyIndex, runId });
+    }
+}
+
+function clearRouterSwipeMarkers(msg) {
+    if (!msg?.extra) return;
+    delete msg.extra.rpgRouterRanForSwipe;
+    delete msg.extra.rpgRouterRunId;
+    delete msg.extra.rpgRouterPrePassWatermark;
+    delete msg.extra.rpgRouterPostPassWatermark;
+}
+
+/**
  * Scans the most recent AI message for inline relationship annotations:
  *   (Friendship: Name +X ...) or (Affection: Name -X ...)
  * Parses field, NPC name, and delta, then applies them directly to
@@ -1013,7 +1195,10 @@ async function fuzzyResolveNpcName(name) {
  * This replaces the old lorebook-agent-as-middleman approach.
  */
 export async function parseAndApplyNarrativeRelTags() {
-    if (_rpgIsGenerating) return; // Prevent scanning ghost text or early partial text during stream
+    if (_rpgIsGenerating) {
+        recordSchedulerEvent('rel_tags_skipped', { reason: 'is_generating' });
+        return;
+    }
     
     const settings = getSettings();
     const ctx = SillyTavern.getContext();
@@ -1040,43 +1225,8 @@ export async function parseAndApplyNarrativeRelTags() {
     let anyStateChanged = false;
 
     // --- 1. STATE TRACKER SWIPE ROLLBACK & RESTORE ---
-    if (settings.stateTrackerSwipeRollback !== false) {
-        lastAiMsg.extra = lastAiMsg.extra || {};
-        const swipeId = lastAiMsg.swipe_id ?? 0;
-        const prevSwipeId = lastAiMsg.extra.rpgActiveSwipe;
-        if (prevSwipeId !== undefined && prevSwipeId !== swipeId) {
-            // Determine the target memo for the new swipe
-            let targetMemo = lastAiMsg.extra.rpgMemoResult?.[swipeId];
-            // Fallback to base memo if not processed yet
-            if (typeof targetMemo !== 'string') {
-                targetMemo = lastAiMsg.extra.rpgMemoRollback?.[prevSwipeId] || lastAiMsg.extra.rpgMemoRollback?.[swipeId];
-            }
-            
-            if (typeof targetMemo === 'string') {
-                console.log(`[RPG Tracker] State swipe detected (${prevSwipeId}→${swipeId}): restoring memo snapshot.`);
-                settings.currentMemo = targetMemo;
-                
-                // Keep memoHistory consistent
-                if (Array.isArray(settings.memoHistory)) {
-                    const baseMemo = lastAiMsg.extra.rpgMemoRollback?.[prevSwipeId] || lastAiMsg.extra.rpgMemoRollback?.[swipeId];
-                    if (targetMemo === baseMemo) {
-                        if (settings.memoHistory[0] !== baseMemo) {
-                            settings.memoHistory.shift();
-                            if (settings.historyIndex !== undefined && settings.historyIndex > 0) settings.historyIndex--;
-                        }
-                    } else {
-                        settings.memoHistory[0] = targetMemo;
-                    }
-                }
-                
-                // Update UI immediately
-                if (typeof globalThis._rpgUpdateUIMemo === 'function') {
-                    globalThis._rpgUpdateUIMemo(targetMemo);
-                }
-                anyStateChanged = true;
-            }
-        }
-    }
+    const memoSwipeResult = applyMemoSwipeRollback(lastAiMsg, settings);
+    anyStateChanged = memoSwipeResult.anyChanged;
 
     const triggerUIUpdate = () => {
         if (typeof ctx.saveChatDebounced === 'function') ctx.saveChatDebounced();
@@ -1105,103 +1255,33 @@ export async function parseAndApplyNarrativeRelTags() {
     // If Relationship Bars are disabled, we only handle State Tracker swipe updates
     console.log('[RPG Tracker] parseAndApplyNarrativeRelTags: STARTING. Bars enabled:', !!settings.npcRelationshipBars);
     if (!settings.npcRelationshipBars) {
+        await maybeRollbackRouterPassForSwipe(lastAiMsg);
         if (anyStateChanged) {
             triggerStateOnlyUIUpdate();
         }
-        // Save the active swipe marker
+        // Save the active swipe marker (relationship uses rpgActiveSwipe; memo uses rpgMemoActiveSwipe)
         lastAiMsg.extra = lastAiMsg.extra || {};
         lastAiMsg.extra.rpgActiveSwipe = lastAiMsg.swipe_id ?? 0;
+        lastAiMsg.extra.rpgMemoActiveSwipe = lastAiMsg.swipe_id ?? 0;
         return;
     }
 
     console.log('[RPG Tracker] parseAndApplyNarrativeRelTags: Found AI message (index ' + chat.indexOf(lastAiMsg) + ') with text length:', lastAiMsg.mes?.length);
 
-    const relMax = getNpcRelationshipMax(settings);
-
     // --- 2. RELATIONSHIP SWIPE ROLLBACK & RESTORE ---
-    lastAiMsg.extra = lastAiMsg.extra || {};
+    const relSwipeResult = applyRelationshipSwipeRollback(lastAiMsg, settings);
+    anyChanged = relSwipeResult.anyChanged;
+    if (relSwipeResult.bailEarly) {
+        await maybeRollbackRouterPassForSwipe(lastAiMsg);
+        if (anyChanged || anyStateChanged) triggerUIUpdate();
+        return;
+    }
+
+    // --- 2b. LOREBOOK AGENT "RUN EVERY" SWIPE ROLLBACK ---
+    await maybeRollbackRouterPassForSwipe(lastAiMsg);
+
     const swipeId = lastAiMsg.swipe_id ?? 0;
-
-    // Convert old array format to object-keyed-by-swipe format if needed
-    if (Array.isArray(lastAiMsg.extra.rpgProcessedTags)) {
-        lastAiMsg.extra.rpgProcessedTags = { [swipeId]: lastAiMsg.extra.rpgProcessedTags };
-    } else if (!lastAiMsg.extra.rpgProcessedTags) {
-        lastAiMsg.extra.rpgProcessedTags = {};
-    }
-    lastAiMsg.extra.rpgRollbackData = lastAiMsg.extra.rpgRollbackData || {};
-
-    const alreadyScanned = lastAiMsg.extra.rpgProcessedTags[swipeId] !== undefined;
-
-    // Detect swipe change and perform rollback / re-application
-    if (lastAiMsg.extra.rpgActiveSwipe !== undefined && lastAiMsg.extra.rpgActiveSwipe !== swipeId) {
-        const prevSwipeId = lastAiMsg.extra.rpgActiveSwipe;
-        console.log(`[RPG Tracker] Relationship swipe change: prev=${prevSwipeId}, current=${swipeId}`);
-        
-        // Rollback previous swipe
-        if (lastAiMsg.extra.rpgRollbackData[prevSwipeId]) {
-            console.log(`[RPG Tracker] Rolling back previous swipe ${prevSwipeId} relationship allocations.`);
-            for (const rb of lastAiMsg.extra.rpgRollbackData[prevSwipeId]) {
-                if (settings.npcRelationshipValues && settings.npcRelationshipValues[rb.npcId]) {
-                    const current = settings.npcRelationshipValues[rb.npcId][rb.field] ?? 0;
-                    if (rb.expectedValue !== undefined && current !== rb.expectedValue) {
-                        console.log(`[RPG Tracker] Aborting rollback for ${rb.npcId}: User manually edited slider.`);
-                        continue;
-                    }
-                    settings.npcRelationshipValues[rb.npcId][rb.field] = clampRelationshipValue(current - rb.actualAppliedDelta, relMax);
-                }
-                if (settings.npcRelationshipLog && Array.isArray(settings.npcRelationshipLog[rb.npcId])) {
-                    settings.npcRelationshipLog[rb.npcId] = settings.npcRelationshipLog[rb.npcId].filter(l => l.timestamp !== rb.logTimestamp);
-                }
-            }
-            anyChanged = true;
-        }
-        
-        // Re-apply current swipe if we have already scanned/processed it
-        if (alreadyScanned) {
-            if (lastAiMsg.extra.rpgRollbackData[swipeId] && lastAiMsg.extra.rpgRollbackData[swipeId].length > 0) {
-                console.log(`[RPG Tracker] Re-applying saved allocations for swipe ${swipeId}`);
-                for (const rb of lastAiMsg.extra.rpgRollbackData[swipeId]) {
-                    if (settings.npcRelationshipValues && settings.npcRelationshipValues[rb.npcId]) {
-                        const current = settings.npcRelationshipValues[rb.npcId][rb.field] ?? 0;
-                        const newValue = clampRelationshipValue(current + rb.actualAppliedDelta, relMax);
-                        settings.npcRelationshipValues[rb.npcId][rb.field] = newValue;
-                        
-                        rb.expectedValue = newValue;
-                        rb.newValue = newValue;
-                    }
-                    if (settings.npcRelationshipLog) {
-                        settings.npcRelationshipLog[rb.npcId] = settings.npcRelationshipLog[rb.npcId] || [];
-                        const hasLog = settings.npcRelationshipLog[rb.npcId].some(l => l.timestamp === rb.logTimestamp);
-                        if (!hasLog) {
-                            settings.npcRelationshipLog[rb.npcId].push({
-                                timestamp: rb.logTimestamp,
-                                field: rb.field,
-                                delta: rb.delta,
-                                newValue: settings.npcRelationshipValues[rb.npcId][rb.field],
-                                source: 'Swipe restore'
-                            });
-                            if (settings.npcRelationshipLog[rb.npcId].length > 50) {
-                                settings.npcRelationshipLog[rb.npcId].shift();
-                            }
-                        }
-                    }
-                }
-                anyChanged = true;
-            }
-            lastAiMsg.extra.rpgActiveSwipe = swipeId;
-            if (anyChanged || anyStateChanged) triggerUIUpdate();
-            return; // Bail out - we already re-applied the saved deltas for this scanned swipe!
-        } else {
-            // New/unprocessed swipe: initialize empty arrays
-            lastAiMsg.extra.rpgProcessedTags[swipeId] = [];
-            lastAiMsg.extra.rpgRollbackData[swipeId] = [];
-        }
-    }
-
-    lastAiMsg.extra.rpgActiveSwipe = swipeId;
-    lastAiMsg.extra.rpgProcessedTags[swipeId] = lastAiMsg.extra.rpgProcessedTags[swipeId] || [];
-    lastAiMsg.extra.rpgRollbackData[swipeId] = lastAiMsg.extra.rpgRollbackData[swipeId] || [];
-
+    const relMax = getNpcRelationshipMax(settings);
     const text = cleanMessageContent(lastAiMsg);
     console.log('[RPG Tracker] parseAndApplyNarrativeRelTags: Cleaned text length:', text?.length);
     if (!text) {
@@ -1496,10 +1576,39 @@ export let _rpgIsGenerating = false;
 export function onGenerationStarted(type) {
     _lastGenerationType = type;
     _rpgIsGenerating = true;
+    recordSchedulerEvent('generation_started', { generationType: type ?? null });
 }
+
+/** Last run-every tick decision (for scheduler debug snapshot). */
+let _lastTickDecision = null;
 
 /** In-memory counter: how many generations have fired since the agent last ran. Resets on chat change. */
 let _routerAutoTick = 0;
+
+/** @returns {object} Live scheduler internals for debug snapshot. */
+export function getRouterSchedulerInternals() {
+    return {
+        routerAutoTick: _routerAutoTick,
+        stateTrackerAutoTick: _stateTrackerAutoTick,
+        lastGenerationType: _lastGenerationType,
+        isGenerating: _rpgIsGenerating,
+        pendingKeywordCount: _pendingKeywordTriggered.length,
+        lastTickDecision: _lastTickDecision,
+    };
+}
+
+function setRouterAutoTick(value, reason, meta = {}) {
+    const tickBefore = _routerAutoTick;
+    _routerAutoTick = value;
+    recordSchedulerEvent('router_tick_set', { tickBefore, tickAfter: value, reason, ...meta });
+}
+
+function incrementRouterAutoTick(reason, meta = {}) {
+    const tickBefore = _routerAutoTick;
+    _routerAutoTick++;
+    recordSchedulerEvent('router_tick_inc', { tickBefore, tickAfter: _routerAutoTick, reason, ...meta });
+    document.dispatchEvent(new CustomEvent('rt_generation_tick'));
+}
 
 /** In-memory counter: how many generations have fired since the state tracker last ran. */
 let _stateTrackerAutoTick = 0;
@@ -1515,9 +1624,17 @@ let _pendingKeywordTriggered = [];
  * @param {boolean} [clearKeywordPool] - Pass true only when actually switching to a different chat.
  */
 export function resetRouterTick(clearKeywordPool = false) {
+    const prevTick = _routerAutoTick;
     _routerAutoTick = 0;
     _stateTrackerAutoTick = 0;
     _pendingKeywordTriggered = [];
+    _lastTickDecision = null;
+    recordSchedulerEvent('router_tick_reset', {
+        tickBefore: prevTick,
+        tickAfter: 0,
+        reason: 'chat_change',
+        clearKeywordPool,
+    });
     // Keyword-activated entries are transient (they expire when the keyword leaves the scan window).
     // Only clear on a real chat change, not on same-chat reloads (swipe, regenerate).
     if (clearKeywordPool) {
@@ -1535,7 +1652,11 @@ export function resetRouterTick(clearKeywordPool = false) {
 export function getRouterTick() { return _routerAutoTick; }
 
 /** Reset the auto-run throttle counter (e.g. after a manual agent pass). */
-export function resetRouterAutoTick() { _routerAutoTick = 0; }
+export function resetRouterAutoTick(reason = 'manual') {
+    const prev = _routerAutoTick;
+    _routerAutoTick = 0;
+    recordSchedulerEvent('router_tick_reset', { tickBefore: prev, tickAfter: 0, reason });
+}
 
 /**
  * Fires on GENERATION_ENDED. Triggers the state model pass.
@@ -1547,11 +1668,22 @@ export async function onGenerationEnded() {
     const settings = getSettings();
 
     const isStateRunning = typeof globalThis._rpgStateModelRunning === 'function' && globalThis._rpgStateModelRunning();
-    if (!settings.enabled || settings.paused || isStateRunning) return;
+    if (!settings.enabled || settings.paused || isStateRunning) {
+        recordSchedulerEvent('generation_ended_aborted', {
+            reason: !settings.enabled ? 'disabled' : settings.paused ? 'paused' : 'state_running',
+            generationType: _lastGenerationType ?? null,
+        });
+        return;
+    }
 
     // Check if the generation was for Impersonation or Quiet tasks.
     // In these cases, the chat history did not actually change.
     const currentType = _lastGenerationType;
+    recordSchedulerEvent('generation_ended_enter', {
+        generationType: currentType ?? null,
+        chatLength: SillyTavern.getContext()?.chat?.length ?? 0,
+        tickBefore: _routerAutoTick,
+    });
     // Reset the tracker after a timeout (next tick) to handle synchronous multi-event triggers (e.g. ENDED + STOPPED)
     setTimeout(() => {
         _lastGenerationType = null;
@@ -1561,12 +1693,16 @@ export async function onGenerationEnded() {
         if (settings.debugMode) {
             console.log(`[RPG Tracker] Skipping State Tracker and Researcher passes for generation type: ${currentType}`);
         }
+        recordSchedulerEvent('generation_ended_aborted', { reason: 'generation_type', generationType: currentType });
         return;
     }
 
     const { chat } = SillyTavern.getContext();
     const combinedNarrative = getNarrativeBlocks(chat, -1, !!settings.routerIncludeHidden);
-    if (!combinedNarrative) return;
+    if (!combinedNarrative) {
+        recordSchedulerEvent('generation_ended_aborted', { reason: 'no_narrative', generationType: currentType ?? null });
+        return;
+    }
 
     if (settings.debugMode) console.log("[RPG Tracker] Assistant generation ended. Running keyword scanner...");
 
@@ -1626,23 +1762,71 @@ export async function onGenerationEnded() {
     // currentMemo, so the [TIME] block reflects the current in-world clock.
     await maybeRunWorldProgression();
 
-    // Step 4: Run-every throttle — only fire the Lorebook Agent every N auto-generations.
-    _routerAutoTick++;
-    document.dispatchEvent(new CustomEvent('rt_generation_tick'));
+    // Step 4: Run-every throttle — only fire the Lorebook Agent every N new turns.
+    // Swipe/regenerate generations reuse an existing message slot and must not advance the
+    // counter (otherwise swiping through alternatives walks the cycle forward normally).
+    // Use a denylist rather than an allowlist: a fresh send may report its type as 'normal',
+    // '', or undefined depending on the entry path, but swipes/regens are always explicit.
+    // (impersonate/quiet already returned earlier and never reach here.)
+    const countsTowardRunEvery = currentType !== 'swipe' && currentType !== 'regenerate';
     const runEvery = settings.routerRunEvery || 1;
-    if (_routerAutoTick < runEvery) return;
-    _routerAutoTick = 0;
+    const tickBefore = _routerAutoTick;
+
+    _lastTickDecision = {
+        at: Date.now(),
+        generationType: currentType ?? null,
+        countsTowardRunEvery,
+        tickBefore,
+        runEvery,
+    };
+
+    recordSchedulerEvent('run_every_eval', {
+        generationType: currentType ?? null,
+        countsTowardRunEvery,
+        tickBefore,
+        runEvery,
+        nextInIfInc: countsTowardRunEvery ? Math.max(0, runEvery - (tickBefore + 1)) : Math.max(0, runEvery - tickBefore),
+    });
+
+    if (countsTowardRunEvery) {
+        incrementRouterAutoTick('generation_ended', { generationType: currentType ?? null });
+    } else {
+        recordSchedulerEvent('router_tick_skipped', {
+            generationType: currentType ?? null,
+            reason: 'denylist_swipe_or_regenerate',
+            tick: _routerAutoTick,
+        });
+    }
+
+    if (!countsTowardRunEvery || _routerAutoTick < runEvery) {
+        _lastTickDecision = { ..._lastTickDecision, action: 'hold', tickAfter: _routerAutoTick };
+        recordSchedulerEvent('lore_agent_hold', {
+            reason: !countsTowardRunEvery ? 'generation_type_excluded' : 'below_threshold',
+            tick: _routerAutoTick,
+            runEvery,
+        });
+        return;
+    }
+
+    setRouterAutoTick(0, 'lore_agent_fire_threshold', { generationType: currentType ?? null, runEvery });
+    _lastTickDecision = { ..._lastTickDecision, action: 'fire', tickAfter: 0 };
 
     // Step 5: Lorebook Agent pass — passes the full accumulated set of keyword-triggered IDs
     // from all throttled turns since the last agent run (not just the current generation).
     if (settings.routerWatermarkBaselinePending) {
         settings.routerWatermarkBaselinePending = false;
         persistRouterLastRunWatermark(chat.length);
+        recordSchedulerEvent('lore_agent_watermark_baseline', { chatLength: chat.length });
         if (settings.debugMode) {
             console.log('[RPG Tracker] Lorebook Agent watermark baselined at chat.length', chat.length);
         }
         return;
     }
+    recordSchedulerEvent('lore_agent_fire', {
+        generationType: currentType ?? null,
+        chatLength: chat.length,
+        pendingKeywords: _pendingKeywordTriggered.length,
+    });
     const triggeredForAgent = [..._pendingKeywordTriggered];
     _pendingKeywordTriggered = []; // reset accumulator now that the agent is about to process them
     await runRouterPass(combinedNarrative, null, null, false, triggeredForAgent);
@@ -1687,7 +1871,6 @@ async function maybeRunWorldProgression() {
     if (elapsed < intervalMinutes) return;
 
     // Guard: don't start a World Progression pass while the Lorebook Agent is already running
-    const { isRouterRunning } = await import('./router.js');
     if (isRouterRunning()) return;
 
     await runWorldProgressionPass(timeStr, currentMinutes);

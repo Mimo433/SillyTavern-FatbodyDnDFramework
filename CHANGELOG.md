@@ -2,6 +2,17 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [5.2.0] - 2026-07-13
+
+### Added
+- **Swipe-safe Lorebook Agent scheduling**: Auto-run on "every N msgs" no longer advances when swiping or regenerating; swiping away from a generation that triggered the agent rolls back lorebook state, rewinds the watermark, and primes the counter to fire on the next real message.
+- **Swipe rollback for agent-driven relationships**: `[[REL:]]` deltas from the Lorebook Agent are now recorded per swipe so friendship/affection rollback matches narrative-tag rollback.
+- **Scheduler debug instrumentation**: `globalThis._rpgSwipeSchedulerDebug` (`.dump()`, `.snapshot()`, `.log()`, `.togglePanel()`) plus `[RPG Scheduler]` console events when debug mode is on.
+
+### Fixed
+- **State Tracker memo swipe rollback**: Memo and relationship swipe trackers no longer share a single marker; memo rollback runs before relationship rollback in the interceptor so both restore correctly.
+- **Relationship swipe rollback**: Interceptor no longer wipes `rpgRollbackData` without undoing deltas.
+
 ## [5.1.10] - 2026-07-13
 
 ### Changed
