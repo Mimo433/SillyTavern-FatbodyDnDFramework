@@ -45,6 +45,7 @@ function snapshotControlRoomSettings(settings) {
         gameSystems: JSON.parse(JSON.stringify(settings.gameSystems || [])),
         customFields: JSON.parse(JSON.stringify(settings.customFields || [])),
         blockOrder: JSON.parse(JSON.stringify(settings.blockOrder || [])),
+        customSysprompt: settings.customSysprompt,
     };
 }
 
@@ -56,6 +57,7 @@ function restoreControlRoomSettings(settings, snapshot) {
     settings.gameSystems = snapshot.gameSystems;
     settings.customFields = snapshot.customFields;
     settings.blockOrder = snapshot.blockOrder;
+    settings.customSysprompt = snapshot.customSysprompt;
 }
 
 /** Popup sizing for content-heavy Game Systems dialogs (90% screen, scrollable). */
@@ -2187,6 +2189,15 @@ export async function openSystemPromptControlRoom() {
                 Drag any row to reorder sections, toggle <b>Enabled</b> to turn it on/off, or use the tools below to unlock a built-in section or add a brand-new one. 🧙 rows are managed by the Game System Wizard — Edit/Delete there keeps the linked tracker module in sync.
                 <div style="margin-top:4px; opacity:0.75;">Changes are kept in memory until you click <b>Save</b>.</div>
             </div>
+            <div style="display: flex; align-items: center; justify-content: space-between; border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; background: rgba(0,0,0,0.15); padding: 8px 10px; margin-bottom: 2px;">
+                <label class="checkbox_label" style="margin: 0; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                    <input id="rpg_tracker_custom_sysprompt" type="checkbox" />
+                    <span>⚠️ Custom Sysprompt Mode</span>
+                </label>
+                <small style="opacity: 0.65; max-width: 60%; line-height: 1.2; text-align: right; font-size: 10px;">
+                    When enabled, the framework will not touch your system prompt. All reordering, toggles, and section transformations are completely bypassed.
+                </small>
+            </div>
             <div style="display:flex; gap:6px; flex-wrap:wrap;">
                 <button id="rt_cr_btn_ai_add" class="menu_button interactable" style="flex:1; background:rgba(180,100,255,0.15); border-color:rgba(180,100,255,0.4); font-size:11px; padding:4px 8px;">
                     <i class="fa-solid fa-wand-magic-sparkles"></i> AI Builder
@@ -2210,6 +2221,14 @@ export async function openSystemPromptControlRoom() {
     setTimeout(() => {
         const container = document.getElementById('rt-cr-container');
         if (!container) return;
+
+        const customSyspromptCb = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_tracker_custom_sysprompt'));
+        if (customSyspromptCb) {
+            customSyspromptCb.checked = !!settings.customSysprompt;
+            customSyspromptCb.addEventListener('change', function () {
+                settings.customSysprompt = !!this.checked;
+            });
+        }
 
         const refresh = () => {
             const wrap = document.getElementById('rt-cr-list-wrap');
@@ -2391,6 +2410,8 @@ export async function openSystemPromptControlRoom() {
         syncAllNarratorTogglesForUnlockState();
         refreshOrderList();
         refreshRenderedView();
+        const narratorBlockEl = document.getElementById('rpg_narrator_config_block');
+        if (narratorBlockEl) narratorBlockEl.style.display = settings.customSysprompt ? 'none' : '';
         await autoApplySysprompt(true);
         toastr['success']('System prompt sections saved.', 'System Prompt Control Room');
         return;
@@ -2398,4 +2419,6 @@ export async function openSystemPromptControlRoom() {
 
     restoreControlRoomSettings(settings, initialSnapshot);
     syncAllNarratorTogglesForUnlockState();
+    const narratorBlockEl = document.getElementById('rpg_narrator_config_block');
+    if (narratorBlockEl) narratorBlockEl.style.display = settings.customSysprompt ? 'none' : '';
 }
