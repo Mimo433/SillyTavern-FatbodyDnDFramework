@@ -138,16 +138,28 @@ export function extractCurrentTimeStr(timeBlockContent) {
 }
 
 /**
+ * True when Last Rest has no real timestamp (new character, never rested, etc.).
+ * @param {string} str
+ * @returns {boolean}
+ */
+export function isRestTimeUnset(str) {
+    const v = String(str || '').trim();
+    if (!v) return true;
+    return /^(?:N\/A|NA|NONE|NEVER|NULL|—|-)$/i.test(v);
+}
+
+/**
  * Converts in-world time strings to a comparable numeric value (minutes since Day 1/epoch date, 00:00).
  * Expected formats: "08:00 AM, Day 1", "08:00 AM, 01/01/2026", "Day 4", "10:00 PM"
  * @param {string} str 
- * @returns {number}
+ * @returns {number|null} Minutes since epoch, or null when the string has no parseable date/time.
  */
 export function parseInWorldTime(str) {
-    if (!str) return 0;
+    if (!str) return null;
     if (str.includes('\n')) {
         str = extractCurrentTimeStr(str);
     }
+    if (isRestTimeUnset(str)) return null;
     const ddmmyyMatch = str.match(/\b(\d{1,2})\/(\d{1,2})\/(\d+)\b/);
     const dayMatch = str.match(/(?:Day|D)\s*(\d+)/i);
     const timeMatch = str.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
@@ -182,7 +194,7 @@ export function parseInWorldTime(str) {
         }
     }
     
-    if (!ddmmyyMatch && !dayMatch && !timeMatch) return 0;
+    if (!ddmmyyMatch && !dayMatch && !timeMatch) return null;
     return (d - 1) * 1440 + h * 60 + m;
 }
 

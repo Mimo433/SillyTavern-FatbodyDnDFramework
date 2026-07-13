@@ -908,7 +908,7 @@ Level 10 — 64,000 XP`;
 export function getOnboardingLevelXpValues(level) {
     const lvl = Math.max(1, Math.min(20, parseInt(String(level), 10) || 1));
     const tableLevel = Math.min(lvl, 10);
-    const currentXp = XP_LEVEL_THRESHOLDS[tableLevel - 1] ?? 0;
+    const currentXp = 0;
     const nextXp = tableLevel >= 10 ? XP_LEVEL_THRESHOLDS[9] : XP_LEVEL_THRESHOLDS[tableLevel];
     return { level: lvl, currentXp, nextXp };
 }
@@ -923,8 +923,18 @@ The character MUST be Level ${lvl}. Output an [XP] block using exactly this form
 Level: ${lvl} | XP: ${fmt(currentXp)}/${fmt(nextXp)}
 [/XP]
 
-Set current XP to ${fmt(currentXp)} (the Level ${Math.min(lvl, 10)} threshold). LEVEL THRESHOLDS:
+Set current XP to ${fmt(currentXp)} — the character is at the BEGINNING of Level ${lvl} (freshly leveled), NOT at max XP for that level. LEVEL THRESHOLDS:
 ${XP_LEVEL_THRESHOLDS_TEXT}`;
+}
+
+/** Prompt fragment for the mandatory [TIME] block at character creation. */
+export function buildOnboardingTimeHint(startDateVal) {
+    return `\n\n[TIME]
+Last Rest: N/A
+Current Time: 08:00 AM, ${startDateVal}
+[/TIME]
+
+Last Rest must be N/A — this is a brand-new character who has not taken a Long Rest yet.`;
 }
 
 // ── Renderer / block layout constants ─────────────────────────────────────────

@@ -1,4 +1,4 @@
-import { EXAMPLES, COLOR_EXAMPLES, DEFAULT_STOCK_PROMPTS, RT_PROMPTS, BLOCK_ICONS, BLOCK_ORDER, PAGE_SIZE, NO_PAGINATE, buildOnboardingXpHint, resolveTimePromptKey, resolveTimePromptDisplayTag } from './constants.js';
+import { EXAMPLES, COLOR_EXAMPLES, DEFAULT_STOCK_PROMPTS, RT_PROMPTS, BLOCK_ICONS, BLOCK_ORDER, PAGE_SIZE, NO_PAGINATE, buildOnboardingXpHint, buildOnboardingTimeHint, resolveTimePromptKey, resolveTimePromptDisplayTag } from './constants.js';
 import { MODULE_NAME, DEFAULT_MODULES, getSettings, getBarBackground, migrateCustomFields, saveChatState, saveProfile, deleteProfile, getEffectiveRouterCampaignPrefix, sanitizeCampaignPrefixString, buildNpcInstruction, loadStockPromptsFromProfile, getNpcRelationshipMax, getNpcRelationshipMaxDefault, clampRelationshipValue, relationshipBarPct, getFriendshipTier, getAffectionTier, getRelTierBadgeStyle, getRelTierDetailedStyle, getRelTierDetailedLabelStyle, applyRelTierBadgeElement, sanitizeRouterState, rebuildAllModuleInstructions, adjustAllStoredTemplatesForTimeFormat, DEFAULT_NPC_SECTIONS, DEFAULT_PC_SECTIONS } from './state-manager.js';
 import { sendStateRequest, fetchOllamaModels, fetchOpenAIModels, testOpenAIConnection, getConnectionProfiles, getCurrentCompletionPreset, setCompletionPreset, syncCombatProfile, resetCombatProfileOverride } from './llm-client.js';
 import { getDiceToolName, getDiceCommandName, getDiceCommandAliases, doDiceRoll, registerDiceFunctionTool, registerDiceSlashCommand, installInterceptor, getNarrativeBlocks, onGenerationStarted, onGenerationEnded, ensureRelTagRegex, resetRouterTick, getRouterTick, resetRouterAutoTick, getRouterSchedulerInternals, makeRngQueue, buildRngBlock, RNG_QUEUE_LEN, parseAndApplyNarrativeRelTags } from './narrative-hooks.js';
@@ -1237,7 +1237,7 @@ function loadChatState(chatId) {
             return formatInWorldTime(totalMins);
         }
         const label = s.worldProgressionLastFiredPeriodLabel || '';
-        const labelMins = label ? parseInWorldTime(label) : -1;
+        const labelMins = label ? (parseInWorldTime(label) ?? -1) : -1;
         const lastText = label || 'Never';
         $('#rpg_world_progression_last_fired').text(lastText);
         $('#rpg_world_progression_last_report_val').text(lastText);
@@ -1248,7 +1248,7 @@ function loadChatState(chatId) {
         } else {
             const tMatch = (s.currentMemo || '').match(/\[TIME\]([\s\S]*?)\[\/TIME\]/i);
             const tStr = tMatch ? extractCurrentTimeStr(tMatch[1]) : '';
-            const tMins = tStr ? parseInWorldTime(tStr) : -1;
+            const tMins = tStr ? (parseInWorldTime(tStr) ?? -1) : -1;
             if (tMins >= 0) nextMins = tMins + intervalMinutes;
         }
         $('#rpg_world_progression_next_report_val').text(nextMins >= 0 ? _fmtWpMins(nextMins) : '—');
@@ -2723,9 +2723,7 @@ export function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRe
                 : `STARTING LEVEL: ${level} (mandatory — the character MUST be exactly Level ${level}; scale/adjust HP, stats, saves, capabilities, and gear (everything a character of that level might have) to Level ${level} accordingly, but do NOT output an [XP] block as it is disabled).`;
 
             const xpHint = _hasXp ? buildOnboardingXpHint(level) : '';
-            const TIME_FORMAT_HINT = _hasTime
-                ? `\n\n[TIME]\nLast Rest: 12:00 AM, ${isCalendar ? startDateVal : 'Day 0'}\nCurrent Time: 08:00 AM, ${startDateVal}\n[/TIME]`
-                : '';
+            const TIME_FORMAT_HINT = _hasTime ? buildOnboardingTimeHint(startDateVal) : '';
 
             // Dynamic block list (only enabled modules)
             const _activeBlocks = ['CHARACTER', ...(_hasInventory ? ['INVENTORY'] : []), ...(_hasAbilities ? ['ABILITIES'] : []), ...(_hasSpells ? ['SPELLS'] : []), ...(_hasXp ? ['XP'] : []), ...(_hasTime ? ['TIME'] : [])];
@@ -4260,7 +4258,7 @@ function createPanel() {
         {
             const wpS = getSettings();
             const wpLabel = wpS.worldProgressionLastFiredPeriodLabel || '';
-            const wpMins = wpLabel ? parseInWorldTime(wpLabel) : -1;
+            const wpMins = wpLabel ? (parseInWorldTime(wpLabel) ?? -1) : -1;
             const wpIntervalMins = (wpS.worldProgressionIntervalHours || 24) * 60;
             function _fmtWP(m) {
                 return formatInWorldTime(m);
@@ -4276,7 +4274,7 @@ function createPanel() {
             } else {
                 const tMatch = (wpS.currentMemo || '').match(/\[TIME\]([\s\S]*?)\[\/TIME\]/i);
                 const tStr = tMatch ? extractCurrentTimeStr(tMatch[1]) : '';
-                const tMins = tStr ? parseInWorldTime(tStr) : -1;
+                const tMins = tStr ? (parseInWorldTime(tStr) ?? -1) : -1;
                 if (tMins >= 0) wpNextMins = tMins + wpIntervalMins;
             }
             if (wpNextEl) wpNextEl.textContent = wpNextMins >= 0 ? _fmtWP(wpNextMins) : '—';
@@ -4595,7 +4593,7 @@ function createPanel() {
         function updateAgentWorldStatus() {
             const s = getSettings();
             const label = s.worldProgressionLastFiredPeriodLabel || '';
-            const mins = label ? parseInWorldTime(label) : -1;
+            const mins = label ? (parseInWorldTime(label) ?? -1) : -1;
             const intervalHours = s.worldProgressionIntervalHours || 24;
             const intervalMins = intervalHours * 60;
             function fmtWP(m) {
@@ -4612,7 +4610,7 @@ function createPanel() {
             } else {
                 const timeMatch = (s.currentMemo || '').match(/\[TIME\]([\s\S]*?)\[\/TIME\]/i);
                 const timeStr = timeMatch ? extractCurrentTimeStr(timeMatch[1]) : '';
-                const currentMins = timeStr ? parseInWorldTime(timeStr) : -1;
+                const currentMins = timeStr ? (parseInWorldTime(timeStr) ?? -1) : -1;
                 if (currentMins >= 0) {
                     nextMins = currentMins + intervalMins;
                 }
@@ -12602,7 +12600,7 @@ RULES:
         function updateWorldProgressionLastFiredDisplay() {
             const s = getSettings();
             const label = s.worldProgressionLastFiredPeriodLabel || '';
-            const mins = label ? parseInWorldTime(label) : -1;
+            const mins = label ? (parseInWorldTime(label) ?? -1) : -1;
 
             const lastReportText = label || 'Never';
             $wpLastFired.text(lastReportText);
@@ -12617,7 +12615,7 @@ RULES:
             } else {
                 const timeMatch = (s.currentMemo || '').match(/\[TIME\]([\s\S]*?)\[\/TIME\]/i);
                 const timeStr = timeMatch ? extractCurrentTimeStr(timeMatch[1]) : '';
-                const currentMins = timeStr ? parseInWorldTime(timeStr) : -1;
+                const currentMins = timeStr ? (parseInWorldTime(timeStr) ?? -1) : -1;
                 if (currentMins >= 0) {
                     nextMins = currentMins + intervalMinutes;
                 }
@@ -12835,7 +12833,7 @@ RULES:
             if (userInput === null) return; // cancelled
 
             const parsedNextMins = parseInWorldTime(userInput.trim());
-            if (parsedNextMins <= 0) {
+            if (parsedNextMins == null || parsedNextMins <= 0) {
                 const errorFormat = s.useDdMmYyFormat
                     ? 'Could not parse the entered time. Please use a format like "06/01/26, 08:00 AM".'
                     : 'Could not parse the entered time. Please use a format like "Day 6, 08:00 AM".';

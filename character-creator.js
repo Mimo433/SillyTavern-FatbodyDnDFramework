@@ -1,6 +1,6 @@
 import { getSettings, saveChatState, DEFAULT_PC_SECTIONS } from './state-manager.js';
 import { sendStateRequest } from './llm-client.js';
-import { buildOnboardingXpHint } from './constants.js';
+import { buildOnboardingXpHint, buildOnboardingTimeHint } from './constants.js';
 import { escapeHtml } from './memo-processor.js';
 import { getRequestHeaders } from '../../../../script.js';
 import { saveSettings, sendDirectPrompt, refreshAgentManifestNow, refreshRenderedView } from './index.js';
@@ -440,7 +440,6 @@ async function handleCharRollGenerate(el, panel) {
     const startDateVal = isCalendar
         ? (s.initialDate && s.initialDate !== 'Day 1' ? s.initialDate : '01/01/2026')
         : 'Day 1';
-    const initRestVal = isCalendar ? startDateVal : 'Day 0';
 
     // Gate optional blocks on enabled modules
     const mods = s.modules || {};
@@ -455,9 +454,7 @@ async function handleCharRollGenerate(el, panel) {
         : `STARTING LEVEL: ${level} (mandatory — the character MUST be exactly Level ${level}; scale/adjust HP, stats, saves, capabilities, and gear (everything a character of that level might have) to Level ${level} accordingly, but do NOT output an [XP] block as it is disabled).`;
 
     const xpHint = hasXp ? buildOnboardingXpHint(level) : '';
-    const TIME_FORMAT_HINT = hasTime
-        ? `\n\n[TIME]\nLast Rest: 12:00 AM, ${initRestVal}\nCurrent Time: 08:00 AM, ${startDateVal}\n[/TIME]`
-        : '';
+    const TIME_FORMAT_HINT = hasTime ? buildOnboardingTimeHint(startDateVal) : '';
 
     // Build the dynamic block list for the closing-tag rule (only active blocks)
     const activeBlocks = ['CHARACTER', ...(hasInventory ? ['INVENTORY'] : []), ...(hasAbilities ? ['ABILITIES'] : []), ...(hasSpells ? ['SPELLS'] : []), ...(hasXp ? ['XP'] : []), ...(hasTime ? ['TIME'] : [])];

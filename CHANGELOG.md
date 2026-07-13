@@ -2,6 +2,13 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [5.2.2] - 2026-07-13
+
+### Fixed
+- **Character creation XP**: New characters now start at the beginning of the selected level (`XP: 0/max`) instead of maxed-out cumulative XP.
+- **Character creation Last Rest**: Initial `[TIME]` block uses `Last Rest: N/A` for brand-new characters who have not taken a Long Rest yet.
+- **Last Rest display**: `N/A` and other unset rest values no longer show a bogus relative time (e.g. "8 hours ago").
+
 ## [5.2.1] - 2026-07-13
 
 ### Changed

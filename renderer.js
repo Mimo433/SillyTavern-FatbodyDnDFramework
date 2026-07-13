@@ -1,6 +1,6 @@
 import { getSettings, getBarBackground, getBarShowAsPercentage } from './state-manager.js';
 import { resolvePortraitDisplaySrc } from './portrait-storage.js';
-import { escapeHtml, highlightParens, highlightNumbers, parseInWorldTime, formatTimeDiff, isArchivedQuestStatus } from './memo-processor.js';
+import { escapeHtml, highlightParens, highlightNumbers, parseInWorldTime, isRestTimeUnset, formatTimeDiff, isArchivedQuestStatus } from './memo-processor.js';
 import { BLOCK_ICONS, BLOCK_ORDER, PAGE_SIZE, NO_PAGINATE } from './constants.js';
 
 // ── Renderer module: pure HTML string producers, localStorage helpers ──
@@ -1388,7 +1388,7 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                     if (line.toLowerCase().startsWith('last rest:')) continue;
                     if (!parsedCurrent) {
                         const t = parseInWorldTime(line);
-                        if (t !== 0) {
+                        if (t !== null) {
                             currentTotalMins = t;
                             parsedCurrent = true;
                         }
@@ -1399,7 +1399,7 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                     if (line.toLowerCase().startsWith('last rest:')) {
                         const restVal = line.substring(line.indexOf(':') + 1).trim();
                         let append = "";
-                        if (parsedCurrent) {
+                        if (parsedCurrent && !isRestTimeUnset(restVal)) {
                             const restMins = parseInWorldTime(restVal);
                             if (restMins !== null) {
                                 const diff = currentTotalMins - restMins;
@@ -2593,14 +2593,14 @@ export function renderQuestLog(quests, currentTime, collapsed, detached, filterT
         const currentTotalMins = parseInWorldTime(currentTime);
         const deadlineMins = parseInWorldTime(quest.deadline_time);
         let timeLeftHtml = '';
-        if (currentTotalMins > 0 && deadlineMins > 0) {
+        if (currentTotalMins != null && deadlineMins != null && currentTotalMins > 0 && deadlineMins > 0) {
             const diff = deadlineMins - currentTotalMins;
             timeLeftHtml = ` <i style="opacity: 0.7; font-size: 0.9em;">(${formatTimeDiff(diff, diff > 0)})</i>`;
         }
 
         const acceptedMins = parseInWorldTime(quest.accepted_time);
         let acceptedRow = '';
-        if (currentTotalMins > 0 && acceptedMins > 0) {
+        if (currentTotalMins != null && acceptedMins != null && currentTotalMins > 0 && acceptedMins > 0) {
             const diff = currentTotalMins - acceptedMins;
             acceptedRow = `
                 <div class="rt-quest-deadline">
