@@ -11625,7 +11625,7 @@ RULES:
 
             let html = `<div class="rpg-tracker-panel ${themeClass}" style="display:flex; flex-direction:column; gap:8px; max-height:60vh; overflow-y:auto; padding-right:10px; position:relative; top:auto; right:auto; width:100%; height:auto; background:transparent; border:none; box-shadow:none; resize:none;">`;
             html += `<div style="font-size:0.85em; opacity:0.85; padding:6px 8px; border:1px solid rgba(255,221,136,0.3); border-radius:6px; background:rgba(255,221,136,0.06);">
-                💡 Any tag above supports an optional inline color override: <code>((TAG - #RRGGBB))</code> (e.g. <code>((PLS - #E5FFCC))</code>). Bar-type tags (<code>((BAR))</code>, <code>((XPBAR))</code>, <code>((PROGRESS))</code>) also support a two-color gradient: <code>((BAR - #E5FFCC #003300))</code>. Use sparingly — extra color codes add tokens the tracker has to read back.
+                💡 Any tag above supports an optional inline color override: <code>((TAG - #RRGGBB))</code> (e.g. <code>((PLS - #E5FFCC))</code>). Bar-type tags (<code>((BAR))</code>, <code>((XPBAR))</code>, <code>((PROGRESS))</code>) also support a two-color gradient: <code>((BAR - #E5FFCC #003300))</code>.
             </div>`;
             for (let i = 0; i < RENDERING_TAGS_LIBRARY.length; i++) {
                 const item = RENDERING_TAGS_LIBRARY[i];
