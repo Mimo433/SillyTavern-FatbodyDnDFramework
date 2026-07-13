@@ -597,7 +597,8 @@ export function installInterceptor() {
             console.log("Chat Length:", Array.isArray(chat) ? chat.length : 'N/A');
         }
 
-        if (!settings.enabled) {
+        const routerActive = !!settings.routerEnabled;
+        if (!settings.enabled && !routerActive) {
             if (settings.debugMode) console.groupEnd();
             return;
         }
@@ -681,7 +682,7 @@ export function installInterceptor() {
         // RNG, State Memo, and Quests are only injected into the user message in Path 2.
         // In Path 1 (addPromptManagerInterceptor), these are built and injected by that interceptor
         // into a dedicated system message at the configured depth, protecting the prefix cache.
-        if (!skipInjection) {
+        if (!skipInjection && settings.enabled) {
             // [PLAYER_CHARACTER] — always injected at the top of the core block
             const curChatId = SillyTavern.getContext().chatId || globalThis._rpgCurrentChatId?.();
             if (curChatId && settings.chatStates?.[curChatId]?.playerCharacter) {
@@ -1750,9 +1751,10 @@ export async function onGenerationEnded() {
     const settings = getSettings();
 
     const isStateRunning = typeof globalThis._rpgStateModelRunning === 'function' && globalThis._rpgStateModelRunning();
-    if (!settings.enabled || settings.paused || isStateRunning) {
+    const routerActive = !!settings.routerEnabled;
+    if ((!settings.enabled && !routerActive) || settings.paused || isStateRunning) {
         recordSchedulerEvent('generation_ended_aborted', {
-            reason: !settings.enabled ? 'disabled' : settings.paused ? 'paused' : 'state_running',
+            reason: (!settings.enabled && !routerActive) ? 'disabled' : settings.paused ? 'paused' : 'state_running',
             generationType: _lastGenerationType ?? null,
         });
         return;
@@ -1812,32 +1814,37 @@ export async function onGenerationEnded() {
     // Step 1b: Parse (Friendship/Affection: Name ±X) tags from the narrative AI's output
     // and apply relationship deltas directly — no lorebook agent middleman.
     // Fired in the background without awaiting so the UI "Send" button reappears instantly.
-    if (settings.npcRelationshipBars) {
+    if (settings.enabled) {
+        // Step 1b: Parse (Friendship/Affection: Name ±X) tags from the narrative AI's output
+        // and apply relationship deltas directly — no lorebook agent middleman.
+        // Fired in the background without awaiting so the UI "Send" button reappears instantly.
+        if (settings.npcRelationshipBars) {
+            try {
+                parseAndApplyNarrativeRelTags(); // Removed await for speed
+            } catch (e) {
+                console.warn('[RPG Tracker] Narrative relationship tag parsing failed:', e);
+            }
+        }
+
+        // Step 2: State Tracker pass — throttled by stateTrackerRunEvery.
+        const stateRunEvery = settings.stateTrackerRunEvery || 1;
+        _stateTrackerAutoTick++;
+        if (_stateTrackerAutoTick >= stateRunEvery) {
+            _stateTrackerAutoTick = 0;
+            if (settings.debugMode) console.log("[RPG Tracker] Triggering State Model pass...", combinedNarrative);
+            if (typeof globalThis._rpgRunStateModelPass === 'function') {
+                await globalThis._rpgRunStateModelPass(combinedNarrative);
+            }
+        } else {
+            if (settings.debugMode) console.log(`[RPG Tracker] State Tracker skipped (tick ${_stateTrackerAutoTick}/${stateRunEvery}).`);
+        }
+
+        // Step 2b: Combat main-profile auto-switch — check raw memo after State Tracker (or on existing memo if throttled).
         try {
-            parseAndApplyNarrativeRelTags(); // Removed await for speed
+            await syncCombatProfile(getSettings().currentMemo, settings);
         } catch (e) {
-            console.warn('[RPG Tracker] Narrative relationship tag parsing failed:', e);
+            console.warn('[RPG Tracker] Combat profile sync failed:', e);
         }
-    }
-
-    // Step 2: State Tracker pass — throttled by stateTrackerRunEvery.
-    const stateRunEvery = settings.stateTrackerRunEvery || 1;
-    _stateTrackerAutoTick++;
-    if (_stateTrackerAutoTick >= stateRunEvery) {
-        _stateTrackerAutoTick = 0;
-        if (settings.debugMode) console.log("[RPG Tracker] Triggering State Model pass...", combinedNarrative);
-        if (typeof globalThis._rpgRunStateModelPass === 'function') {
-            await globalThis._rpgRunStateModelPass(combinedNarrative);
-        }
-    } else {
-        if (settings.debugMode) console.log(`[RPG Tracker] State Tracker skipped (tick ${_stateTrackerAutoTick}/${stateRunEvery}).`);
-    }
-
-    // Step 2b: Combat main-profile auto-switch — check raw memo after State Tracker (or on existing memo if throttled).
-    try {
-        await syncCombatProfile(getSettings().currentMemo, settings);
-    } catch (e) {
-        console.warn('[RPG Tracker] Combat profile sync failed:', e);
     }
 
     // Step 3: World Progression deterministic check — runs AFTER the State Tracker has updated
