@@ -15,11 +15,13 @@
                 </div>
                 <div class="inline-drawer-content">
                     <div class="flex-container flexFlowColumn gap-1">
+
+                        <!-- CORE -->
+                        <small style="display: block; margin-bottom: 2px; font-weight: bold; opacity: 0.65; text-transform: uppercase; font-size: 0.7em; letter-spacing: 0.4px;">Core</small>
                         <label class="checkbox_label">
                             <input id="rpg_tracker_enabled" type="checkbox" />
                             <span>Enable State Tracker</span>
                         </label>
-
                         <label class="checkbox_label">
                             <input id="rpg_tracker_chat_link_enabled" type="checkbox" />
                             <span>Chat-Linked Mode</span>
@@ -27,8 +29,95 @@
                                 title="When enabled, the tracker state (memo) is automatically saved and restored per chat ID. Switching chats will reload that specific campaign's state."></i>
                         </label>
 
-                        <div id="rpg_portrait_config_block" style="margin-top: 6px; border: 1px solid rgba(255,255,255,0.12); border-radius: 6px; padding: 8px 10px;">
-                            <small style="display: block; margin-bottom: 6px; font-weight: bold; opacity: 0.9;">AI Character Portraits</small>
+                        <!-- APPEARANCE -->
+                        <small style="display: block; margin-top: 10px; margin-bottom: 2px; font-weight: bold; opacity: 0.65; text-transform: uppercase; font-size: 0.7em; letter-spacing: 0.4px;">Appearance</small>
+                        <label style="font-size: 0.82em; opacity: 0.75;">Panel Layout</label>
+                        <div class="rt-seg-toggle" id="rpg_tracker_layout_mode_seg" role="group" style="width: 100%;" title="Stacked shows every module at once, vertically. Tab Mode pins Character/Combat at the top and puts the rest behind a compact tab strip — better for small screens or mobile.">
+                            <button type="button" data-value="stack" style="flex: 1;">📚 Stacked</button>
+                            <button type="button" data-value="tabs" style="flex: 1;">🗂️ Tab Mode (Compact)</button>
+                        </div>
+                        <label style="font-size: 0.82em; opacity: 0.75; margin-top: 4px;">Visual Theme</label>
+                        <select id="rpg_tracker_theme_select" class="text_pole">
+                            <option value="rt-theme-native">Match ST UI</option>
+                            <option value="rt-theme-hacker">Hacker</option>
+                            <option value="rt-theme-fantasy">Fantasy</option>
+                            <option value="rt-theme-hologram">Hologram</option>
+                            <option value="rt-theme-pacific">Pacific Cove</option>
+                            <option value="rt-theme-cherry">Cherry Blossom</option>
+                            <option value="rt-theme-custom">✨ Custom (AI Wizard)</option>
+                        </select>
+                        <label class="checkbox_label" style="margin-top: 4px;">
+                            <input id="rpg_tracker_daynight_cycle" type="checkbox" />
+                            <span>Day/Night Cycle</span>
+                            <i class="fa-solid fa-circle-question interactable" title="Shifts the tracker panel colors and header sky badge to match the current in-world time from [TIME] (requires an HH:MM clock). Seven phases: late night, dawn, morning, midday, afternoon, sunset, and night. Purely decorative — no effect on prompts or memo."></i>
+                        </label>
+                        <div class="flex-container flexFlowColumn gap-1" style="margin-top: 4px;">
+                            <div class="flex-container alignitemscenter" style="width: 100%;">
+                                <span style="font-size: 0.85em;">Tracker Font Size</span>
+                                <span id="rpg_tracker_font_size_val" style="margin-left: auto; font-weight: bold; opacity: 0.8;">13px</span>
+                            </div>
+                            <input id="rpg_tracker_font_size" type="range" class="text_pole" style="width: 100%; cursor: pointer;" min="8" max="32" />
+                            <div class="flex-container alignitemscenter" style="width: 100%; margin-top: 4px;">
+                                <span style="font-size: 0.85em;">Agent Font Size</span>
+                                <span id="rpg_agent_font_size_val" style="margin-left: auto; font-weight: bold; opacity: 0.8;">13px</span>
+                            </div>
+                            <input id="rpg_agent_font_size" type="range" class="text_pole" style="width: 100%; cursor: pointer;" min="8" max="32" />
+                        </div>
+                        <div id="rpg_tracker_theme_wizard_block" style="display:none; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; padding: 10px; background: rgba(255,255,255,0.03); margin-top: 4px;">
+                            <b>🪄 AI Theme Wizard</b>
+                            <textarea id="rpg_tracker_theme_prompt" class="text_pole" rows="3" placeholder="Describe visual style..."></textarea>
+                            <div class="flex-container gap-1" style="margin-top: 6px;">
+                                <button id="rpg_tracker_theme_generate" class="menu_button interactable" style="flex: 1;">New</button>
+                                <button id="rpg_tracker_theme_iterate" class="menu_button interactable" style="flex: 1;">Iterate</button>
+                            </div>
+                            <div class="flex-container gap-1" style="margin-top: 4px;">
+                                <button id="rpg_tracker_theme_save" class="menu_button interactable" style="flex: 2; font-size: 11px;"><i class="fa-solid fa-bookmark"></i> Save to Library</button>
+                                <button id="rpg_tracker_theme_wizard_undo" class="menu_button interactable" style="flex: 1; font-size: 11px;"><i class="fa-solid fa-undo"></i> Undo</button>
+                            </div>
+                            <div id="rpg_tracker_theme_wizard_status" style="font-size: 10px; margin-top: 5px; opacity: 0.8; font-style: italic; min-height: 14px;"></div>
+                            <div id="rpg_tracker_saved_themes_container" style="display:none; margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px;">
+                                <b style="font-size: 0.85em; opacity: 0.8;">Library</b>
+                                <div id="rpg_tracker_saved_themes_list" class="flex-container flexFlowColumn gap-1"></div>
+                            </div>
+                        </div>
+
+                        <!-- MODULE DISPLAY -->
+                        <small style="display: block; margin-top: 10px; margin-bottom: 2px; font-weight: bold; opacity: 0.65; text-transform: uppercase; font-size: 0.7em; letter-spacing: 0.4px;">Module Display</small>
+
+                        <div class="inline-drawer">
+                            <div class="inline-drawer-toggle inline-drawer-header" style="font-size: 0.88em;">
+                                <i class="fa-solid fa-sack-dollar" style="margin-right: 6px; opacity: 0.6;"></i>
+                                <b>Inventory</b>
+                                <div class="inline-drawer-icon fa-solid fa-circle-chevron-down"></div>
+                            </div>
+                            <div class="inline-drawer-content">
+                                <div id="rpg_inventory_config_block" class="flex-container flexFlowColumn gap-1">
+                                    <label class="checkbox_label">
+                                        <input id="rpg_tracker_show_total_value" type="checkbox" />
+                                        <span>Show Total Inventory Value</span>
+                                        <i class="fa-solid fa-circle-question interactable" title="When enabled, displays the calculated total value of all items in the inventory header bar."></i>
+                                    </label>
+                                    <div style="display: flex; align-items: center; gap: 8px; padding-left: 4px;">
+                                        <label style="font-size: 0.82em; opacity: 0.75; white-space: nowrap;">Item Worth
+                                            <i class="fa-solid fa-circle-question interactable" title="Controls how item worth values (e.g. ~120 GP) are shown in Inventory. Hover: stripped from display, shown as a tooltip on hover. Display: shown as an inline coin badge next to the item. Bare currency items (e.g. '45 GP') always render as a coin badge regardless of this setting."></i>
+                                        </label>
+                                        <select id="rpg_tracker_inventory_worth_mode" class="text_pole" style="font-size: 0.82em; padding: 2px 4px; height: 24px; flex: 1;">
+                                            <option value="hover">Hover (tooltip only)</option>
+                                            <option value="display">Display (inline badge)</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="inline-drawer">
+                            <div class="inline-drawer-toggle inline-drawer-header" style="font-size: 0.88em;">
+                                <i class="fa-solid fa-user-circle" style="margin-right: 6px; opacity: 0.6;"></i>
+                                <b>Character Portraits</b>
+                                <div class="inline-drawer-icon fa-solid fa-circle-chevron-down"></div>
+                            </div>
+                            <div class="inline-drawer-content">
+                        <div id="rpg_portrait_config_block" class="flex-container flexFlowColumn gap-1">
                             <label class="checkbox_label">
                                 <input id="rpg_tracker_enable_portraits" type="checkbox" />
                                 <span>Enable Character Portraits</span>
@@ -36,7 +125,7 @@
                                     title="Show portrait thumbnails on Character, Party, and Combat cards. Per-chat: each campaign retains its own portraits. Drag &amp; drop an image onto any portrait box, or click to paste a URL."></i>
                             </label>
 
-                            <div style="margin-top: 6px; padding-left: 20px; margin-bottom: 6px; display: flex; align-items: center; gap: 8px;">
+                            <div style="display: flex; align-items: center; gap: 8px; padding-left: 4px;">
                                 <label style="font-size: 0.82em; opacity: 0.75; white-space: nowrap;">Generator Source
                                     <i class="fa-solid fa-circle-question interactable"
                                         title="SillyTavern Image Generation Extension uses whatever backend (local WebUI/ComfyUI, Horde, or cloud API) is configured in SillyTavern's native Image Generation settings panel. Ensure it is enabled and configured there first."></i>
@@ -47,35 +136,41 @@
                                 </select>
                             </div>
 
-                            <label class="checkbox_label" style="margin-top: 6px; padding-left: 20px;">
+                            <label class="checkbox_label" style="padding-left: 4px;">
                                 <input id="rpg_tracker_portrait_skip_prompt" type="checkbox" />
                                 <span>Skip Prompt Edit Dialog</span>
                                 <i class="fa-solid fa-circle-question interactable"
                                     title="When enabled, clicking 'AI Generate' will instantly generate and apply the portrait in the background without opening the confirmation/prompt editor dialog first."></i>
                             </label>
 
-                            <label class="checkbox_label" style="margin-top: 6px; padding-left: 20px;">
+                            <small style="display: block; padding-left: 4px; font-size: 0.78em; opacity: 0.6; margin-top: 2px;">Auto-generate for:</small>
+                            <label class="checkbox_label" style="padding-left: 4px;">
                                 <input id="rpg_tracker_portrait_auto_party" type="checkbox" />
-                                <span>Always Auto-Generate Party</span>
+                                <span>Party members</span>
                                 <i class="fa-solid fa-circle-question interactable"
                                     title="When enabled, portraits will be automatically generated in the background for new party members added to the PARTY block if they don't already have one."></i>
                             </label>
-
-                            <label class="checkbox_label" style="margin-top: 6px; padding-left: 20px;">
+                            <label class="checkbox_label" style="padding-left: 4px;">
                                 <input id="rpg_tracker_portrait_auto_enemies" type="checkbox" />
-                                <span>Always Auto-Generate Enemies</span>
+                                <span>Combat enemies</span>
                                 <i class="fa-solid fa-circle-question interactable"
                                     title="When enabled, portraits will be automatically generated in the background for new combatants in the COMBAT block if they are not in the party and don't already have one."></i>
                             </label>
-
-                            <label class="checkbox_label" style="margin-top: 6px; padding-left: 20px;">
+                            <label class="checkbox_label" style="padding-left: 4px;">
                                 <input id="rpg_tracker_portrait_auto_npcs" type="checkbox" />
-                                <span>Always Auto-Generate NPCs (Lorebook)</span>
+                                <span>Lorebook NPCs</span>
                                 <i class="fa-solid fa-circle-question interactable"
                                     title="When enabled, portraits will be automatically generated in the background for new NPCs created or updated in the lorebook if they don't already have one."></i>
                             </label>
 
-                            <div id="rpg_tracker_pollinations_group" style="margin-top: 4px; padding-left: 20px; margin-bottom: 6px;">
+                            <div class="inline-drawer" style="margin-top: 4px;">
+                                <div class="inline-drawer-toggle inline-drawer-header" style="font-size: 0.82em; padding: 3px 6px;">
+                                    <b>Advanced Portrait Setup</b>
+                                    <div class="inline-drawer-icon fa-solid fa-circle-chevron-down"></div>
+                                </div>
+                                <div class="inline-drawer-content" style="padding: 6px 4px 0 4px;">
+                                    <div class="flex-container flexFlowColumn gap-1">
+                            <div id="rpg_tracker_pollinations_group" style="margin-bottom: 6px;">
                                 <label style="font-size: 0.82em; opacity: 0.75; display: block; margin-bottom: 3px;">Pollinations API Key
                                     <i class="fa-solid fa-circle-question interactable"
                                         title="Why Pollinations? Pollinations.ai offers image generation models (like Flux and ZImage) via API keys linked to a GitHub account. It operates on a pay-as-you-go / quest system. It only requires a GitHub account to get a permanent API key."></i>
@@ -87,10 +182,10 @@
                             </div>
 
                             <!-- Portrait Prompt LLM Connection Settings -->
-                            <div class="inline-drawer" style="margin-top: 6px; margin-bottom: 2px; margin-left: 20px;">
+                            <div class="inline-drawer" style="margin-top: 6px; margin-bottom: 2px;">
                                 <div class="inline-drawer-toggle inline-drawer-header" style="font-size: 0.82em; padding: 3px 6px;">
                                     <b>Prompt LLM Connection</b>
-                                    <div class="inline-drawer-icon fa-solid fa-circle-down down" style="font-size: 0.8em;"></div>
+                                    <div class="inline-drawer-icon fa-solid fa-circle-chevron-down"></div>
                                 </div>
                                 <div class="inline-drawer-content" style="padding: 6px 4px 0 4px;">
                                     <div class="flex-container flexFlowColumn gap-1">
@@ -127,10 +222,10 @@
                             </div>
 
                             <!-- Portrait Prompt Templates -->
-                            <div class="inline-drawer" style="margin-top: 6px; margin-bottom: 2px; margin-left: 20px;">
+                            <div class="inline-drawer" style="margin-top: 6px; margin-bottom: 2px;">
                                 <div class="inline-drawer-toggle inline-drawer-header" style="font-size: 0.82em; padding: 3px 6px;">
                                     <b>Portrait Prompt Templates</b>
-                                    <div class="inline-drawer-icon fa-solid fa-circle-down down" style="font-size: 0.8em;"></div>
+                                    <div class="inline-drawer-icon fa-solid fa-circle-chevron-down"></div>
                                 </div>
                                 <div class="inline-drawer-content" style="padding: 6px 4px 0 4px;">
                                     <div class="flex-container flexFlowColumn gap-1">
@@ -169,128 +264,69 @@
                                     </div>
                                 </div>
                             </div>
+                                    </div>
+                                </div>
+                            </div>
 
                             <button id="rpg_tracker_purge_all_portraits" class="menu_button interactable" style="margin-top: 8px; width: 100%; background: rgba(200, 60, 60, 0.15); border-color: #c0392b;"
                                 title="Deletes every Multihog portrait file on disk and clears portrait data from the live state and all saved chat links. Use if settings.json became huge or portraits are broken. Does not touch memos or lorebooks.">
                                 <i class="fa-solid fa-trash-can"></i> Emergency: Purge All Portraits
                             </button>
                         </div>
+                            </div>
+                        </div>
 
-                        <div id="rpg_inventory_config_block" style="margin-top: 6px; border: 1px solid rgba(255,255,255,0.12); border-radius: 6px; padding: 8px 10px;">
-                            <small style="display: block; margin-bottom: 6px; font-weight: bold; opacity: 0.9;">Inventory Settings</small>
-                            
-                            <label class="checkbox_label">
-                                <input id="rpg_tracker_show_total_value" type="checkbox" />
-                                <span>Show Total Inventory Value</span>
-                                <i class="fa-solid fa-circle-question interactable" title="When enabled, displays the calculated total value of all items in the inventory header bar."></i>
-                            </label>
+                        <!-- ADVANCED -->
+                        <div class="inline-drawer" style="margin-top: 6px;">
+                            <div class="inline-drawer-toggle inline-drawer-header" style="font-size: 0.88em;">
+                                <i class="fa-solid fa-sliders" style="margin-right: 6px; opacity: 0.6;"></i>
+                                <b>Advanced &amp; Data</b>
+                                <div class="inline-drawer-icon fa-solid fa-circle-chevron-down"></div>
+                            </div>
+                            <div class="inline-drawer-content">
+                                <div id="rpg_combat_profile_config_block" class="flex-container flexFlowColumn gap-1">
+                                    <label class="checkbox_label">
+                                        <input id="rpg_tracker_combat_profile_auto_switch" type="checkbox" />
+                                        <span>Auto-Switch Main Profile During Combat</span>
+                                        <i class="fa-solid fa-circle-question interactable"
+                                            title="When [COMBAT] is active in the State Tracker, automatically switch SillyTavern's main Connection Profile to the one selected below. Restores your previous profile when combat ends ([COMBAT]END_COMBAT[/COMBAT] or block removed). Requires the Connection Manager extension."></i>
+                                    </label>
+                                    <div id="rpg_combat_profile_group" style="padding-left: 4px; display: none;">
+                                        <label style="font-size: 0.82em; opacity: 0.75; display: block; margin-bottom: 3px;">Combat Connection Profile</label>
+                                        <select id="rpg_combat_connection_profile" class="text_pole" style="font-size: 0.85em;"></select>
+                                        <label style="font-size: 0.82em; opacity: 0.75; display: block; margin-top: 6px; margin-bottom: 3px;">Combat Chat Completion Preset</label>
+                                        <select id="rpg_combat_completion_preset" class="text_pole" style="font-size: 0.85em;"></select>
+                                    </div>
+                                </div>
+                                <button id="rpg_tracker_clear_chat_states" class="menu_button interactable" style="margin-top: 8px; width: 100%;"><i class="fa-solid fa-trash-can"></i> Remove all chat links</button>
+                            </div>
+                        </div>
 
-                            <div style="margin-top: 6px; display: flex; align-items: center; gap: 8px; padding-left: 20px;">
-                                <label style="font-size: 0.82em; opacity: 0.75; white-space: nowrap;">Item Worth
-                                    <i class="fa-solid fa-circle-question interactable" title="Controls how item worth values (e.g. ~120 GP) are shown in Inventory. Hover: stripped from display, shown as a tooltip on hover. Display: shown as an inline coin badge next to the item. Bare currency items (e.g. '45 GP') always render as a coin badge regardless of this setting."></i>
+                        <!-- DEVELOPER -->
+                        <div class="inline-drawer" style="margin-top: 6px;">
+                            <div class="inline-drawer-toggle inline-drawer-header" style="font-size: 0.88em;">
+                                <i class="fa-solid fa-code" style="margin-right: 6px; opacity: 0.6;"></i>
+                                <b>Developer &amp; Reset</b>
+                                <div class="inline-drawer-icon fa-solid fa-circle-chevron-down"></div>
+                            </div>
+                            <div class="inline-drawer-content">
+                                <label class="checkbox_label">
+                                    <input id="rpg_tracker_debug" type="checkbox" />
+                                    <span>Debug Mode</span>
                                 </label>
-                                <select id="rpg_tracker_inventory_worth_mode" class="text_pole" style="font-size: 0.82em; padding: 2px 4px; height: 24px; flex: 1;">
-                                    <option value="hover">Hover (tooltip only)</option>
-                                    <option value="display">Display (inline badge)</option>
-                                </select>
+                                <label class="checkbox_label">
+                                    <input id="rpg_tracker_auto_reset_prompts" type="checkbox" />
+                                    <span>Auto-Update Prompts on Upgrade</span>
+                                    <i class="fa-solid fa-circle-question interactable" title="When enabled, all prompts will be automatically reset/updated to defaults when a new framework version is loaded, without prompting."></i>
+                                </label>
+                                <button id="rpg_tracker_btn_reset_and_apply_sysprompt" class="menu_button interactable"
+                                    style="width: 100%; margin-top: 6px; background: rgba(80, 140, 255, 0.18); border-color: #5588ff;"
+                                    title="Resets ALL prompts (Core, Stock Modules, Block Order) and writes the current system prompt template to Quick Prompt Main box.">
+                                    <i class="fa-solid fa-rotate"></i> Reset All &amp; Apply
+                                </button>
+                                <button id="rpg_tracker_btn_factory_reset" class="menu_button interactable" style="background: rgba(181, 31, 31, 0.4); border-color: #ff5555; width: 100%; margin-top: 6px;"><i class="fa-solid fa-radiation"></i> FACTORY RESET</button>
                             </div>
                         </div>
-
-                        <div id="rpg_combat_profile_config_block" style="margin-top: 6px; border: 1px solid rgba(255,255,255,0.12); border-radius: 6px; padding: 8px 10px;">
-                            <small style="display: block; margin-bottom: 6px; font-weight: bold; opacity: 0.9;">Combat Profile Auto-Switch</small>
-                            <label class="checkbox_label">
-                                <input id="rpg_tracker_combat_profile_auto_switch" type="checkbox" />
-                                <span>Auto-Switch Main Profile During Combat</span>
-                                <i class="fa-solid fa-circle-question interactable"
-                                    title="When [COMBAT] is active in the State Tracker, automatically switch SillyTavern's main Connection Profile to the one selected below. Restores your previous profile when combat ends ([COMBAT]END_COMBAT[/COMBAT] or block removed). Requires the Connection Manager extension."></i>
-                            </label>
-                            <div id="rpg_combat_profile_group" style="margin-top: 6px; padding-left: 20px; display: none;">
-                                <label style="font-size: 0.82em; opacity: 0.75; display: block; margin-bottom: 3px;">Combat Connection Profile</label>
-                                <select id="rpg_combat_connection_profile" class="text_pole" style="font-size: 0.85em;"></select>
-                                <label style="font-size: 0.82em; opacity: 0.75; display: block; margin-top: 6px; margin-bottom: 3px;">Combat Chat Completion Preset</label>
-                                <select id="rpg_combat_completion_preset" class="text_pole" style="font-size: 0.85em;"></select>
-                            </div>
-                        </div>
-
-                        <label class="checkbox_label">
-                            <input id="rpg_tracker_legacy_dice" type="checkbox" />
-                            <span>Legacy Dice Logic (Vanilla)</span>
-                        </label>
-
-                        <button id="rpg_tracker_clear_chat_states" class="menu_button interactable" style="margin-top: 5px; width: 100%;"><i class="fa-solid fa-trash-can"></i> Remove all chat links</button>
-
-                        <hr>
-                        <b>Panel Layout</b>
-                        <div class="rt-seg-toggle" id="rpg_tracker_layout_mode_seg" role="group" style="width: 100%;" title="Stacked shows every module at once, vertically. Tab Mode pins Character/Combat at the top and puts the rest behind a compact tab strip — better for small screens or mobile.">
-                            <button type="button" data-value="stack" style="flex: 1;">📚 Stacked</button>
-                            <button type="button" data-value="tabs" style="flex: 1;">🗂️ Tab Mode (Compact)</button>
-                        </div>
-
-                        <hr>
-                        <label class="checkbox_label">
-                            <input id="rpg_tracker_daynight_cycle" type="checkbox" />
-                            <span>Day/Night Cycle</span>
-                            <i class="fa-solid fa-circle-question interactable" title="Shifts the tracker panel colors and header sky badge to match the current in-world time from [TIME] (requires an HH:MM clock). Seven phases: late night, dawn, morning, midday, afternoon, sunset, and night. Purely decorative — no effect on prompts or memo."></i>
-                        </label>
-
-                        <hr>
-                        <b>Visual Theme</b>
-                        <select id="rpg_tracker_theme_select" class="text_pole">
-                            <option value="rt-theme-native">Match ST UI</option>
-                            <option value="rt-theme-hacker">Hacker</option>
-                            <option value="rt-theme-fantasy">Fantasy</option>
-                            <option value="rt-theme-hologram">Hologram</option>
-                            <option value="rt-theme-pacific">Pacific Cove</option>
-                            <option value="rt-theme-cherry">Cherry Blossom</option>
-                            <option value="rt-theme-custom">✨ Custom (AI Wizard)</option>
-                        </select>
-                        <div class="flex-container flexFlowColumn gap-1" style="margin-top: 5px;">
-                            <div class="flex-container alignitemscenter" style="width: 100%;">
-                                <span>Tracker Font Size</span>
-                                <span id="rpg_tracker_font_size_val" style="margin-left: auto; font-weight: bold; opacity: 0.8;">13px</span>
-                            </div>
-                            <input id="rpg_tracker_font_size" type="range" class="text_pole" style="width: 100%; cursor: pointer;" min="8" max="32" />
-                            <div class="flex-container alignitemscenter" style="width: 100%; margin-top: 4px;">
-                                <span>Agent Font Size</span>
-                                <span id="rpg_agent_font_size_val" style="margin-left: auto; font-weight: bold; opacity: 0.8;">13px</span>
-                            </div>
-                            <input id="rpg_agent_font_size" type="range" class="text_pole" style="width: 100%; cursor: pointer;" min="8" max="32" />
-                        </div>
-
-                        <div id="rpg_tracker_theme_wizard_block" style="display:none; border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; padding: 10px; background: rgba(255,255,255,0.03);">
-                            <b>🪄 AI Theme Wizard</b>
-                            <textarea id="rpg_tracker_theme_prompt" class="text_pole" rows="3" placeholder="Describe visual style..."></textarea>
-                            <div class="flex-container gap-1" style="margin-top: 6px;">
-                                <button id="rpg_tracker_theme_generate" class="menu_button interactable" style="flex: 1;">New</button>
-                                <button id="rpg_tracker_theme_iterate" class="menu_button interactable" style="flex: 1;">Iterate</button>
-                            </div>
-                            <div class="flex-container gap-1" style="margin-top: 4px;">
-                                <button id="rpg_tracker_theme_save" class="menu_button interactable" style="flex: 2; font-size: 11px;"><i class="fa-solid fa-bookmark"></i> Save to Library</button>
-                                <button id="rpg_tracker_theme_wizard_undo" class="menu_button interactable" style="flex: 1; font-size: 11px;"><i class="fa-solid fa-undo"></i> Undo</button>
-                            </div>
-                            <div id="rpg_tracker_theme_wizard_status" style="font-size: 10px; margin-top: 5px; opacity: 0.8; font-style: italic; min-height: 14px;"></div>
-                            <div id="rpg_tracker_saved_themes_container" style="display:none; margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px;">
-                                <b style="font-size: 0.85em; opacity: 0.8;">Library</b>
-                                <div id="rpg_tracker_saved_themes_list" class="flex-container flexFlowColumn gap-1"></div>
-                            </div>
-                        </div>
-
-                        <hr>
-                        <label class="checkbox_label">
-                            <input id="rpg_tracker_debug" type="checkbox" />
-                            <span>Debug Mode</span>
-                        </label>
-                        <label class="checkbox_label">
-                            <input id="rpg_tracker_auto_reset_prompts" type="checkbox" />
-                            <span>Auto-Update Prompts on Upgrade</span>
-                            <i class="fa-solid fa-circle-question interactable" title="When enabled, all prompts will be automatically reset/updated to defaults when a new framework version is loaded, without prompting."></i>
-                        </label>
-                        <button id="rpg_tracker_btn_reset_and_apply_sysprompt" class="menu_button interactable"
-                            style="width: 100%; margin-top: 6px; background: rgba(80, 140, 255, 0.18); border-color: #5588ff;"
-                            title="Resets ALL prompts (Core, Stock Modules, Block Order) and writes the current system prompt template to Quick Prompt Main box.">
-                            <i class="fa-solid fa-rotate"></i> Reset All &amp; Apply
-                        </button>
-                        <button id="rpg_tracker_btn_factory_reset" class="menu_button interactable" style="background: rgba(181, 31, 31, 0.4); border-color: #ff5555; width: 100%;"><i class="fa-solid fa-radiation"></i> FACTORY RESET</button>
                     </div>
                 </div>
             </div>
@@ -320,6 +356,14 @@
                             <details style="margin-top: 8px; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 6px; padding-left: 5px;">
                                 <summary style="font-size: 0.82em; font-weight: bold; opacity: 0.8; cursor: pointer; outline: none; user-select: none; padding-bottom: 2px;">⚙️ Advanced RNG Settings</summary>
                                 <div style="margin-top: 6px; display: flex; flex-direction: column; gap: 6px; cursor: default;">
+
+                                    <div style="margin-bottom: 4px; border-bottom: 1px dashed rgba(255,255,255,0.06); padding-bottom: 8px;">
+                                        <label class="checkbox_label">
+                                            <input id="rpg_tracker_legacy_dice" type="checkbox" />
+                                            <span>Legacy Dice Logic (Vanilla)</span>
+                                            <i class="fa-solid fa-circle-question interactable" title="Uses the vanilla SillyTavern RollTheDice tool with no DC commitment before the roll."></i>
+                                        </label>
+                                    </div>
                                     
                                     <div style="margin-bottom: 4px; border-bottom: 1px dashed rgba(255,255,255,0.06); padding-bottom: 8px;">
                                         <label class="checkbox_label" title="Uses d100 instead of d20 for all rolls. Swaps RollTheDice ➔ RollTheDiceD100 and generates RNG_QUEUE_d100 pre-seeded values in 1-100 range. Ideal for percentage-based systems.">
@@ -914,10 +958,6 @@
                 </div>
                 <div class="inline-drawer-content">
                     <div class="flex-container flexFlowColumn gap-1">
-                        <div style="font-size: 0.85em; border: 1px solid rgba(255, 160, 0, 0.4); border-radius: 6px; padding: 10px 12px; background: rgba(255, 160, 0, 0.08); color: #ffa000; margin-bottom: 8px; line-height: 1.45; font-weight: 500;">
-                            ✨ <b>New Feature:</b> World Progression is currently under active development. I am actively expanding and refining its features, and your feedback is highly appreciated!
-                        </div>
-
                         <div style="font-size: 0.8em; opacity: 0.65; line-height: 1.4; margin-bottom: 8px; border: 1px solid rgba(100,160,255,0.2); border-radius: 6px; padding: 8px 10px; background: rgba(100,160,255,0.04);">
                             World Progression automatically generates off-screen world simulation reports at a fixed in-world time interval.
                             Reports are written by a standalone LLM pass and stored in the <code style="font-size:0.9em;">{prefix}_World</code> lorebook.

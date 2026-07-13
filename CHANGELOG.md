@@ -2,6 +2,17 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [5.3.0] - 2026-07-13
+
+### Changed
+- **General & Visuals settings**: Reorganized into Core, Appearance, Module Display, Advanced & Data, and Developer & Reset sections; portrait advanced options collapsed by default.
+- **Legacy Dice Logic (Vanilla)**: Moved to Game Systems & Customization → Narrator Configuration → Advanced RNG Settings.
+- **System Prompt Control Room**: Custom Sysprompt Mode tucked into a collapsed advanced section at the top of the popup.
+
+### Fixed
+- **Custom Sysprompt Mode**: Saving in the Control Room no longer overwrites Quick Prompt Main when the mode is enabled.
+- **Edit with AI (stock modules)**: "Apply to Editor" now correctly applies the revised prompt instead of writing `undefined`.
+
 ## [5.2.2] - 2026-07-13
 
 ### Fixed

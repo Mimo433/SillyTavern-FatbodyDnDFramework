@@ -763,9 +763,9 @@ export function openPromptEditor(blockTag, title, currentText, defaultText, onSa
         const description = await promptForAiModuleEditDescription(`[${displayTag}]`);
         if (!description) return;
         try {
-            const parsed = await runAiEditStockModulePrompt(s, modKey, blockTag, displayTag, textEl.value, description);
-            if (!parsed) return;
-            textEl.value = parsed.prompt;
+            const revisedPrompt = await runAiEditStockModulePrompt(s, modKey, blockTag, displayTag, textEl.value, description);
+            if (!revisedPrompt) return;
+            textEl.value = revisedPrompt;
             toastr['success'](`[${displayTag}] prompt revised. Review and click Save Changes.`, 'AI Module Editor');
         } catch (err) {
             console.error('[RPG Tracker] AI Module Editor error:', err);

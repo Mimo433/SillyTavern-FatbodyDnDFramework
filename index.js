@@ -9485,7 +9485,8 @@ export async function fetchBaseSyspromptRaw(settingsOverride = null) {
 let _autoApplyTimer = null;
 export async function autoApplySysprompt(force = false) {
     const s = getSettings();
-    if (!force && (!s.enabled || s.customSysprompt)) return;
+    if (s.customSysprompt) return;
+    if (!force && !s.enabled) return;
 
     const content = await fetchBaseSyspromptRaw(s);
     if (!content) return;
