@@ -2063,6 +2063,10 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                             <span>🏕️ Benched Party (Tracks temporarily separated companions)</span>
                         </label>
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="checkbox" id="rt_onboarding_mod_cyoa_mode" />
+                            <span>🧭 CYOA Mode (Numbered action choices at end of outputs)</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                             <input type="checkbox" id="rt_onboarding_mod_npc_rel_bars" />
                             <span>💞 Relationship System (BETA)</span>
                         </label>

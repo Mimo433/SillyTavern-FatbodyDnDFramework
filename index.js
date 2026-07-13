@@ -663,10 +663,10 @@ function syncOnboardingUI() {
 
 
     // Optional Components Sync
-    const mods = { 'loot': '#rt_onboarding_mod_loot', 'random_events': '#rt_onboarding_mod_random_events', 'resting': '#rt_onboarding_mod_resting', 'party_bench': '#rt_onboarding_mod_party_bench' };
+    const mods = { 'loot': '#rt_onboarding_mod_loot', 'random_events': '#rt_onboarding_mod_random_events', 'resting': '#rt_onboarding_mod_resting', 'party_bench': '#rt_onboarding_mod_party_bench', 'CYOA_mode': '#rt_onboarding_mod_cyoa_mode' };
     for (const [key, id] of Object.entries(mods)) {
         const cb = /** @type {HTMLInputElement|null} */ (onboarding.querySelector(id));
-        if (cb) cb.checked = !!s.syspromptModules?.[key];
+        if (cb) cb.checked = key === 'CYOA_mode' ? s.syspromptModules?.CYOA_mode === true : !!s.syspromptModules?.[key];
     }
 
     // Custom Sysprompt Sync
@@ -2357,6 +2357,9 @@ async function showComponentsExplanation() {
                 ${card('🏕️', 'Benched Party',
         `Tracks party members who are temporarily away from you — hospitalized, scouting ahead, captured, sent on a side task, etc. — in a separate [BENCHED PARTY] roster while reunion remains plausible. The GM is told what this means so it won't narrate them back at your side until the story brings them back on-screen. Benched members become eligible for off-screen simulation updates via World Reports (🌍), allowing the simulator to advance their individual subplots in the background. Turn off if you don't want temporary separations tracked separately from your active party.`
     )}
+                ${card('🧭', 'CYOA Mode',
+        `Choose-your-own-adventure style: the narrator ends outputs with numbered courses of action and fitting emojis so you can pick what to do next.`
+    )}
                 ${card('💞', 'Relationship System',
         `Tracks friendship, affection, or general reputation deltas between the user and NPCs. Automatically calculates shifts from the chat tone/actions, and visualizes them using custom tracking bars.`
     )}
@@ -2996,6 +2999,7 @@ Gear:
     syncOptionalMod('#rt_onboarding_mod_random_events', 'random_events');
     syncOptionalMod('#rt_onboarding_mod_resting', 'resting');
     syncOptionalMod('#rt_onboarding_mod_party_bench', 'party_bench');
+    syncOptionalMod('#rt_onboarding_mod_cyoa_mode', 'CYOA_mode');
 
     // Onboarding Relationship System Sync
     const onboardingRelBarsCb = el.querySelector('#rt_onboarding_mod_npc_rel_bars');
@@ -11834,11 +11838,14 @@ RULES:
             { key: 'random_events', id: 'rpg_sysprompt_mod_random_events' },
             { key: 'resting', id: 'rpg_sysprompt_mod_resting' },
             { key: 'party_bench', id: 'rpg_sysprompt_mod_party_bench' },
+            { key: 'CYOA_mode', id: 'rpg_sysprompt_mod_cyoa_mode' },
             { key: 'quests', id: 'rpg_sysprompt_mod_quests' },
         ];
         _syspromptModDefs.forEach(({ key, id }) => {
             const s = getSettings();
-            const val = s.syspromptModules?.[key] ?? true;
+            const val = key === 'CYOA_mode'
+                ? (s.syspromptModules?.CYOA_mode === true)
+                : (s.syspromptModules?.[key] ?? true);
             $(`#${id}`).prop('checked', val).on('change', function () {
                 const fresh = getSettings();
                 if (!fresh.syspromptModules) fresh.syspromptModules = {};

@@ -722,6 +722,7 @@ You may be asked to use Markers: ((PLS)), ((B)), ((XB)), ((BDG)), ((HGT)). These
             questsFrustration: false,
             questsDifficulty: false,
             questsShowArchive: true,
+            CYOA_mode: false,
         },
         routerEnabled: true,
         routerLog: [],

@@ -1000,10 +1000,10 @@ export function syncSettingsAndUI(updateFn) {
     const showArchiveCb = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_quests_show_archive'));
     if (showArchiveCb) showArchiveCb.checked = fresh.syspromptModules?.questsShowArchive !== false;
 
-    const mods = { 'loot': '#rpg_sysprompt_mod_loot', 'random_events': '#rpg_sysprompt_mod_random_events', 'resting': '#rpg_sysprompt_mod_resting', 'party_bench': '#rpg_sysprompt_mod_party_bench' };
+    const mods = { 'loot': '#rpg_sysprompt_mod_loot', 'random_events': '#rpg_sysprompt_mod_random_events', 'resting': '#rpg_sysprompt_mod_resting', 'party_bench': '#rpg_sysprompt_mod_party_bench', 'CYOA_mode': '#rpg_sysprompt_mod_cyoa_mode' };
     for (const [key, id] of Object.entries(mods)) {
         const cb = /** @type {HTMLInputElement|null} */ (document.getElementById(id.replace('#', '')));
-        if (cb) cb.checked = !!fresh.syspromptModules?.[key];
+        if (cb) cb.checked = key === 'CYOA_mode' ? fresh.syspromptModules?.CYOA_mode === true : !!fresh.syspromptModules?.[key];
     }
 
     const relBarsCb = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_tracker_npc_rel_bars'));

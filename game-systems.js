@@ -206,7 +206,7 @@ export function isBlankSectionContent(content) {
 }
 
 /** Narrator Configuration tags whose enabled-state doubles as a base sysprompt toggle. */
-const KNOWN_TOGGLE_DEFAULTS = { loot: true, random_events: true, resting: true, party_bench: true, quests: true };
+const KNOWN_TOGGLE_DEFAULTS = { loot: true, random_events: true, resting: true, party_bench: true, quests: true, CYOA_mode: false };
 
 /** Checkbox ids from the Narrator Configuration panel, keyed by base sysprompt tag. */
 const NARRATOR_TOGGLE_IDS = {
@@ -215,6 +215,7 @@ const NARRATOR_TOGGLE_IDS = {
     resting: 'rpg_sysprompt_mod_resting',
     party_bench: 'rpg_sysprompt_mod_party_bench',
     quests: 'rpg_sysprompt_mod_quests',
+    CYOA_mode: 'rpg_sysprompt_mod_cyoa_mode',
     relationship_tracking: 'rpg_sysprompt_mod_npc_rel_bars',
 };
 
@@ -226,6 +227,7 @@ export function isSectionUnlocked(settings, tag) {
 export function isBaseSectionEnabled(tag, settings) {
     if (tag === 'relationship_tracking') return !!settings.npcRelationshipBars;
     const mods = settings.syspromptModules || {};
+    if (tag === 'CYOA_mode') return mods.CYOA_mode === true;
     return mods[tag] !== false;
 }
 
@@ -388,7 +390,38 @@ export function normalizeSectionOrder(settings, baseSections) {
         return false;
     });
 
-    baseKeys.forEach(key => { if (!order.includes(key)) order.push(key); });
+    baseKeys.forEach(key => {
+        if (order.includes(key)) return;
+        const fileIdx = baseKeys.indexOf(key);
+        let insertAt = order.length;
+        for (let i = fileIdx - 1; i >= 0; i--) {
+            const earlierPos = order.indexOf(baseKeys[i]);
+            if (earlierPos !== -1) {
+                insertAt = earlierPos + 1;
+                break;
+            }
+        }
+        if (insertAt === order.length) {
+            for (let i = fileIdx + 1; i < baseKeys.length; i++) {
+                const laterPos = order.indexOf(baseKeys[i]);
+                if (laterPos !== -1) {
+                    insertAt = laterPos;
+                    break;
+                }
+            }
+        }
+        order.splice(insertAt, 0, key);
+    });
+
+    // Keep CYOA_mode directly above constraints when reconciling saved order.
+    const cyoaKey = 'base:CYOA_mode';
+    const constraintsKey = 'base:constraints';
+    const cyoaIdx = order.indexOf(cyoaKey);
+    const constraintsIdxForCyoa = order.indexOf(constraintsKey);
+    if (cyoaIdx !== -1 && constraintsIdxForCyoa !== -1 && cyoaIdx > constraintsIdxForCyoa) {
+        order.splice(cyoaIdx, 1);
+        order.splice(constraintsIdxForCyoa, 0, cyoaKey);
+    }
 
     const newLibKeys = [...orderableLibKeys].filter(key => !order.includes(key));
     if (newLibKeys.length) {

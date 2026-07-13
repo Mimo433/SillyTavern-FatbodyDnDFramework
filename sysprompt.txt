@@ -298,6 +298,10 @@ EXAMPLE — end of a response where {{user}} complimented Elena:
 - ## TRACKER STATE 0 (Current) is passed on every turn; its mechanical data is absolute law.
 </state_memo>
 
+<CYOA_mode>
+Choose your own adventure mode is enabled; suggest numbered courses of action at the end of outputs. Use fitting emojis.
+</CYOA_mode>
+
 <constraints>
 <resolution_constraints>
 - NEVER skip or reinterpret a roll result.
