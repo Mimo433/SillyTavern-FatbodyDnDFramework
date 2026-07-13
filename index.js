@@ -487,7 +487,6 @@ export function syncTimeFormatSettingsUi(s) {
     if (timeDdMmyyCb) timeDdMmyyCb.checked = !!s.useDdMmYyFormat;
     const time24hCb = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_time_24h_toggle'));
     if (time24hCb) time24hCb.checked = !!s.use24hTime;
-    $('#rpg_sysprompt_mod_time_ddmmyy').prop('checked', !!s.useDdMmYyFormat);
     syncOnboardingUI();
     if (typeof updateWorldProgressionLastFiredDisplayRef === 'function') {
         updateWorldProgressionLastFiredDisplayRef();
@@ -9727,7 +9726,6 @@ async function runPortraitMigrationIfNeeded() {
                         syncNpcPortraitDependentUi(sTempTracker);
                         $('#rpg_tracker_npc_rel_bars').prop('checked', !!sTempTracker.npcRelationshipBars);
                         $('#rpg_sysprompt_mod_npc_rel_bars').prop('checked', !!sTempTracker.npcRelationshipBars);
-                        $('#rpg_sysprompt_mod_time_ddmmyy').prop('checked', !!sTempTracker.useDdMmYyFormat);
                         $('#rpg_tracker_npc_card_import').prop('checked', !!sTempTracker.experimentalNpcImport);
                         $('#rpg_tracker_ignore_npc_limits').prop('checked', !!sTempTracker.ignoreNpcImportLimits);
                         if (typeof refreshOrderList === 'function') refreshOrderList();
@@ -9923,7 +9921,6 @@ async function runPortraitMigrationIfNeeded() {
                                     syncNpcPortraitDependentUi(sTempTracker);
                                     $('#rpg_tracker_npc_rel_bars').prop('checked', !!sTempTracker.npcRelationshipBars);
                                     $('#rpg_sysprompt_mod_npc_rel_bars').prop('checked', !!sTempTracker.npcRelationshipBars);
-                                    $('#rpg_sysprompt_mod_time_ddmmyy').prop('checked', !!sTempTracker.useDdMmYyFormat);
                                     $('#rpg_tracker_npc_card_import').prop('checked', !!sTempTracker.experimentalNpcImport);
                                     $('#rpg_tracker_ignore_npc_limits').prop('checked', !!sTempTracker.ignoreNpcImportLimits);
                                     if (typeof refreshOrderList === 'function') refreshOrderList();
@@ -12448,9 +12445,6 @@ RULES:
         $('#rpg_sysprompt_mod_npc_rel_bars').prop('checked', !!settings.npcRelationshipBars).on('change', function () {
             handleRelBarsChange($(this).prop('checked'));
         });
-        $('#rpg_sysprompt_mod_time_ddmmyy').prop('checked', !!settings.useDdMmYyFormat).on('change', function () {
-            setUseDdMmYyFormat(!!$(this).prop('checked'));
-        });
         $('#rpg_tracker_npc_rel_toast').prop('checked', settings.npcRelationshipToast !== false).on('change', function () {
             settings.npcRelationshipToast = $(this).prop('checked');
             saveSettings();
@@ -13435,7 +13429,6 @@ RULES:
             $('#rpg_tracker_npc_portraits').prop('checked', s.npcPortraits !== false);
             $('#rpg_tracker_npc_rel_bars').prop('checked', !!s.npcRelationshipBars);
             $('#rpg_sysprompt_mod_npc_rel_bars').prop('checked', !!s.npcRelationshipBars);
-            $('#rpg_sysprompt_mod_time_ddmmyy').prop('checked', !!s.useDdMmYyFormat);
             $('#rpg_tracker_npc_card_import').prop('checked', !!s.experimentalNpcImport);
             $('#rpg_tracker_ignore_npc_limits').prop('checked', !!s.ignoreNpcImportLimits);
 
