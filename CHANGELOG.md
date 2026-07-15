@@ -2,6 +2,14 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [5.4.3] - 2026-07-15
+
+### Changed
+- **Quest prompts**: Removed emergent-quest auto-tracking from `<quests>`; acceptance now requires {{user}} to clearly take on a task. GM sysprompt assigns `FRUSTRATION_COEFF` and uses engine `MOOD` for questgiver behavior; tracker sets coeff on creation and never outputs `MOOD`.
+
+### Fixed
+- **Frustration without deadlines**: MOOD/frustration math no longer runs on quests without a valid deadline; bogus or AI-written `MOOD` lines are stripped when the tracker rewrites `[QUESTS]`.
+
 ## [5.4.1] - 2026-07-15
 
 ### Changed

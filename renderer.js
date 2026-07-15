@@ -1,6 +1,6 @@
 import { getSettings, getBarBackground, getBarShowAsPercentage } from './state-manager.js';
 import { resolvePortraitDisplaySrc } from './portrait-storage.js';
-import { escapeHtml, highlightParens, highlightNumbers, parseInWorldTime, isRestTimeUnset, formatTimeDiff, isArchivedQuestStatus } from './memo-processor.js';
+import { escapeHtml, highlightParens, highlightNumbers, parseInWorldTime, isRestTimeUnset, formatTimeDiff, isArchivedQuestStatus, questHasEffectiveDeadline } from './memo-processor.js';
 import { BLOCK_ICONS, BLOCK_ORDER, PAGE_SIZE, NO_PAGINATE } from './constants.js';
 
 // ── Renderer module: pure HTML string producers, localStorage helpers ──
@@ -2516,12 +2516,14 @@ export function renderQuestLog(quests, currentTime, collapsed, detached, filterT
     const renderQuestCard = (quest, opts = {}) => {
         const dismissible = !!opts.dismissible;
 
-        const { getQuestMood } = /** @type {any} */ (globalThis.__rpgQuestUtils || {});
-        const moodData = typeof getQuestMood === 'function' 
-            ? getQuestMood(quest, currentTime, showFrustration) 
-            : { label: 'Active', color: '#00cc77', value: 0 };
+        const hasDeadline = questHasEffectiveDeadline(quest);
 
-        const frust = moodData.value;
+        const { getQuestMood } = /** @type {any} */ (globalThis.__rpgQuestUtils || {});
+        const moodData = hasDeadline && typeof getQuestMood === 'function'
+            ? getQuestMood(quest, currentTime, showFrustration)
+            : { label: '', color: '#00cc77', value: null };
+
+        const frust = moodData.value ?? 0;
         const label = moodData.label;
         const barColor = moodData.color;
 
@@ -2532,17 +2534,17 @@ export function renderQuestLog(quests, currentTime, collapsed, detached, filterT
         const scale        = 100 / 3; // -1→0%, 0→33%, 1→67%, 2→100%
         const fillPct      = Math.round((displayFrust + 1) * scale);
 
-        const barTitle = showFrustration 
+        const barTitle = showFrustration && moodData.label
             ? `NPC Mood: ${label} (${frust >= 0 ? '+' : ''}${frust.toFixed(2)})`
-            : `Time Progress: ${label}`;
+            : (hasDeadline ? `Time Progress: ${label}` : '');
 
         // Tick mark at the neutral position (33%) and deadline position (67%)
-        const moodBarHtml = `
+        const moodBarHtml = hasDeadline ? `
             <div class="rt-quest-mood-bar-wrap" title="${escapeHtml(barTitle)}">
                 <div class="rt-quest-mood-bar" style="width:${fillPct}%; background:${barColor};"></div>
                 <div class="rt-quest-mood-tick rt-quest-mood-tick-neutral"></div>
                 <div class="rt-quest-mood-tick rt-quest-mood-tick-deadline"></div>
-            </div>`;
+            </div>` : '';
 
         let statusBadgeClass = 'rt-quest-badge-active';
         let statusLabel = 'Active';
@@ -2597,7 +2599,7 @@ export function renderQuestLog(quests, currentTime, collapsed, detached, filterT
                 </div>`;
         }
 
-        const deadlineRow = (quest.deadline_time && showDeadlines) ? `
+        const deadlineRow = (hasDeadline && showDeadlines) ? `
             <div class="rt-quest-deadline" style="${acceptedRow ? 'border-top: none; margin-top: 0;' : ''}">
                 <div class="rt-quest-deadline-header">
                     <span class="rt-entity-sub-label">Deadline:</span> ${escapeHtml(quest.deadline_time)}${timeLeftHtml}

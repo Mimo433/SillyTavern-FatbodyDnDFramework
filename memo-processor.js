@@ -22,24 +22,20 @@ import { DEFAULT_STOCK_PROMPTS, resolveTimePromptKey } from './constants.js';
  * @returns {number}
  */
 function computeFrustrationLocal(quest, currentTime) {
-    if (quest.status !== 'active' && quest.status !== 'past deadline') return 0;
+    if (quest.status !== 'active' && quest.status !== 'past deadline') return null;
+    if (!questHasEffectiveDeadline(quest)) return null;
+
     const accepted = parseInWorldTime(quest.accepted_time);
     const current  = parseInWorldTime(currentTime);
-    if (!accepted || !current) return 0;
+    if (!accepted || !current) return null;
 
     const elapsed = current - accepted;
     if (elapsed <= 0) return -1; // Just accepted — NPC is optimistic
 
     const coeff = Math.max(0.1, quest.frustration_coefficient ?? 1.0);
-
-    if (!quest.deadline_time || String(quest.deadline_time).toLowerCase() === 'none') {
-        // No deadline: NPC remains neutral regardless of time elapsed
-        return 0;
-    }
-
     const deadline = parseInWorldTime(quest.deadline_time);
     const window   = deadline - accepted;
-    if (window <= 0) return 1;
+    if (window <= 0) return null;
 
     const ratio = elapsed / window;
     
@@ -61,6 +57,9 @@ function computeFrustrationLocal(quest, currentTime) {
  */
 export function getQuestMood(quest, currentTime, showFrustration) {
     const frust = computeFrustrationLocal(quest, currentTime);
+    if (frust == null) {
+        return { label: '', color: '#aaaaaa', value: null };
+    }
     let color = '#00cc77';
     let label = 'Pleased';
     if (showFrustration) {
@@ -196,6 +195,31 @@ export function parseInWorldTime(str) {
     
     if (!ddmmyyMatch && !dayMatch && !timeMatch) return null;
     return (d - 1) * 1440 + h * 60 + m;
+}
+
+const NO_DEADLINE_SENTINELS = new Set([
+    'none', 'n/a', 'na', 'no deadline', 'no time limit', '-', '—', 'null', 'unlimited', 'tbd', 'unknown',
+]);
+
+/**
+ * Whether a quest has a real, parseable deadline that can drive frustration math.
+ * @param {object} quest
+ * @returns {boolean}
+ */
+export function questHasEffectiveDeadline(quest) {
+    const raw = quest?.deadline_time;
+    if (raw == null) return false;
+    const t = String(raw).trim();
+    if (!t) return false;
+    if (NO_DEADLINE_SENTINELS.has(t.toLowerCase())) return false;
+
+    const deadline = parseInWorldTime(t);
+    if (deadline == null) return false;
+
+    const accepted = parseInWorldTime(quest.accepted_time);
+    if (accepted != null && deadline <= accepted) return false;
+
+    return true;
 }
 
 /**
@@ -1058,13 +1082,15 @@ export function serializeQuestsToText(quests) {
         if (q.frustration_coefficient != null)
                                       lines.push(`  FRUSTRATION_COEFF: ${q.frustration_coefficient}`);
 
-        // Inject human-readable mood for the AI narrator
+        // Inject human-readable mood for the AI narrator (deadline quests only)
         if (q.status === 'active' || q.status === 'past deadline') {
             const settings = getSettings();
             const showFrustration = !!settings.syspromptModules?.questsFrustration;
-            const currentTime = settings.currentMemo?.match(/\[TIME\]([\s\S]*?)\[\/TIME\]/i)?.[1]?.trim() || "";
-            const { label } = getQuestMood(q, currentTime, showFrustration);
-            lines.push(`  MOOD: ${label}`);
+            if (showFrustration && questHasEffectiveDeadline(q)) {
+                const currentTime = settings.currentMemo?.match(/\[TIME\]([\s\S]*?)\[\/TIME\]/i)?.[1]?.trim() || "";
+                const { label } = getQuestMood(q, currentTime, showFrustration);
+                if (label) lines.push(`  MOOD: ${label}`);
+            }
         }
         for (const obj of (q.objectives || [])) {
             let tag = 'OBJ_ACTIVE';
@@ -1180,7 +1206,13 @@ export function syncQuestsFromMemo(memoText) {
  */
 export function applyQuestSyncAndStripMemo(memoText) {
     syncQuestsFromMemo(memoText);
-    return stripArchivedQuestsFromMemo(memoText);
+    let memo = stripArchivedQuestsFromMemo(memoText);
+    const match = memo.match(/\[QUESTS\]([\s\S]*?)\[\/QUESTS\]/i);
+    if (match?.[1]?.trim().startsWith('QUEST:')) {
+        const rewritten = writeQuestsToMemo(getSettings().quests || [], memo);
+        if (typeof rewritten === 'string') memo = rewritten;
+    }
+    return memo;
 }
 
 /**
@@ -1491,7 +1523,10 @@ export function buildModulesInstructionText(settings) {
                         .replace(/Day N/g, 'DD/MM/YYYY');
                 }
                 if (!isDeadlines) p = p.replace(/\n\s*DEADLINE:.*?\n/g, '\n');
-                if (!isFrustration) p = p.replace(/\n\s*FRUSTRATION_COEFF:.*?\n/g, '\n');
+                if (!isFrustration) {
+                    p = p.replace(/\n\s*FRUSTRATION_COEFF:.*?\n/g, '\n');
+                    p = p.replace(/\n- On quest creation, set FRUSTRATION_COEFF.*\n/g, '\n');
+                }
                 if (!isDifficulty) {
                     p = p.replace(/\n\s*DIFFICULTY:.*?\n/g, '\n');
                     p = p.replace(/\n- For difficulty, use the DIFFICULTY marker.*\n/g, '\n');

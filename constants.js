@@ -149,7 +149,7 @@ Current Time: HH:MM AM/PM, Day N
 
 'Last Rest' is ONLY triggered on Long Rest, NOT Short Rest (when Hit Dice, etc, are spent.) If the [TIME] delta between PREVIOUS STATE MEMO and your current update is only an hour, it is a Short Rest.`,
   xp: "Character Level and Experience Points (XP). Format as `Level: X | XP: current/max`. You MUST output this field whenever the narrative mentions gaining experience or leveling up.",
-  quests: `Track quests using the [QUESTS] block. Maintain the complete list of all quests at all times — active, completed, and failed. Only add a quest if [QUEST ACCEPTED] is outputted in the narrative. NEVER ADD A QUEST UNLESS YOU SEE [QUEST ACCEPTED]. A quest simply being listed does not mean it is accepted.
+  quests: `Track quests using the [QUESTS] block. Maintain the complete list of all quests at all times — active, completed, and failed. Only add a quest if {{user}} clearly takes on a task, even self-imposed. A quest/task simply being listed or offered does not mean it is accepted.
 
 Format each quest exactly as shown:
 
@@ -163,7 +163,6 @@ QUEST: The Missing Sheep
   REWARD: 100 GP
   REWARD: Hemwick's family heirloom
   FRUSTRATION_COEFF: 1.2
-  MOOD: Pleased
   OBJ_ACTIVE: Find the missing sheep
   OBJ_ACTIVE: Collect 6 Phosphor-Cap mushrooms [4/6]
   OBJ_TOTAL: 6
@@ -174,7 +173,8 @@ QUEST: The Missing Sheep
 - For collection/count objectives, append [current/total] after the text (e.g. [4/6]) and add an OBJ_TOTAL line with the total. Update the count each turn as progress is made.
 - For rewards, use the REWARD marker (e.g. REWARD: 50 Gold). List multiple rewards on separate lines.
 - For difficulty, use the DIFFICULTY marker (Very Easy, Easy, Medium, Hard, Very Hard).
-- The MOOD field is calculated by the engine based on time pressure and the frustration coefficient. Use this to guide how the NPC speaks and acts.
+- On quest creation, set FRUSTRATION_COEFF from the quest giver's personality: 0.4 = very patient, 1.0 = normal, 3.0 = volatile. Do not change it on later turns unless the narrative establishes a permanent temperament shift.
+- Do not output the MOOD field — the engine calculates and injects it automatically.
 - When a quest completes or fails, set STATUS to completed or failed on that quest — keep the full quest entry in [QUESTS]; do not delete or omit it from your output.
 - Never delete old quests. Keep completed/failed ones with updated STATUS.`,
   time_24h: `Current time and day grabbed from the status footer. Also track time of the last rest (only on Long Rest, e.g. 'Last Rest: 22:00, Day 0'). Use this to track out-of-combat buff durations by comparing to the PRIOR MEMO's time.
@@ -226,11 +226,13 @@ export function getResolvedTimePrompt(settings) {
 }
 
 
-export const QUESTS_NARRATOR = `When the player formally accepts a quest from an NPC, describe it clearly in the narrative and conclude with the tag [QUEST ACCEPTED]. State who gave the quest, where they are located, what the task entails, how many objectives there are (there should always be multiple — they should be obtainable immediate objectives and not long term goals), the difficulty (Very Easy to Very Hard), any time pressure, and what rewards were promised. Do NOT do this for rumors, casual requests, or tasks the player has not yet agreed to.
+export const QUESTS_NARRATOR = `When the player unambiguously accepts a quest from an NPC, describe it clearly in the narrative and conclude with the tag [QUEST ACCEPTED]. State who gave the quest, where they are located, what the task entails, how many objectives there are, the difficulty (Very Easy to Very Hard), any time pressure, and what rewards were promised. Do NOT do this for something the {{user}} has not yet agreed to.
 
 When an objective is completed, mention it naturally in the narrative. When a quest concludes (success or failure), narrate the outcome.
 
-EMERGENT QUESTS: When the player pursues a clear, sustained goal through action (investigating a mystery, hunting a target, exploring a location, helping a stranger, etc.), treat it as an emergent quest. Add it to the quest tracker with Source: "Player action/investigation", Objective: What the player is clearly pursuing, Difficulty: Estimate based on context, Reward: ??? (usually unknown). Player action IS acceptance. Do not forget to always narrate objective completion and quest completion.`;
+When a new quest is accepted, assign FRUSTRATION_COEFF based on the quest giver's personality: 0.4 = very patient, 1.0 = normal, 3.0 = volatile.
+
+The MOOD field on each active quest with a deadline in the STATE MEMO is calculated by the engine from time pressure and FRUSTRATION_COEFF. Use it to guide how the questgiver NPC speaks and acts.`;
 
 // ── Embedded sysprompts — mobile/Termux fallback (fetch preferred, this is the safety net) ──
 
@@ -385,11 +387,9 @@ Level 10 — 64,000 XP
 </xp_system>
 
 <quests>
-When the player formally accepts a quest from an NPC, describe it clearly in the narrative and conclude with the tag [QUEST ACCEPTED]. State who gave the quest, where they are located, what the task entails, how many objectives there are (there should always be multiple — they should be obtainable immediate objectives and not long term goals), the difficulty (Very Easy to Very Hard), any time pressure, and what rewards were promised. Do NOT do this for rumors, casual requests, or tasks the player has not yet agreed to.
+When the player unambiguously accepts a quest from an NPC, describe it clearly in the narrative and conclude with the tag [QUEST ACCEPTED]. State who gave the quest, where they are located, what the task entails, how many objectives there are, the difficulty (Very Easy to Very Hard), any time pressure, and what rewards were promised. Do NOT do this for something the {{user}} has not yet agreed to.
 
 When an objective is completed, mention it naturally in the narrative. When a quest concludes (success or failure), narrate the outcome.
-
-EMERGENT QUESTS: When the player pursues a clear, sustained goal through action (investigating a mystery, hunting a target, exploring a location, helping a stranger, etc.), treat it as an emergent quest. Add it to the quest tracker with Source: "Player action/investigation", Objective: What the player is clearly pursuing, Difficulty: Estimate based on context, Reward: ??? (usually unknown). Player action IS acceptance. Do not forget to always narrate objective completion and quest completion.
 </quests>
 
 <level_up_protocol>
@@ -719,16 +719,9 @@ Level 10 — 64,000 XP
 </xp_system>
 
 <quests>
-When the player formally accepts a quest from an NPC, describe it clearly in the narrative and conclude with the tag [QUEST ACCEPTED]. State who gave the quest, where they are located, what the task entails, how many objectives there are (there should always be multiple — they should be obtainable immediate objectives and not long term goals), the difficulty (Very Easy to Very Hard), any time pressure, and what rewards were promised. Do NOT do this for rumors, casual requests, or tasks the player has not yet agreed to.
+When the player unambiguously accepts a quest from an NPC, describe it clearly in the narrative and conclude with the tag [QUEST ACCEPTED]. State who gave the quest, where they are located, what the task entails, how many objectives there are, the difficulty (Very Easy to Very Hard), any time pressure, and what rewards were promised. Do NOT do this for something the {{user}} has not yet agreed to.
 
 When an objective is completed, mention it naturally in the narrative. When a quest concludes (success or failure), narrate the outcome.
-
-Same goes for non-formal quests, aka natural or emergent quests. EMERGENT QUESTS: When the player pursues a clear, sustained goal through action (investigating a mystery, hunting a target, exploring a location, helping a stranger, etc.), treat it as an emergent quest. Add it to the quest tracker with:
-- Source: "Player action/investigation"
-- Objective: What {{user}} is clearly pursuing
-- Difficulty: Estimate based on context
-- Reward: ??? (usually unknown until completed, unless specified)
-Do NOT wait for NPC formal acceptance for these. Player action IS acceptance. Do not forget to always narrate objective completion and quest completion.
 </quests>
 
 <level_up_protocol>

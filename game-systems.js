@@ -300,7 +300,7 @@ export function transformBaseSectionContent(tag, innerContent, settings) {
     if (tag === 'quests') {
         let instruction = QUESTS_NARRATOR;
         if (!mods.questsFrustration) {
-            instruction = instruction.replace(/Use the MOOD field.*?\./g, '');
+            instruction = instruction.replace(/\n\nWhen a new quest is accepted, assign FRUSTRATION_COEFF[\s\S]*?questgiver NPC speaks and acts\./g, '');
         }
         if (!mods.questsDifficulty) {
             instruction = instruction.replace(/the difficulty \(Very Easy to Very Hard\), /g, '');
@@ -311,14 +311,6 @@ export function transformBaseSectionContent(tag, innerContent, settings) {
             result = result.replace(/- Assign an in-world Deadline.*\n/g, '');
             result = result.replace(/- Set auto_fail to true for quests.*\n/g, '');
             result = result.replace(/- If a duration is given.* Day N.*\n/g, '');
-        }
-        if (!mods.questsFrustration) {
-            result = result.replace(/- Set a frustration_coefficient.*\n/g, '');
-            result = result.replace(/ {2}· 0\.4 = Very patient.*\n/g, '');
-            result = result.replace(/ {2}· 1\.0 = Normal.*\n/g, '');
-            result = result.replace(/ {2}· 3\.0 = Volatile.*\n/g, '');
-            result = result.replace(/- The NPC Mood evolves continuously.*\n/g, '');
-            result = result.replace(/- If a quest is time-sensitive and the deadline passes.*\n/g, '');
         }
         return result;
     }

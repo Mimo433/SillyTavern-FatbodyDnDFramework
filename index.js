@@ -1006,24 +1006,14 @@ async function cloneCampaignStack() {
 
 export function refreshQuestPrompt(s) {
     let prompt = DEFAULT_STOCK_PROMPTS.quests;
-    if (!s.syspromptModules?.questsDeadlines && !s.syspromptModules?.questsFrustration) {
+    if (!s.syspromptModules?.questsDeadlines) {
         prompt = prompt.replace(/  DEADLINE:.*\n/g, '');
-        prompt = prompt.replace(/  FRUSTRATION_COEFF:.*\n/g, '');
-        prompt = prompt.replace(/  MOOD:.*\n/g, '');
+        prompt = prompt.replace(/- DEADLINE.*\n/g, '');
         prompt = prompt.replace(/- DEADLINE \/ FRUSTRATION_COEFF:.*\n/g, '');
-        prompt = prompt.replace(/- FRUSTRATION_COEFF:.*\n/g, '');
-        prompt = prompt.replace(/- The MOOD field.*\n/g, '');
-    } else {
-        if (!s.syspromptModules?.questsDeadlines) {
-            prompt = prompt.replace(/  DEADLINE:.*\n/g, '');
-            prompt = prompt.replace(/- DEADLINE.*\n/g, '');
-        }
-        if (!s.syspromptModules?.questsFrustration) {
-            prompt = prompt.replace(/  FRUSTRATION_COEFF:.*\n/g, '');
-            prompt = prompt.replace(/- FRUSTRATION_COEFF:.*\n/g, '');
-            prompt = prompt.replace(/  MOOD:.*\n/g, '');
-            prompt = prompt.replace(/- The MOOD field.*\n/g, '');
-        }
+    }
+    if (!s.syspromptModules?.questsFrustration) {
+        prompt = prompt.replace(/  FRUSTRATION_COEFF:.*\n/g, '');
+        prompt = prompt.replace(/- On quest creation, set FRUSTRATION_COEFF.*\n/g, '');
     }
     if (!s.syspromptModules?.questsDifficulty) {
         prompt = prompt.replace(/  DIFFICULTY:.*\n/g, '');

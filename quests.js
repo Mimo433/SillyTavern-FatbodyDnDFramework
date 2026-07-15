@@ -4,7 +4,7 @@
  */
 
 import { getSettings } from './state-manager.js';
-import { parseQuestsFromMemo, writeQuestsToMemo, parseInWorldTime, isArchivedQuestStatus } from './memo-processor.js';
+import { parseQuestsFromMemo, writeQuestsToMemo, parseInWorldTime, isArchivedQuestStatus, questHasEffectiveDeadline } from './memo-processor.js';
 
 /**
  * Unregisters the deprecated LogQuest tool if it was left registered from a prior version.
@@ -37,24 +37,20 @@ export function unregisterLogQuestTool() {
  * @returns {number} Mood value from -1 (pleased) upward (unbounded)
  */
 export function computeFrustration(quest, currentTime) {
-    if (quest.status !== 'active' && quest.status !== 'past deadline') return 0;
+    if (quest.status !== 'active' && quest.status !== 'past deadline') return null;
+    if (!questHasEffectiveDeadline(quest)) return null;
+
     const accepted = parseInWorldTime(quest.accepted_time);
     const current  = parseInWorldTime(currentTime);
-    if (!accepted || !current) return 0;
+    if (!accepted || !current) return null;
 
     const elapsed = current - accepted;
     if (elapsed <= 0) return -1; // Just accepted — NPC is optimistic
 
     const coeff = Math.max(0.1, quest.frustration_coefficient ?? 1.0);
-
-    if (!quest.deadline_time || String(quest.deadline_time).toLowerCase() === 'none') {
-        // No deadline: NPC remains neutral regardless of time elapsed
-        return 0;
-    }
-
     const deadline = parseInWorldTime(quest.deadline_time);
     const window   = deadline - accepted;
-    if (window <= 0) return 1;
+    if (window <= 0) return null;
 
     const ratio = elapsed / window;
     
@@ -83,7 +79,7 @@ export function checkQuestDeadlines() {
     const currentTimeMinutes = parseInWorldTime(settings.currentMemo?.match(/\[TIME\]([\s\S]*?)\[\/TIME\]/i)?.[1]?.trim());
     
     for (const quest of quests) {
-        if (quest.status === 'active' && quest.deadline_time) {
+        if (quest.status === 'active' && questHasEffectiveDeadline(quest)) {
             const deadlineMinutes = parseInWorldTime(quest.deadline_time);
             if (currentTimeMinutes >= deadlineMinutes && deadlineMinutes > 0) {
                 if (quest.auto_fail) {
@@ -130,11 +126,11 @@ export function renderQuestsAsPlainText(quests, currentTime) {
     for (const q of relevantQuests) {
         text += `- **${q.title}** (Given by ${q.giver_name} at ${q.giver_location})\n`;
 
-        // Always show deadline/mood when data is available, regardless of module flags
-        if (q.deadline_time) {
+        // Deadline / mood only when the quest has a real deadline
+        if (questHasEffectiveDeadline(q)) {
             const frust = computeFrustration(q, currentTime);
             let moodLabel;
-            if (showFrustration) {
+            if (frust != null && showFrustration) {
                 if (frust <= -0.5)      moodLabel = 'Very Pleased — NPC is optimistic you will make it';
                 else if (frust <= -0.1) moodLabel = 'Pleased — on schedule';
                 else if (frust <=  0.1) moodLabel = 'Neutral — at deadline';
@@ -142,7 +138,7 @@ export function renderQuestsAsPlainText(quests, currentTime) {
                 else if (frust <=  1.0) moodLabel = 'Frustrated — deadline missed';
                 else if (frust <=  1.5) moodLabel = 'Very Frustrated — deadline passed long ago';
                 else                    moodLabel = 'Furious — NPC may withdraw the quest entirely';
-            } else if (showDeadlines) {
+            } else if (frust != null && showDeadlines) {
                 if (frust <= 0)        moodLabel = 'Ahead of Schedule';
                 else if (frust <= 0.5) moodLabel = 'On Time';
                 else if (frust <= 1.0) moodLabel = 'Near Deadline';
@@ -150,9 +146,6 @@ export function renderQuestsAsPlainText(quests, currentTime) {
             }
             const moodInfo = moodLabel ? ` — ${moodLabel}` : '';
             text += `  Deadline: ${q.deadline_time}${moodInfo}\n`;
-        } else if (q.accepted_time) {
-            // No deadline but frustration is on — still show mood based on elapsed time perception
-            // (no math possible without deadline, so skip label)
         }
 
         for (const obj of q.objectives) {
