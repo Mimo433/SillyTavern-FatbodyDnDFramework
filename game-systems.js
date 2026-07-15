@@ -432,7 +432,7 @@ export function transformBaseSectionContent(tag, innerContent, settings) {
     if (d100Mode) {
         result = result
             .replace(/\bRollTheDice\b/g, 'RollTheDiceD100')
-            .replace(/\[RNG_QUEUE v6\.0_PROPER\]/g, '[RNG_QUEUE_d100 v6.0_PROPER]')
+            .replace(/\[RNG_QUEUE v7\.0\]/g, '[RNG_QUEUE_d100 v7.0]')
             .replace(/\[\/RNG_QUEUE\]/g, '[/RNG_QUEUE_d100]')
             .replace(/\b1d20\b/g, '1d100')
             .replace(/\bd20\b/gi, 'd100')

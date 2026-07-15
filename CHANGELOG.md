@@ -2,6 +2,11 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [5.4.9] - 2026-07-15
+
+### Changed
+- **RNG queue v7.0**: Combat pre-roll block now uses numbered lines with labeled dice (`1: d20=17 d4=3 ...`) instead of the v6.0 `queue=[...]` array format. Non-legacy `<rng_system>` now nests queue rules in `<rng_queue_instructions>`. Sysprompt and legacy prompt text updated to match. Removed erroneous space-padding before single-digit d20 values.
+
 ## [5.4.7] - 2026-07-15
 
 ### Changed

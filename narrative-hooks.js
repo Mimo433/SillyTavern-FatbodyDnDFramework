@@ -48,6 +48,9 @@ export function getDiceCommandAliases() {
 // ── RNG Engine ─────────────────────────────────────────────────────────────────
 
 export const RNG_QUEUE_LEN = 12;
+export const RNG_QUEUE_VERSION = 'v7.0';
+export const RNG_QUEUE_TAG_D20 = `[RNG_QUEUE ${RNG_QUEUE_VERSION}]`;
+export const RNG_QUEUE_TAG_D100 = `[RNG_QUEUE_d100 ${RNG_QUEUE_VERSION}]`;
 
 export function rollDie(sides) {
     const buf = new Uint32Array(1);
@@ -81,17 +84,20 @@ export function makeRngQueue(n, forceD100) {
     return out;
 }
 
+export function formatRngQueueLine(lineNum, dice, d100Mode = false) {
+    if (d100Mode) {
+        return `${lineNum}: d100=${dice.d100}`;
+    }
+    return `${lineNum}: d20=${dice.d20} d4=${dice.d4} d6=${dice.d6} d8=${dice.d8} d10=${dice.d10} d12=${dice.d12}`;
+}
+
 export function buildRngBlock(queue, d100Mode = false) {
     const turnId = Date.now();
-    let formattedQueue;
+    const lines = queue.map((dice, i) => formatRngQueueLine(i + 1, dice, d100Mode));
     if (d100Mode) {
-        formattedQueue = queue.map(dice => String(dice.d100)).join(", ");
-        return `[RNG_QUEUE_d100 v6.0_PROPER]\nturn_id=${turnId}\nscope=this_response\nqueue=[${formattedQueue}]\n[/RNG_QUEUE_d100]\n\n`;
+        return `${RNG_QUEUE_TAG_D100}\nturn_id=${turnId}\nscope=this_response\n${lines.join('\n')}\n[/RNG_QUEUE_d100]\n\n`;
     }
-    formattedQueue = queue.map(dice =>
-        `${dice.d20}(d4:${dice.d4},d6:${dice.d6},d8:${dice.d8},d10:${dice.d10},d12:${dice.d12})`
-    ).join(", ");
-    return `[RNG_QUEUE v6.0_PROPER]\nturn_id=${turnId}\nscope=this_response\nqueue=[${formattedQueue}]\n[/RNG_QUEUE]\n\n`;
+    return `${RNG_QUEUE_TAG_D20}\nturn_id=${turnId}\nscope=this_response\n${lines.join('\n')}\n[/RNG_QUEUE]\n\n`;
 }
 
 // ── Dice rolling ───────────────────────────────────────────────────────────────
@@ -675,7 +681,7 @@ export function installInterceptor() {
         if (settings.debugMode) {
             console.log(`Found user message at index ${idx}.`);
             console.log(`Extracted Text Content Length: ${content.length}`);
-            console.log(`Content includes RNG tag? ${content.includes('[RNG_QUEUE v6.0_PROPER]') || content.includes('[RNG_QUEUE_d100 v6.0_PROPER]')}`);
+            console.log(`Content includes RNG tag? ${content.includes(RNG_QUEUE_TAG_D20) || content.includes(RNG_QUEUE_TAG_D100)}`);
             if (skipInjection) console.log("[RPG Tracker] Path 1 active: skipping user-message injection; keyword scan will still run.");
         }
 
@@ -698,12 +704,12 @@ export function installInterceptor() {
             if (relBlock) injections += relBlock;
 
             if (settings.rngEnabled) {
-                if (settings.rngQueueD20 && !content.includes('[RNG_QUEUE v6.0_PROPER]')) {
+                if (settings.rngQueueD20 && !content.includes(RNG_QUEUE_TAG_D20)) {
                     const queue = makeRngQueue(RNG_QUEUE_LEN, false);
                     injections += buildRngBlock(queue, false);
                     if (settings.debugMode) console.log("RNG Queue (d20) generated for injection.");
                 }
-                if (settings.rngQueueD100 && !content.includes('[RNG_QUEUE_d100 v6.0_PROPER]')) {
+                if (settings.rngQueueD100 && !content.includes(RNG_QUEUE_TAG_D100)) {
                     const queue = makeRngQueue(30, true);
                     injections += buildRngBlock(queue, true);
                     if (settings.debugMode) console.log("RNG Queue (d100) generated for injection.");

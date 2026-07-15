@@ -9703,7 +9703,7 @@ export function buildSysprompt(rawText) {
     if (!s.rngEnabled) {
         content = content
             .replace(/.*RollTheDice(?:D100)?.*\n?/gi, '')
-            .replace(/.*RNG_QUEUE(?:_d100)?\s+v6\.0_PROPER.*\n?/gi, '');
+            .replace(/.*\[RNG_QUEUE(?:_d100)?\s+v[\d.]+[^\]]*\].*\n?/gi, '');
     }
 
     return content
