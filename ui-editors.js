@@ -11,6 +11,7 @@ import {
     setUseDdMmYyFormat, 
     updateStatusIndicator,
     syncNpcPortraitDependentUi,
+    syncLocationImageDependentUi,
     syncTimeFormatSettingsUi,
     refreshQuestPrompt,
     syncMemoView,
@@ -1019,6 +1020,9 @@ export function syncSettingsAndUI(updateFn) {
     const npcPortraitsCb = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_tracker_npc_portraits'));
     if (npcPortraitsCb) npcPortraitsCb.checked = fresh.npcPortraits !== false;
     syncNpcPortraitDependentUi(fresh);
+    const locationImagesCb = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_tracker_location_images'));
+    if (locationImagesCb) locationImagesCb.checked = !!fresh.locationImages;
+    syncLocationImageDependentUi(fresh);
     const stateSwipeRollbackUICb = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_tracker_state_swipe_rollback'));
     if (stateSwipeRollbackUICb) stateSwipeRollbackUICb.checked = fresh.stateTrackerSwipeRollback !== false;
 

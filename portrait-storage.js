@@ -163,8 +163,10 @@ export function countPortraitPathRefs(settings, targetPath) {
         }
     };
     scan(settings.customPortraits);
+    scan(settings.customLocationImages);
     for (const cs of Object.values(settings.chatStates || {})) {
         scan(cs.customPortraits);
+        scan(cs.customLocationImages);
     }
     return count;
 }
@@ -179,8 +181,10 @@ export function collectAllPortraitRefs(settings) {
         }
     };
     scan(settings.customPortraits);
+    scan(settings.customLocationImages);
     for (const cs of Object.values(settings.chatStates || {})) {
         scan(cs.customPortraits);
+        scan(cs.customLocationImages);
     }
     return refs;
 }
@@ -195,8 +199,10 @@ export function countEmbeddedPortraitDataUrls(settings) {
         }
     };
     scan(settings.customPortraits);
+    scan(settings.customLocationImages);
     for (const cs of Object.values(settings.chatStates || {})) {
         scan(cs.customPortraits);
+        scan(cs.customLocationImages);
     }
     return count;
 }
@@ -236,12 +242,17 @@ export async function migrateAllEmbeddedPortraits(settings) {
     // Chat partitions are the source of truth — migrate those before live state.
     for (const [chatId, cs] of Object.entries(settings.chatStates || {})) {
         await migratePortraitMap(cs.customPortraits, chatId, stats, dedupeCache);
+        await migratePortraitMap(cs.customLocationImages, chatId, stats, dedupeCache);
     }
     await migratePortraitMap(settings.customPortraits, getActiveChatId() || '_global', stats, dedupeCache);
+    await migratePortraitMap(settings.customLocationImages, getActiveChatId() || '_global', stats, dedupeCache);
 
     const activeChatId = getActiveChatId();
     if (settings.chatLinkEnabled && activeChatId && settings.chatStates?.[activeChatId]?.customPortraits) {
         settings.customPortraits = JSON.parse(JSON.stringify(settings.chatStates[activeChatId].customPortraits));
+    }
+    if (settings.chatLinkEnabled && activeChatId && settings.chatStates?.[activeChatId]?.customLocationImages) {
+        settings.customLocationImages = JSON.parse(JSON.stringify(settings.chatStates[activeChatId].customLocationImages));
     }
 
     settings.portraitsFileStorageVersion = 1;
@@ -258,7 +269,9 @@ export async function purgeAllPortraitData(settings) {
     await Promise.all(managed.map(deletePortraitFile));
 
     settings.customPortraits = {};
+    settings.customLocationImages = {};
     for (const cs of Object.values(settings.chatStates || {})) {
         if (cs.customPortraits) cs.customPortraits = {};
+        if (cs.customLocationImages) cs.customLocationImages = {};
     }
 }

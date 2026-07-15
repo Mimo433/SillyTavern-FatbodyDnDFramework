@@ -2,6 +2,26 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [5.5.0] - 2026-07-16
+
+### Added
+- **Location images (Lorebook Agent)**: Hierarchical location tree with per-entry wide 16:9 scene art, drag-and-drop upload, AI generation, and detail popups with breadcrumb paths. Dedicated Location Scene prompt template.
+- **Lorebook Agent Visualization Mode**: Scene layout with location hero image and present NPC tiles; segmented **Campaign Records / Visualization Mode** switcher in the agent panel. Click tiles to open full character/location cards.
+- **Real-Time Visualization Mode**: Location images generated only on Scene View arrival (current context and characters present). Mutually exclusive with Lorebook Locations auto-generation. Enables regenerate-on-visit, Show Location Images, and Include present NPCs as a locked bundle.
+- **Include present NPCs in location scene prompts** (optional): Injects active Lorebook Agent NPC keys into location image prompts; uses last two narrator outputs for scene context.
+- **Regenerate visited locations**: Optional fresh hero image on each arrival when Real-Time Visualization Mode is on.
+
+### Changed
+- **Location images (alpha)**: Show Location Images is **off by default** — opt in via settings or Real-Time Visualization Mode.
+- **Location image inheritance**: Child entries no longer inherit parent art; parent lore guides distinct child generation.
+- **Portrait LLM connection**: Portraits LLM Connection is global; NPC and location prompt generation use it instead of the Lorebook Agent connection.
+- **Settings layout**: Location Portraits section reorganized; Real-Time Visualization Mode is the primary control.
+
+### Fixed
+- **Scene View character clicks**: Open full NPC/PC cards instead of portrait image-gen menu.
+- **Real-Time Visualization Mode page refresh**: Reload no longer counts as a new location arrival; last visited path persisted per chat.
+- **Lorebook auto-gen vs Real-Time**: Lorebook location background generation is hard-blocked while Real-Time Visualization Mode is on.
+
 ## [5.4.95] - 2026-07-15
 
 ### Changed

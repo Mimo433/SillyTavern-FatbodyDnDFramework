@@ -508,6 +508,124 @@ export const DEFAULT_MODULES = {
  * missing keys. All reads and writes to persistent state go through this.
  * @returns {Record<string, any>}
  */
+/** Original 5.5.0 location prompt (pre parent-continuity / present-NPC variants). */
+export const PORTRAIT_LOCATION_SYSTEM_PROMPT_LEGACY = `You are a location/scene prompt generator for AI image models. Given a place's lorebook description from an RPG campaign, output a single detailed image generation prompt for a wide establishing shot.
+
+Focus on:
+- Architecture, terrain, lighting, weather, and atmosphere
+- Distinctive landmarks and environmental details from the lore entry
+- Time of day and mood appropriate to the description
+- Art style: high-quality fantasy landscape, cinematic wide shot, no characters in frame
+
+Rules:
+- Output ONLY the prompt text, nothing else. No preamble, no explanation.
+- Keep it under {{wordtarget}} words.
+- The location lorebook entry is your PRIMARY source of truth.
+- Use narrator card and scene context only for world/art-style guidance.
+- Do not include game stats, quests, or non-visual information.`;
+
+/** Factory default Location Scene prompt when present-NPC injection is off. */
+export const PORTRAIT_LOCATION_SYSTEM_PROMPT_WITHOUT_NPCS = `You are a location/scene prompt generator for AI image models. Given a place's lorebook description from an RPG campaign, output a single detailed image generation prompt for a wide cinematic shot of "{{name}}" (full path: {{path}}).
+
+Focus on:
+- Architecture, terrain, lighting, weather, and atmosphere specific to THIS sub-location
+- Distinctive landmarks and environmental details from the target location's lore entry
+- Time of day and mood appropriate to the description and recent narrator output
+- Art style: high-quality fantasy scene, cinematic wide shot
+
+Scene composition:
+- When a Player Character is listed in "Characters Present Now", include them as a primary figure in the scene.
+- If no "Characters Present Now" block is provided: no characters in frame — environment and atmosphere only.
+
+Parent continuity:
+- If parent/ancestor location context is provided, treat it as a visual STYLE GUIDE only (palette, building materials, era, cultural aesthetic, weather tone).
+- The image must depict the TARGET sub-location as its own distinct place — never reuse or clone a parent's composition.
+- Parents with existing reference art: match their look and feel while showing what makes this child location unique.
+
+Rules:
+- Output ONLY the prompt text, nothing else. No preamble, no explanation.
+- Keep it under {{wordtarget}} words.
+- The target location's lorebook entry is your PRIMARY source of truth for the place itself.
+- Use narrator output and scene context for moment-to-moment mood and staging.
+- Do not include game stats, quests, or non-visual information.`;
+
+/** Factory default Location Scene prompt when present-NPC injection is on. */
+export const PORTRAIT_LOCATION_SYSTEM_PROMPT_WITH_NPCS = `You are a location/scene prompt generator for AI image models. Given a place's lorebook description from an RPG campaign, output a single detailed image generation prompt for a wide cinematic shot of "{{name}}" (full path: {{path}}).
+
+Focus on:
+- Architecture, terrain, lighting, weather, and atmosphere specific to THIS sub-location
+- Distinctive landmarks and environmental details from the target location's lore entry
+- Time of day and mood appropriate to the description and recent narrator output
+- Art style: high-quality fantasy scene, cinematic wide shot
+
+Characters:
+- The Player Character entry (when provided in "Characters Present Now") is always a primary figure in the scene — never omit them.
+- If additional NPC entries are listed in "Characters Present Now": include those NPCs naturally in the scene (mid-ground or foreground). Use their lore entries for appearance, clothing, and pose. They should feel placed in the environment, not isolated portrait close-ups.
+- Also incorporate any minor characters who appear in the recent narrator output (bystanders, guards, patrons, crowd figures, etc.) even when they are NOT listed in "Characters Present Now". Infer brief visual details from the narrative and keep them secondary in the composition.
+- If there are no characters in "Characters Present Now" and none appear in recent narrator output: no characters in frame — environment and atmosphere only.
+
+Parent continuity:
+- If parent/ancestor location context is provided, treat it as a visual STYLE GUIDE only (palette, building materials, era, cultural aesthetic, weather tone).
+- The image must depict the TARGET sub-location as its own distinct place — never reuse or clone a parent's composition.
+- Parents with existing reference art: match their look and feel while showing what makes this child location unique.
+
+Rules:
+- Output ONLY the prompt text, nothing else. No preamble, no explanation.
+- Keep it under {{wordtarget}} words.
+- The target location's lorebook entry is your PRIMARY source of truth for the place itself.
+- Use narrator output and scene context for moment-to-moment mood and staging.
+- Do not include game stats, quests, or non-visual information.`;
+
+/** Previous WITH_NPCS factory default (pre minor-narrative-characters line). */
+export const PORTRAIT_LOCATION_SYSTEM_PROMPT_WITH_NPCS_V1 = `You are a location/scene prompt generator for AI image models. Given a place's lorebook description from an RPG campaign, output a single detailed image generation prompt for a wide cinematic shot of "{{name}}" (full path: {{path}}).
+
+Focus on:
+- Architecture, terrain, lighting, weather, and atmosphere specific to THIS sub-location
+- Distinctive landmarks and environmental details from the target location's lore entry
+- Time of day and mood appropriate to the description and recent narrator output
+- Art style: high-quality fantasy scene, cinematic wide shot
+
+Characters:
+- If a "Characters Present Now" block is provided: include those NPCs naturally in the scene (mid-ground or foreground). Use their lore entries for appearance, clothing, and pose. They should feel placed in the environment, not isolated portrait close-ups.
+- If no "Characters Present Now" block is provided: no characters in frame — environment and atmosphere only.
+
+Parent continuity:
+- If parent/ancestor location context is provided, treat it as a visual STYLE GUIDE only (palette, building materials, era, cultural aesthetic, weather tone).
+- The image must depict the TARGET sub-location as its own distinct place — never reuse or clone a parent's composition.
+- Parents with existing reference art: match their look and feel while showing what makes this child location unique.
+
+Rules:
+- Output ONLY the prompt text, nothing else. No preamble, no explanation.
+- Keep it under {{wordtarget}} words.
+- The target location's lorebook entry is your PRIMARY source of truth for the place itself.
+- Use narrator output and scene context for moment-to-moment mood and staging.
+- Do not include game stats, quests, or non-visual information.`;
+
+/**
+ * @param {boolean} [includePresentNpcs]
+ * @returns {string}
+ */
+export function getDefaultPortraitLocationSystemPrompt(includePresentNpcs = false) {
+    return includePresentNpcs
+        ? PORTRAIT_LOCATION_SYSTEM_PROMPT_WITH_NPCS
+        : PORTRAIT_LOCATION_SYSTEM_PROMPT_WITHOUT_NPCS;
+}
+
+/**
+ * True when the text still matches a shipped factory default (current or legacy).
+ * Custom edits return false so the toggle does not overwrite them.
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function isShippedPortraitLocationSystemPrompt(text) {
+    const norm = (s) => (s || '').replace(/\r\n/g, '\n').trim();
+    const t = norm(text);
+    return t === norm(PORTRAIT_LOCATION_SYSTEM_PROMPT_WITHOUT_NPCS)
+        || t === norm(PORTRAIT_LOCATION_SYSTEM_PROMPT_WITH_NPCS)
+        || t === norm(PORTRAIT_LOCATION_SYSTEM_PROMPT_WITH_NPCS_V1)
+        || t === norm(PORTRAIT_LOCATION_SYSTEM_PROMPT_LEGACY);
+}
+
 /**
  * Builds a fresh copy of every settings default. Extracted from getSettings()
  * so it can be reused by getFactoryCartridgePayload() (the "Stock" Game
@@ -523,6 +641,7 @@ function buildDefaultSettings() {
         enabled: true,
         trackerCollapsed: false,
         agentCollapsed: false,
+        agentImmersionMode: false,
         agentKeysCollapsed: false,
         agentSettingsOpen: true,
         agentConsoleOpen: true,
@@ -552,6 +671,11 @@ function buildDefaultSettings() {
         portraitAutoGenerateParty: false,
         portraitAutoGenerateEnemies: false,
         portraitAutoGenerateNpcs: false,
+        portraitAutoGenerateLocations: false,
+        /** Real-Time Mode: generate location images only on Scene View arrival (mutually exclusive with portraitAutoGenerateLocations). */
+        portraitAutoGenerateSceneView: false,
+        portraitRegenerateVisitedLocations: false,
+        portraitLocationIncludePresentNpcs: false,
         pollinationsApiKey: "",
         pollinationsModel: "zimage",
         inventoryWorthMode: "hover",   // 'hover' = worth shown as tooltip only | 'display' = coin badge shown inline
@@ -564,6 +688,7 @@ function buildDefaultSettings() {
         npcRelationshipMaxDefault: 150,
         npcRelationshipMax: 150,
         npcPortraits: true,
+        locationImages: false,
         npcRelationshipBars: true,
         npcRelationshipToast: true,
         stateTrackerSwipeRollback: true,        // auto-roll back State Tracker memo on swipe           // emit toast notification when relationship values change
@@ -1005,6 +1130,7 @@ Rules:
 - Keep it under {{wordtarget}} words.
 - A user persona is provided for reference. If it does NOT describe the character "{{name}}", ignore it entirely and do not use any of its details in the portrait prompt.
 - Focus on visual details. Do not include game stats, abilities, or non-visual information.`,
+        portraitLocationSystemPrompt: getDefaultPortraitLocationSystemPrompt(false),
         savedPortraitPromptPresets: {},
         worldConnectionSource: "default",
         worldConnectionProfileId: "",
@@ -1098,6 +1224,7 @@ const CARTRIDGE_PAYLOAD_KEYS = [
     'systemPromptTemplate',
     'portraitNpcSystemPrompt',
     'portraitCharacterSystemPrompt',
+    'portraitLocationSystemPrompt',
     'portraitPromptWordTarget',
     'savedPortraitPromptPresets',
     'npcCoreSections',
@@ -1165,7 +1292,7 @@ export const CARTRIDGE_PAYLOAD_GROUPS = [
         label: 'Portrait Generator',
         description: 'NPC and character portrait prompt templates, word target, saved presets',
         keys: [
-            'portraitNpcSystemPrompt', 'portraitCharacterSystemPrompt',
+            'portraitNpcSystemPrompt', 'portraitCharacterSystemPrompt', 'portraitLocationSystemPrompt',
             'portraitPromptWordTarget', 'savedPortraitPromptPresets',
         ],
     },
@@ -1554,6 +1681,8 @@ function getSettingsInternal(extensionSettings) {
     // NPC portrait card view toggle (v3.16.21)
     if (isOlderThan(s.settingsVersion, '3.16.21')) {
         if (s.npcPortraits === undefined) s.npcPortraits = true;
+        if (s.locationImages === undefined) s.locationImages = false;
+        if (s.portraitAutoGenerateLocations === undefined) s.portraitAutoGenerateLocations = false;
         s.settingsVersion = '3.16.21';
     }
 
@@ -1709,6 +1838,67 @@ function getSettingsInternal(extensionSettings) {
             }
         }
     }
+
+    // Location scene prompt defaults: keep textarea variant aligned with present-NPC toggle (v5.5.6+)
+    // 5.5.7 also migrates the original 5.5.0 "establishing shot" factory text.
+    if (isOlderThan(s.settingsVersion, '5.5.7')) {
+        if (isShippedPortraitLocationSystemPrompt(s.portraitLocationSystemPrompt || '')) {
+            s.portraitLocationSystemPrompt = getDefaultPortraitLocationSystemPrompt(!!s.portraitLocationIncludePresentNpcs);
+        }
+        s.settingsVersion = '5.5.7';
+    }
+
+    // 5.5.8: refresh WITH_NPCS factory prompt (minor narrative characters line).
+    if (isOlderThan(s.settingsVersion, '5.5.8')) {
+        const norm = (v) => (v || '').replace(/\r\n/g, '\n').trim();
+        const prompt = norm(s.portraitLocationSystemPrompt);
+        if (s.portraitLocationIncludePresentNpcs && (
+            prompt === norm(PORTRAIT_LOCATION_SYSTEM_PROMPT_WITH_NPCS_V1)
+            || prompt === norm(PORTRAIT_LOCATION_SYSTEM_PROMPT_WITH_NPCS)
+        )) {
+            s.portraitLocationSystemPrompt = PORTRAIT_LOCATION_SYSTEM_PROMPT_WITH_NPCS;
+        }
+        s.settingsVersion = '5.5.8';
+    }
+
+    if (isOlderThan(s.settingsVersion, '5.5.9')) {
+        if (s.portraitRegenerateVisitedLocations === undefined) {
+            s.portraitRegenerateVisitedLocations = false;
+        }
+        s.settingsVersion = '5.5.9';
+    }
+
+    // 5.5.10: Real-Time Mode vs Lorebook Locations auto-gen are mutually exclusive.
+    // Prefer Real-Time Mode when both were previously enabled (avoids agent overwriting arrival art).
+    if (isOlderThan(s.settingsVersion, '5.5.10')) {
+        if (s.portraitAutoGenerateSceneView && s.portraitAutoGenerateLocations) {
+            s.portraitAutoGenerateLocations = false;
+        }
+        if (!s.portraitAutoGenerateSceneView) {
+            s.portraitRegenerateVisitedLocations = false;
+        }
+        s.settingsVersion = '5.5.10';
+    }
+
+    // 5.5.11: Real-Time Mode forces its companion location portrait options on.
+    if (isOlderThan(s.settingsVersion, '5.5.11')) {
+        if (s.portraitAutoGenerateSceneView) {
+            s.portraitRegenerateVisitedLocations = true;
+            s.locationImages = true;
+            s.portraitLocationIncludePresentNpcs = true;
+            s.portraitAutoGenerateLocations = false;
+            if (isShippedPortraitLocationSystemPrompt(s.portraitLocationSystemPrompt || '')) {
+                s.portraitLocationSystemPrompt = getDefaultPortraitLocationSystemPrompt(true);
+            }
+        }
+        s.settingsVersion = '5.5.11';
+    }
+
+    // 5.5.12: Location images alpha — opt-in only (default off).
+    if (isOlderThan(s.settingsVersion, '5.5.12')) {
+        s.settingsVersion = '5.5.12';
+    }
+
     // ── MIGRATION: Auto-fix legacy corrupted PC Core Section colors ────────────────
     if (s.pcCoreSections && Array.isArray(s.pcCoreSections) && s.pcCoreSections.length === 6) {
         // We check by ID rather than name, because the legacy version might have had "Appearance" instead of "Appearance/Species"
@@ -1922,6 +2112,7 @@ export function saveChatState(chatId) {
         memoHistory:  JSON.parse(JSON.stringify(s.memoHistory)),
         lastDelta:    s.lastDelta || '',
         customPortraits: JSON.parse(JSON.stringify(s.customPortraits || {})),
+        customLocationImages: JSON.parse(JSON.stringify(s.customLocationImages || {})),
         modules:      JSON.parse(JSON.stringify(s.modules)),
         blockOrder:   JSON.parse(JSON.stringify(s.blockOrder  || BLOCK_ORDER)),
         stockPrompts: snapshotStockPromptsForProfile(s.stockPrompts),
@@ -1980,14 +2171,10 @@ export function saveChatState(chatId) {
         portraitAutoGenerateParty: s.portraitAutoGenerateParty ?? false,
         portraitAutoGenerateEnemies: s.portraitAutoGenerateEnemies ?? false,
         portraitAutoGenerateNpcs: s.portraitAutoGenerateNpcs ?? false,
-        portraitConnectionSource: s.portraitConnectionSource ?? "default",
-        portraitConnectionProfileId: s.portraitConnectionProfileId || "",
-        portraitCompletionPresetId: s.portraitCompletionPresetId || "",
-        portraitOllamaUrl: s.portraitOllamaUrl || "http://localhost:11434",
-        portraitOllamaModel: s.portraitOllamaModel || "",
-        portraitOpenaiUrl: s.portraitOpenaiUrl || "",
-        portraitOpenaiKey: s.portraitOpenaiKey || "",
-        portraitOpenaiModel: s.portraitOpenaiModel || "",
+        portraitAutoGenerateLocations: s.portraitAutoGenerateLocations ?? false,
+        portraitAutoGenerateSceneView: s.portraitAutoGenerateSceneView ?? false,
+        portraitRegenerateVisitedLocations: s.portraitRegenerateVisitedLocations ?? false,
+        locationImages: !!s.locationImages,
         worldConnectionSource: s.worldConnectionSource ?? "default",
         worldConnectionProfileId: s.worldConnectionProfileId || "",
         worldCompletionPresetId: s.worldCompletionPresetId || "",
@@ -2012,8 +2199,13 @@ export function saveChatState(chatId) {
         initialDate: s.initialDate || 'Day 1',
         npcRelationshipMax: getNpcRelationshipMax(s),
 
+        agentImmersionMode: s.agentImmersionMode ?? false,
+
         // Preserve lorebook stack link — written by Link button and router, not by normal state saves
         campaignBooks: existing.campaignBooks || [],
+
+        // Real-Time Mode: last scene location we generated art for (survives F5)
+        lastImmersionSceneArtPath: existing.lastImmersionSceneArtPath || null,
 
         // Preserve Player Character pseudo-persona which is injected into the chat state
         playerCharacter: existing.playerCharacter,
@@ -2131,6 +2323,10 @@ export function saveProfile(name) {
         portraitAutoGenerateParty: s.portraitAutoGenerateParty ?? false,
         portraitAutoGenerateEnemies: s.portraitAutoGenerateEnemies ?? false,
         portraitAutoGenerateNpcs: s.portraitAutoGenerateNpcs ?? false,
+        portraitAutoGenerateLocations: s.portraitAutoGenerateLocations ?? false,
+        portraitAutoGenerateSceneView: s.portraitAutoGenerateSceneView ?? false,
+        portraitRegenerateVisitedLocations: s.portraitRegenerateVisitedLocations ?? false,
+        locationImages: !!s.locationImages,
         portraitConnectionSource: s.portraitConnectionSource ?? "default",
         portraitConnectionProfileId: s.portraitConnectionProfileId || "",
         portraitCompletionPresetId: s.portraitCompletionPresetId || "",

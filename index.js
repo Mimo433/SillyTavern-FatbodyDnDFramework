@@ -1,5 +1,5 @@
 import { EXAMPLES, COLOR_EXAMPLES, DEFAULT_STOCK_PROMPTS, RT_PROMPTS, BLOCK_ICONS, BLOCK_ORDER, PAGE_SIZE, NO_PAGINATE, buildOnboardingXpHint, buildOnboardingTimeHint, resolveTimePromptKey, resolveTimePromptDisplayTag } from './constants.js';
-import { MODULE_NAME, DEFAULT_MODULES, getSettings, getBarBackground, migrateCustomFields, saveChatState, saveProfile, deleteProfile, getEffectiveRouterCampaignPrefix, sanitizeCampaignPrefixString, buildNpcInstruction, loadStockPromptsFromProfile, getNpcRelationshipMax, getNpcRelationshipMaxDefault, clampRelationshipValue, relationshipBarPct, getFriendshipTier, getAffectionTier, getRelTierBadgeStyle, getRelTierDetailedStyle, getRelTierDetailedLabelStyle, applyRelTierBadgeElement, sanitizeRouterState, rebuildAllModuleInstructions, adjustAllStoredTemplatesForTimeFormat, DEFAULT_NPC_SECTIONS, DEFAULT_PC_SECTIONS, computeBundledPromptsFingerprint } from './state-manager.js';
+import { MODULE_NAME, DEFAULT_MODULES, getSettings, getBarBackground, migrateCustomFields, saveChatState, saveProfile, deleteProfile, getEffectiveRouterCampaignPrefix, sanitizeCampaignPrefixString, buildNpcInstruction, loadStockPromptsFromProfile, getNpcRelationshipMax, getNpcRelationshipMaxDefault, clampRelationshipValue, relationshipBarPct, getFriendshipTier, getAffectionTier, getRelTierBadgeStyle, getRelTierDetailedStyle, getRelTierDetailedLabelStyle, applyRelTierBadgeElement, sanitizeRouterState, rebuildAllModuleInstructions, adjustAllStoredTemplatesForTimeFormat, DEFAULT_NPC_SECTIONS, DEFAULT_PC_SECTIONS, computeBundledPromptsFingerprint, getDefaultPortraitLocationSystemPrompt, isShippedPortraitLocationSystemPrompt } from './state-manager.js';
 import { sendStateRequest, fetchOllamaModels, fetchOpenAIModels, testOpenAIConnection, getConnectionProfiles, getCurrentCompletionPreset, setCompletionPreset, syncCombatProfile, resetCombatProfileOverride } from './llm-client.js';
 import { getDiceToolName, getDiceCommandName, getDiceCommandAliases, doDiceRoll, registerDiceFunctionTool, registerDiceSlashCommand, installInterceptor, getNarrativeBlocks, onGenerationStarted, onGenerationEnded, ensureRelTagRegex, resetRouterTick, getRouterTick, resetRouterAutoTick, getRouterSchedulerInternals, makeRngQueue, buildRngBlock, RNG_QUEUE_LEN, parseAndApplyNarrativeRelTags } from './narrative-hooks.js';
 import { deduplicateMemo, mergeMemo, computeDelta, escapeHtml, escapeRegex, highlightParens, cleanToolCallMessage, cleanMessageContent, getLastUserAction, buildLorebookContext, buildModulesInstructionText, buildModuleFormatInstruction, parseQuestsFromMemo, syncQuestsFromMemo, syncQuestsToMemo, writeQuestsToMemo, getQuestMood, extractCurrentTimeStr, stripArchivedQuestsFromMemo, stripCompletedQuestsFromMemo, applyQuestSyncAndStripMemo, isArchivedQuestStatus, removeArchivedQuest, parseInWorldTime, formatInWorldTime, sanitizeLorebookRecordContent, memoForTrackerContext, memoForGmContext } from './memo-processor.js';
@@ -9,7 +9,8 @@ import { initializeDebugViewer, toggleDebugViewer } from './debug-viewer.js';
 import { installSwipeSchedulerDebug } from './swipe-scheduler-debug.js';
 import { runRouterPass, rollbackRouterPass, reapplyRouterPass, getLorebookManifest, deleteLorebookEntry, updateLorebookEntry, disableManagedEntries, isRouterRunning, stopRouterPass } from './router.js';
 import { getRequestHeaders } from '../../../../script.js';
-import { fileToDataUrl, scaleImageTo512Square, applyPortraitData, generatePortraitPrompt, generateNpcPortraitPrompt, showPortraitPromptPopup, generatePortraitDirect, autoGeneratePartyPortraits, removeAllPortraits, checkAndTriggerAutoGenerations, autoGenerateEnemyPortraits, forceCheckAutoGenerations, resetAutoGenerationTracking } from './portraits.js';
+import { fileToDataUrl, scaleImageTo512Square, scaleImageToLandscape, applyPortraitData, applyLocationImageData, generatePortraitPrompt, generateNpcPortraitPrompt, generateLocationImagePrompt, showPortraitPromptPopup, generatePortraitDirect, autoGeneratePartyPortraits, removeAllPortraits, checkAndTriggerAutoGenerations, autoGenerateEnemyPortraits, forceCheckAutoGenerations, resetAutoGenerationTracking, resolveLocationImageWithMeta, normalizeLocationPath, buildLocationPath, getLinkedPlayerCharacter } from './portraits.js';
+import { buildImmersionSceneState, renderImmersionViewHtml, getCurrentLocationText, loadLocationEntryByPath, loadNpcEntryByKey, maybeAutoGenerateImmersionSceneArt, resetImmersionSceneArtTracking, hydrateImmersionSceneArtPath } from './immersion.js';
 import { migrateAllEmbeddedPortraits, countEmbeddedPortraitDataUrls, purgeAllPortraitData, resolvePortraitDisplaySrc, collectAllPortraitRefs, isManagedPortraitPath, isPortraitMigrationLocked, setPortraitMigrationLocked, PORTRAIT_STORAGE_FOLDER } from './portrait-storage.js';
 import { loadPanelGeometry, loadDeltaHeight, makeDraggable, makeResizableTR, makeResizableBR, makeResizableBL, setupResizeObserver, setupDeltaResize, canResizePanels, jqueryToggleSlide } from './ui-geometry.js';
 import { applyCustomTheme, openThemeWizard, refreshSavedThemesList, handleRecolor, undoThemeChange } from './theme-manager.js';
@@ -45,6 +46,7 @@ let renderRouterUI = null;
 globalThis._rpgRenderRouterUI = () => { if (typeof renderRouterUI === 'function') renderRouterUI(); };
 /** Rebuilds CAMPAIGN RECORDS; assigned in createPanel when the agent panel is wired. */
 let refreshAgentManifest = async () => { };
+let refreshImmersionView = async () => { };
 globalThis._rpgRefreshAgentManifest = async () => { if (typeof refreshAgentManifest === 'function') await refreshAgentManifest(); };
 /** Refreshes the NPC card grid; assigned in createPanel so module-level code can call it. */
 let refreshNpcManifest = async () => { };
@@ -98,11 +100,9 @@ function scheduleAgentManifestRefresh(force = false) {
     void refreshAgentManifest().catch(() => { });
 }
 
-/** Reload CAMPAIGN RECORDS — safe from settings UI outside createPanel(). */
+/** Reload CAMPAIGN RECORDS / Scene View — safe from settings UI outside createPanel(). */
 export async function refreshAgentManifestNow() {
-    if (typeof globalThis._rpgRefreshAgentManifest === 'function') {
-        await globalThis._rpgRefreshAgentManifest();
-    }
+    await refreshLorebookAgentViewsNow();
 }
 
 let updateAgentWorldStatusRef = null;
@@ -463,16 +463,154 @@ function applyNpcPortraitSetting(settings, enabled) {
     syncNpcPortraitDependentUi(settings);
 }
 
+/** When location images are disabled, turn off location auto-generation and sync dependent UI. */
+function applyLocationImageSetting(settings, enabled) {
+    settings.locationImages = !!enabled;
+    if (!settings.locationImages) {
+        settings.portraitAutoGenerateLocations = false;
+        settings.portraitAutoGenerateSceneView = false;
+        settings.portraitRegenerateVisitedLocations = false;
+    }
+    syncLocationImageDependentUi(settings);
+}
+
+/**
+ * Real-Time Mode enables a fixed bundle of location portrait options.
+ * @param {object} settings
+ */
+function applyRealTimeModeBundle(settings) {
+    settings.portraitAutoGenerateSceneView = true;
+    settings.portraitAutoGenerateLocations = false;
+    settings.portraitRegenerateVisitedLocations = true;
+    settings.locationImages = true;
+    settings.portraitLocationIncludePresentNpcs = true;
+}
+
+/**
+ * Real-Time Mode (portraitAutoGenerateSceneView) and Lorebook Locations auto-gen
+ * are mutually exclusive — arrival-based art must not be overwritten by agent passes.
+ */
+function applyLocationImageAutoMode(settings, { realTimeMode, lorebookLocations } = {}) {
+    if (realTimeMode !== undefined) {
+        if (realTimeMode) {
+            applyRealTimeModeBundle(settings);
+            syncPortraitLocationPromptForNpcToggle(settings, true, { force: true });
+        } else {
+            settings.portraitAutoGenerateSceneView = false;
+            settings.portraitRegenerateVisitedLocations = false;
+        }
+    }
+    if (lorebookLocations !== undefined) {
+        settings.portraitAutoGenerateLocations = !!lorebookLocations;
+        if (settings.portraitAutoGenerateLocations) {
+            settings.portraitAutoGenerateSceneView = false;
+            settings.portraitRegenerateVisitedLocations = false;
+        }
+    }
+    syncLocationImageDependentUi(settings);
+}
+
 /** Sync NPC portrait toggle and disable auto-generate-NPCs when portraits are off. */
 export function syncNpcPortraitDependentUi(settings) {
     const enabled = settings.npcPortraits !== false;
+    const mainCb = document.getElementById('rpg_tracker_npc_portraits');
+    if (mainCb) mainCb.checked = enabled;
     $('#rpg_tracker_npc_portraits').prop('checked', enabled);
-    const autoNpcCb = $('#rpg_tracker_portrait_auto_npcs');
-    if (!enabled) {
-        autoNpcCb.prop('checked', false);
+
+    const autoNpcCb = document.getElementById('rpg_tracker_portrait_auto_npcs');
+    if (autoNpcCb) {
+        autoNpcCb.disabled = !enabled;
+        autoNpcCb.checked = enabled ? !!settings.portraitAutoGenerateNpcs : false;
     }
-    autoNpcCb.prop('disabled', !enabled);
+    $('#rpg_tracker_portrait_auto_npcs').prop('disabled', !enabled);
+    if (!enabled) {
+        $('#rpg_tracker_portrait_auto_npcs').prop('checked', false);
+    } else {
+        $('#rpg_tracker_portrait_auto_npcs').prop('checked', !!settings.portraitAutoGenerateNpcs);
+    }
 }
+
+/** Sync location image toggle and mutually exclusive auto-gen modes when images are off/on. */
+export function syncLocationImageDependentUi(settings) {
+    const realTimeOn = !!settings.portraitAutoGenerateSceneView;
+    if (realTimeOn) {
+        applyRealTimeModeBundle(settings);
+    } else {
+        settings.portraitRegenerateVisitedLocations = false;
+    }
+
+    const imagesEnabled = !!settings.locationImages;
+    const mainCb = document.getElementById('rpg_tracker_location_images');
+    if (mainCb) mainCb.checked = imagesEnabled;
+    $('#rpg_tracker_location_images').prop('checked', imagesEnabled);
+
+    if (settings.portraitAutoGenerateSceneView && settings.portraitAutoGenerateLocations) {
+        settings.portraitAutoGenerateLocations = false;
+    }
+
+    const lorebookAutoOn = imagesEnabled && !!settings.portraitAutoGenerateLocations;
+
+    const syncCheckbox = (id, checked, disabled) => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.disabled = !!disabled;
+            el.checked = !!checked;
+        }
+        const $el = $(`#${id}`);
+        $el.prop('disabled', !!disabled);
+        $el.prop('checked', !!checked);
+    };
+
+    syncCheckbox('rpg_tracker_portrait_auto_locations', lorebookAutoOn, !imagesEnabled || realTimeOn);
+    syncCheckbox('rpg_tracker_portrait_auto_scene_view', realTimeOn, false);
+    syncCheckbox('rpg_portrait_regenerate_visited_locations', realTimeOn, !realTimeOn);
+    syncCheckbox('rpg_tracker_location_images', imagesEnabled, realTimeOn);
+    syncCheckbox('rpg_portrait_location_include_present_npcs', realTimeOn || !!settings.portraitLocationIncludePresentNpcs, realTimeOn);
+}
+
+/** Push the Location Scene Prompt textarea to match settings (if present in DOM). */
+function setPortraitLocationPromptTextarea(text) {
+    const el = document.getElementById('rpg_portrait_location_system_prompt');
+    if (el) el.value = text;
+    $('#rpg_portrait_location_system_prompt').val(text);
+}
+
+/**
+ * When the present-NPC toggle changes, swap Location Scene Prompt to the matching factory default
+ * if settings or the open textarea still match a shipped/legacy default.
+ * @param {object} settings
+ * @param {boolean} includePresentNpcs
+ * @param {{ force?: boolean }} [opts] force=true always overwrites (used by the toggle itself).
+ */
+function syncPortraitLocationPromptForNpcToggle(settings, includePresentNpcs, opts = {}) {
+    const fromSettings = settings.portraitLocationSystemPrompt || '';
+    const fromTextarea = String($('#rpg_portrait_location_system_prompt').val() || '');
+    const shouldSwap = !!opts.force
+        || !fromSettings.trim()
+        || isShippedPortraitLocationSystemPrompt(fromSettings)
+        || isShippedPortraitLocationSystemPrompt(fromTextarea);
+    if (!shouldSwap) return;
+    settings.portraitLocationSystemPrompt = getDefaultPortraitLocationSystemPrompt(includePresentNpcs);
+    setPortraitLocationPromptTextarea(settings.portraitLocationSystemPrompt);
+}
+
+/**
+ * Sync portrait-related extension checkboxes, then refresh the open Lorebook Agent view.
+ * @param {{ forceLayoutRefresh?: boolean }} [opts] When true, rebuild catalog records from scratch (layout toggles).
+ */
+export async function refreshLorebookAgentViewsNow(opts = {}) {
+    const s = getSettings();
+    syncNpcPortraitDependentUi(s);
+    syncLocationImageDependentUi(s);
+    if (typeof globalThis._rpgSyncAgentImmersionUi === 'function') {
+        globalThis._rpgSyncAgentImmersionUi();
+    }
+    if (!isAgentPanelVisible()) return;
+    const source = opts.forceLayoutRefresh ? 'layout-toggle' : 'auto';
+    await refreshAgentManifest(source);
+}
+
+globalThis._rpgRefreshLorebookAgentViews = refreshLorebookAgentViewsNow;
 
 /**
  * Sync every time/date format control across the whole extension (Modules &
@@ -1047,6 +1185,7 @@ function loadChatState(chatId) {
     if (saved.stockPrompts) s.stockPrompts = loadStockPromptsFromProfile(saved.stockPrompts);
     if (saved.customFields) s.customFields = JSON.parse(JSON.stringify(saved.customFields));
     s.customPortraits = JSON.parse(JSON.stringify(saved.customPortraits || {}));
+    s.customLocationImages = JSON.parse(JSON.stringify(saved.customLocationImages || {}));
     // Restore persisted quests (incl. completed) so the UI can display them
     s.quests = JSON.parse(JSON.stringify(saved.quests || []));
     s.historyIndex = saved.historyIndex ?? -1;
@@ -1094,14 +1233,18 @@ function loadChatState(chatId) {
     s.portraitAutoGenerateParty = saved.portraitAutoGenerateParty ?? false;
     s.portraitAutoGenerateEnemies = saved.portraitAutoGenerateEnemies ?? false;
     s.portraitAutoGenerateNpcs = saved.portraitAutoGenerateNpcs ?? false;
-    s.portraitConnectionSource = saved.portraitConnectionSource ?? "default";
-    s.portraitConnectionProfileId = saved.portraitConnectionProfileId || "";
-    s.portraitCompletionPresetId = saved.portraitCompletionPresetId || "";
-    s.portraitOllamaUrl = saved.portraitOllamaUrl || "http://localhost:11434";
-    s.portraitOllamaModel = saved.portraitOllamaModel || "";
-    s.portraitOpenaiUrl = saved.portraitOpenaiUrl || "";
-    s.portraitOpenaiKey = saved.portraitOpenaiKey || "";
-    s.portraitOpenaiModel = saved.portraitOpenaiModel || "";
+    s.portraitAutoGenerateLocations = saved.portraitAutoGenerateLocations ?? false;
+    s.portraitAutoGenerateSceneView = saved.portraitAutoGenerateSceneView ?? false;
+    s.portraitRegenerateVisitedLocations = saved.portraitRegenerateVisitedLocations ?? false;
+    s.locationImages = !!saved.locationImages;
+    s.portraitLocationIncludePresentNpcs = saved.portraitLocationIncludePresentNpcs ?? false;
+    if (s.portraitAutoGenerateSceneView) {
+        applyRealTimeModeBundle(s);
+        syncPortraitLocationPromptForNpcToggle(s, true, { force: true });
+    } else {
+        s.portraitRegenerateVisitedLocations = false;
+    }
+    s.agentImmersionMode = saved.agentImmersionMode ?? false;
 
     s.worldConnectionSource = saved.worldConnectionSource ?? "default";
     s.worldConnectionProfileId = saved.worldConnectionProfileId || "";
@@ -1152,7 +1295,12 @@ function loadChatState(chatId) {
     $('#rpg_tracker_portrait_auto_party').prop('checked', !!s.portraitAutoGenerateParty);
     $('#rpg_tracker_portrait_auto_enemies').prop('checked', !!s.portraitAutoGenerateEnemies);
     $('#rpg_tracker_portrait_auto_npcs').prop('checked', !!s.portraitAutoGenerateNpcs);
+    $('#rpg_tracker_portrait_auto_locations').prop('checked', !!s.portraitAutoGenerateLocations);
+    $('#rpg_tracker_portrait_auto_scene_view').prop('checked', !!s.portraitAutoGenerateSceneView);
+    $('#rpg_portrait_regenerate_visited_locations').prop('checked', !!s.portraitRegenerateVisitedLocations);
+    $('#rpg_tracker_location_images').prop('checked', !!s.locationImages);
     syncNpcPortraitDependentUi(s);
+    syncLocationImageDependentUi(s);
     $('#rpg_tracker_show_total_value').prop('checked', s.showTotalInventoryValue !== false);
     $('#rpg_tracker_inventory_worth_mode').val(s.inventoryWorthMode || 'hover');
     $('#rpg_portrait_connection_source').val(s.portraitConnectionSource || 'default');
@@ -1275,6 +1423,13 @@ function loadChatState(chatId) {
     }
     scheduleAgentManifestRefresh();
 
+    if (typeof globalThis._rpgSyncAgentImmersionUi === 'function') {
+        globalThis._rpgSyncAgentImmersionUi();
+    }
+    if (isAgentPanelVisible() && typeof globalThis._rpgRefreshLorebookAgentViews === 'function') {
+        void globalThis._rpgRefreshLorebookAgentViews();
+    }
+
     // Patch any managed entries that don't yet have disable:true so ST's
     // native keyword scanner cannot inject them on user-message send.
     if (s.routerEnabled) {
@@ -1286,6 +1441,8 @@ function loadChatState(chatId) {
     if (typeof globalThis._rpgUpdateSkeletonStatus === 'function') {
         globalThis._rpgUpdateSkeletonStatus();
     }
+
+    hydrateImmersionSceneArtPath(chatId);
 
     return true;
 }
@@ -1582,6 +1739,8 @@ function onChatChanged(newChatId) {
         s.routerLog = [];
         s.worldProgressionLastFiredAtMinutes = -1;
         s.worldProgressionLastFiredPeriodLabel = '';
+        s.agentImmersionMode = false;
+        resetImmersionSceneArtTracking();
 
         applyChatTimeFormatSettings(null);
         applyChatNpcRelMaxSettings(null);
@@ -1597,6 +1756,9 @@ function onChatChanged(newChatId) {
         refreshRenderedView();
         if (typeof renderRouterUI === 'function') {
             renderRouterUI();
+        }
+        if (typeof globalThis._rpgSyncAgentImmersionUi === 'function') {
+            globalThis._rpgSyncAgentImmersionUi();
         }
     }
 
@@ -2188,6 +2350,10 @@ function loadProfile(name) {
     s.portraitAutoGenerateParty = p.portraitAutoGenerateParty ?? false;
     s.portraitAutoGenerateEnemies = p.portraitAutoGenerateEnemies ?? false;
     s.portraitAutoGenerateNpcs = p.portraitAutoGenerateNpcs ?? false;
+    s.portraitAutoGenerateLocations = p.portraitAutoGenerateLocations ?? false;
+    s.portraitAutoGenerateSceneView = p.portraitAutoGenerateSceneView ?? false;
+    s.portraitRegenerateVisitedLocations = p.portraitRegenerateVisitedLocations ?? false;
+    s.locationImages = !!p.locationImages;
     s.portraitConnectionSource = p.portraitConnectionSource ?? "default";
     s.portraitConnectionProfileId = p.portraitConnectionProfileId || "";
     s.portraitCompletionPresetId = p.portraitCompletionPresetId || "";
@@ -2240,7 +2406,12 @@ function loadProfile(name) {
     $('#rpg_tracker_portrait_auto_party').prop('checked', !!s.portraitAutoGenerateParty);
     $('#rpg_tracker_portrait_auto_enemies').prop('checked', !!s.portraitAutoGenerateEnemies);
     $('#rpg_tracker_portrait_auto_npcs').prop('checked', !!s.portraitAutoGenerateNpcs);
+    $('#rpg_tracker_portrait_auto_locations').prop('checked', !!s.portraitAutoGenerateLocations);
+    $('#rpg_tracker_portrait_auto_scene_view').prop('checked', !!s.portraitAutoGenerateSceneView);
+    $('#rpg_portrait_regenerate_visited_locations').prop('checked', !!s.portraitRegenerateVisitedLocations);
+    $('#rpg_tracker_location_images').prop('checked', !!s.locationImages);
     syncNpcPortraitDependentUi(s);
+    syncLocationImageDependentUi(s);
     $('#rpg_portrait_connection_source').val(s.portraitConnectionSource || 'default');
     $('#rpg_portrait_connection_profile').val(s.portraitConnectionProfileId || '');
     $('#rpg_portrait_completion_preset').val(s.portraitCompletionPresetId || '');
@@ -2623,6 +2794,180 @@ async function showPortraitSettingsMenu(entityName, onRefresh, npcContent = null
                 );
                 if (cropped) {
                     const scaled = await scaleImageTo512Square(cropped);
+                    await localApply(scaled);
+                }
+            } catch (err) {
+                console.error(err);
+                toastr['warning']('Could not crop image.', 'RPG Tracker');
+            }
+        } else if (capturedUrl && (capturedUrl.startsWith('data:image/') || /^https?:\/\//i.test(capturedUrl))) {
+            await localApply(capturedUrl);
+        } else if (capturedUrl) {
+            toastr['warning']('Please enter a valid https:// URL or use the Browse button.', 'RPG Tracker');
+        }
+    }
+}
+
+async function showLocationImageSettingsMenu(locationPath, onRefresh, locContent = '') {
+    const refresh = onRefresh || refreshRenderedView;
+    const s = getSettings();
+    const normPath = normalizeLocationPath(locationPath);
+    const imageMeta = resolveLocationImageWithMeta(normPath);
+    const currentSrc = imageMeta.src;
+    const previewHtml = currentSrc
+        ? `<img src="${escapeHtml(currentSrc)}" style="max-width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:6px;display:block;margin:0 auto 10px;"/>`
+        : `<div style="text-align:center;opacity:0.5;margin-bottom:10px;">No location image set</div>`;
+    const inputId = `rt-loc-image-url-${Date.now()}`;
+    const fileId = `rt-loc-image-file-${Date.now()}`;
+    const browseBtnId = `rt-loc-image-browse-${Date.now()}`;
+    const popupContent = `<div style="padding:10px;min-width:300px;">
+            <b style="display:block;margin-bottom:8px;">Set Location Image</b>
+            <div style="font-size:0.78em;opacity:0.65;margin-bottom:8px;">${escapeHtml(normPath)}</div>
+            ${previewHtml}
+            <label style="display:block;margin-bottom:4px;font-size:0.85em;opacity:0.8;">Image URL (https://…)</label>
+            <div style="display:flex;gap:6px;align-items:center;">
+                <input id="${inputId}" type="text" class="text_pole" placeholder="Paste an image URL…" value="${currentSrc.startsWith('http') ? escapeHtml(currentSrc) : ''}" style="flex:1;box-sizing:border-box;"/>
+                <button id="${browseBtnId}" class="menu_button" style="white-space:nowrap;flex-shrink:0;">Browse…</button>
+            </div>
+            <input id="${fileId}" type="file" accept="image/*" style="display:none"/>
+            <div style="font-size:0.78em;opacity:0.55;margin-top:5px;">Or drag &amp; drop onto the image / paste (Ctrl+V) on this screen.</div>
+        </div>`;
+    const ctx = SillyTavern.getContext();
+    if (!ctx.callGenericPopup) { toastr['warning']('Popup API not available.', 'RPG Tracker'); return; }
+    const popupOpts = {
+        okButton: 'Apply', cancelButton: 'Cancel', wide: false,
+        customButtons: [
+            { text: '🤖 AI Generate', result: 4, classes: ['menu_button'] },
+        ],
+    };
+    if (currentSrc) {
+        popupOpts.customButtons.push({ text: '✂️ Crop Existing', result: 5, classes: ['menu_button'] });
+        popupOpts.customButtons.push({ text: '🗑 Clear Image', result: 2, classes: ['menu_button'] });
+    }
+
+    const localApply = async (src) => {
+        let finalSrc = src;
+        if (src && typeof src === 'string' && src.startsWith('data:image/')) {
+            finalSrc = await scaleImageToLandscape(src);
+        }
+        await applyLocationImageData(normPath, finalSrc);
+        refresh();
+        void refreshNpcManifest().catch(() => { });
+    };
+
+    let capturedUrl = currentSrc.startsWith('http') ? currentSrc : '';
+    let capturedRawUrl = '';
+
+    const popupPasteHandler = async (ev) => {
+        const file = ev.clipboardData?.files?.[0];
+        if (file && file.type.startsWith('image/')) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            try {
+                capturedRawUrl = await fileToDataUrl(file);
+                capturedUrl = '';
+                const urlInput = /** @type {HTMLInputElement|null} */ (document.getElementById(inputId));
+                if (urlInput) urlInput.value = '(image pasted — click Apply to crop ✔)';
+            } catch (err) {
+                console.error(err);
+                toastr['warning']('Could not read image from clipboard.', 'RPG Tracker');
+            }
+        }
+    };
+
+    setTimeout(() => {
+        const fileInput = /** @type {HTMLInputElement|null} */ (document.getElementById(fileId));
+        const browseBtn = document.getElementById(browseBtnId);
+        const urlInput = /** @type {HTMLInputElement|null} */ (document.getElementById(inputId));
+
+        if (urlInput) {
+            urlInput.addEventListener('input', () => {
+                capturedUrl = urlInput.value.trim();
+                capturedRawUrl = '';
+            });
+        }
+
+        if (browseBtn && fileInput) {
+            browseBtn.addEventListener('click', (ev) => {
+                ev.preventDefault();
+                ev.stopPropagation();
+                fileInput.click();
+            });
+            fileInput.addEventListener('change', async () => {
+                const file = fileInput.files?.[0];
+                if (!file) return;
+                try {
+                    capturedRawUrl = await fileToDataUrl(file);
+                    capturedUrl = '';
+                    if (urlInput) urlInput.value = '(file selected — click Apply to crop ✔)';
+                } catch (err) {
+                    console.error(err);
+                    toastr['warning']('Could not read image file.', 'RPG Tracker');
+                }
+            });
+        }
+
+        document.addEventListener('paste', popupPasteHandler);
+    }, 0);
+
+    const result = await ctx.callGenericPopup(popupContent, ctx.POPUP_TYPE?.CONFIRM ?? 1, '', popupOpts);
+    document.removeEventListener('paste', popupPasteHandler);
+
+    if (result === 2) {
+        await localApply(null);
+    } else if (result === 5) {
+        try {
+            const cropped = await ctx.callGenericPopup(
+                'Set the crop position of the location image',
+                ctx.POPUP_TYPE?.CROP ?? 4,
+                '',
+                { cropImage: currentSrc, cropAspect: 16 / 9 }
+            );
+            if (cropped) {
+                const scaled = await scaleImageToLandscape(cropped);
+                await localApply(scaled);
+            }
+        } catch (err) {
+            console.error(err);
+            toastr['warning']('Could not crop existing image.', 'RPG Tracker');
+        }
+    } else if (result === 4) {
+        try {
+            if (s.portraitSkipPromptDialog) {
+                toastr['info'](`Generating location image for ${normPath} in background…`, 'RPG Tracker');
+                const aiPrompt = await generateLocationImagePrompt(normPath, locContent || '');
+                if (!aiPrompt) {
+                    toastr['warning']('Could not generate prompt — no context found.', 'RPG Tracker');
+                    return;
+                }
+                const dataUrl = await generatePortraitDirect(aiPrompt, normPath);
+                const scaled = await scaleImageToLandscape(dataUrl);
+                await localApply(scaled);
+                toastr['success'](`Location image generated for ${normPath}!`, 'RPG Tracker');
+            } else {
+                toastr['info']('Generating location image prompt…', 'RPG Tracker');
+                const aiPrompt = await generateLocationImagePrompt(normPath, locContent || '');
+                if (aiPrompt) {
+                    await showPortraitPromptPopup(aiPrompt, normPath, localApply, refresh);
+                } else {
+                    toastr['warning']('Could not generate prompt — no context found.', 'RPG Tracker');
+                }
+            }
+        } catch (err) {
+            console.error('[RPG Tracker] AI location image error:', err);
+            toastr['error']('AI location image generation failed: ' + (err.message || err), 'RPG Tracker');
+        }
+    } else if (result) {
+        if (capturedRawUrl) {
+            try {
+                const cropped = await ctx.callGenericPopup(
+                    'Set the crop position of the location image',
+                    ctx.POPUP_TYPE?.CROP ?? 4,
+                    '',
+                    { cropImage: capturedRawUrl, cropAspect: 16 / 9 }
+                );
+                if (cropped) {
+                    const scaled = await scaleImageToLandscape(cropped);
                     await localApply(scaled);
                 }
             } catch (err) {
@@ -3410,22 +3755,8 @@ export function refreshRenderedView() {
         bindRenderedCardEvents(el, memo, false);
 
         // Update footer location: try parsing from recent chat status footer first, fallback to memo
-        let locText = '';
         const ctx = SillyTavern.getContext();
-        if (ctx && ctx.chat && ctx.chat.length) {
-            for (let i = ctx.chat.length - 1; i >= 0; i--) {
-                const msgContent = ctx.chat[i]?.mes || ctx.chat[i]?.['content'] || '';
-                const m = msgContent.match(/\(Location:\s*([^)]+)\)/i);
-                if (m) {
-                    locText = m[1].trim();
-                    break;
-                }
-            }
-        }
-        if (!locText) {
-            const locMatch = (memo || '').match(/Location:\s*([^)\n]+)/i);
-            if (locMatch) locText = locMatch[1].trim();
-        }
+        const locText = getCurrentLocationText(memo, ctx);
         const footerLoc = document.getElementById('rt-footer-location');
         if (footerLoc) {
             footerLoc.textContent = locText || 'Unknown Location';
@@ -3470,6 +3801,8 @@ export function refreshRenderedView() {
     if (_historyViewIndex === -1) {
         scheduleDeferred(() => checkAndTriggerAutoGenerations(refreshAll));
     }
+
+    void globalThis._rpgRefreshAgentManifest().catch(() => { });
 }
 
 function createDetachedPanel(tag) {
@@ -3890,14 +4223,21 @@ function createPanel() {
                     </div>
 
                     <div id="rt-agent-campaign-section" style="margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px; display: flex; flex-direction: column; flex: 1; min-height: 0;">
-                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; flex-shrink: 0;">
-                            <div style="font-weight: bold; opacity: 0.8; font-size: 0.846em;">CAMPAIGN RECORDS</div>
-                            <div style="display: flex; align-items: center; gap: 6px;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; flex-shrink: 0; gap: 8px;">
+                            <div class="rt-agent-view-mode-switch" id="rt-agent-view-mode-switch" role="tablist" aria-label="Lorebook view mode">
+                                <button type="button" class="rt-agent-view-mode-btn${settings.agentImmersionMode ? '' : ' rt-agent-view-mode-btn-active'}" id="rt-agent-view-mode-records" role="tab" aria-selected="${settings.agentImmersionMode ? 'false' : 'true'}">Campaign Records</button>
+                                <button type="button" class="rt-agent-view-mode-btn rt-agent-view-mode-btn-visualization${settings.agentImmersionMode ? ' rt-agent-view-mode-btn-active' : ''}" id="rt-agent-view-mode-visualization" role="tab" aria-selected="${settings.agentImmersionMode ? 'true' : 'false'}">
+                                    <span class="rt-agent-view-mode-glow" aria-hidden="true"></span>
+                                    <span class="rt-agent-view-mode-label">Visualization Mode</span>
+                                </button>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
                                 <button class="rpg-tracker-icon-btn" id="rt-agent-activate-books" title="Activate campaign lorebooks now" style="font-size: 0.769em; opacity: 0.5;"><i class="fa-solid fa-book-open"></i></button>
                                 <button class="rpg-tracker-icon-btn" id="rt-agent-manifest-refresh" title="Refresh Manifest" style="font-size: 0.769em; opacity: 0.5;"><i class="fa-solid fa-arrows-rotate"></i></button>
                             </div>
                         </div>
-                        <div id="rt-agent-manifest-list" style="flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;">
+                        <div id="rt-agent-immersion-view" style="display: ${settings.agentImmersionMode ? 'flex' : 'none'}; flex: 1; min-height: 0; overflow-y: auto; flex-direction: column;"></div>
+                        <div id="rt-agent-manifest-list" style="display: ${settings.agentImmersionMode ? 'none' : 'flex'}; flex: 1; min-height: 0; overflow-y: auto; flex-direction: column; gap: 6px;">
                             <div style="text-align: center; opacity: 0.5; font-size: 0.769em; padding: 10px;">Click refresh to load lore...</div>
                         </div>
                     </div>
@@ -4297,12 +4637,23 @@ function createPanel() {
                     : 'font-size:0.692em; padding:1px 7px; border-radius:10px; font-weight:bold; background:rgba(255,255,255,0.06); color:rgba(255,255,255,0.35); border:1px solid rgba(255,255,255,0.1);';
             }
         }
+
+        void refreshImmersionView().catch(() => { });
     }
 
     // Assigned below when the agent panel is wired. Declared here so
     // nav handlers outside the wiring block can always call it safely.
     let refreshManifest = async (_source = 'uninitialized') => { };
     let _manifestRenderGen = 0;
+    /** When true, refreshManifest runs catalog handler init while Scene View stays visible. */
+    let _manifestBypassImmersion = false;
+    const areAgentCharacterDetailHandlersReady = () => {
+        const s = getSettings();
+        const needsPcHandler = _currentChatId && s.chatStates?.[_currentChatId]?.playerCharacter;
+        return typeof globalThis._rpgAgentOpenNpcDetail === 'function'
+            && typeof globalThis._rpgAgentParseRelationship === 'function'
+            && (!needsPcHandler || typeof globalThis._rpgAgentOpenPcDetail === 'function');
+    };
     let updateAgentBtnUI = () => { };
 
     if (agentBtn && agentPanel && agentCloseBtn) {
@@ -4343,6 +4694,7 @@ function createPanel() {
                 }
 
                 syncRouterPrefixDisplays(s.routerCampaignPrefix || '');
+                syncAgentImmersionUi();
                 renderRouterUI();
                 refreshManifest();
 
@@ -5084,7 +5436,124 @@ function createPanel() {
             return body;
         };
 
+        const bindImmersionViewEvents = () => {
+            const root = agentPanel.querySelector('#rt-agent-immersion-view');
+            if (!root) return;
+
+            const hero = root.querySelector('.rt-immersion-hero-wrap');
+            if (hero) {
+                const activateHero = async () => {
+                    const path = hero.getAttribute('data-loc-path');
+                    const raw = hero.getAttribute('data-loc-raw');
+                    if (path) {
+                        const item = await loadLocationEntryByPath(path);
+                        const opener = globalThis._rpgAgentOpenLocationDetail;
+                        if (item && typeof opener === 'function') {
+                            await opener(item, path);
+                        } else {
+                            await showLocationImageSettingsMenu(path, () => refreshImmersionView(), item?.content || '');
+                        }
+                    } else if (raw) {
+                        toastr.info(`No lore match for "${raw}". Add a Locations entry or check the name.`, 'Scene View');
+                    }
+                };
+                hero.addEventListener('click', () => { void activateHero(); });
+                hero.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        void activateHero();
+                    }
+                });
+            }
+
+            root.querySelectorAll('.rt-immersion-npc-tile').forEach(tile => {
+                tile.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    void (async () => {
+                        if (tile.getAttribute('data-is-pc') === '1') {
+                            let opener = globalThis._rpgAgentOpenPcDetail;
+                            if (typeof opener !== 'function' && typeof globalThis._rpgRefreshAgentManifest === 'function') {
+                                await globalThis._rpgRefreshAgentManifest();
+                                opener = globalThis._rpgAgentOpenPcDetail;
+                            }
+                            if (typeof opener === 'function') {
+                                await opener(false);
+                            }
+                            return;
+                        }
+                        const entryId = tile.getAttribute('data-npc-entry-id');
+                        if (!entryId) return;
+                        const item = await loadNpcEntryByKey(entryId);
+                        let opener = globalThis._rpgAgentOpenNpcDetail;
+                        let parseRel = globalThis._rpgAgentParseRelationship;
+                        if (typeof opener !== 'function' || typeof parseRel !== 'function') {
+                            if (typeof globalThis._rpgRefreshAgentManifest === 'function') {
+                                await globalThis._rpgRefreshAgentManifest();
+                            }
+                            opener = globalThis._rpgAgentOpenNpcDetail;
+                            parseRel = globalThis._rpgAgentParseRelationship;
+                        }
+                        if (item && typeof opener === 'function' && typeof parseRel === 'function') {
+                            await opener(item, parseRel(entryId));
+                        }
+                    })();
+                });
+            });
+        };
+
+        refreshImmersionView = async () => {
+            const s = getSettings();
+            if (!s.agentImmersionMode) return;
+            const container = agentPanel.querySelector('#rt-agent-immersion-view');
+            if (!container || agentPanel.style.display === 'none') return;
+
+            try {
+                const scene = await buildImmersionSceneState(s.currentMemo, s);
+                container.innerHTML = renderImmersionViewHtml(scene);
+                bindImmersionViewEvents();
+                maybeAutoGenerateImmersionSceneArt(scene, () => { void refreshImmersionView(); });
+            } catch (err) {
+                console.error('[RPG Tracker] refreshImmersionView failed:', err);
+                container.innerHTML = '<div style="text-align:center;opacity:0.5;font-size:0.769em;padding:10px;">Failed to load scene view.</div>';
+            }
+        };
+        globalThis._rpgRefreshImmersionView = refreshImmersionView;
+
+        const syncAgentImmersionUi = () => {
+            const s = getSettings();
+            const immersionEl = agentPanel.querySelector('#rt-agent-immersion-view');
+            const manifestEl = agentPanel.querySelector('#rt-agent-manifest-list');
+            const recordsBtn = agentPanel.querySelector('#rt-agent-view-mode-records');
+            const vizBtn = agentPanel.querySelector('#rt-agent-view-mode-visualization');
+            const immersion = !!s.agentImmersionMode;
+            if (immersionEl) immersionEl.style.display = immersion ? 'flex' : 'none';
+            if (manifestEl) manifestEl.style.display = immersion ? 'none' : 'flex';
+            if (recordsBtn) {
+                recordsBtn.classList.toggle('rt-agent-view-mode-btn-active', !immersion);
+                recordsBtn.setAttribute('aria-selected', !immersion ? 'true' : 'false');
+            }
+            if (vizBtn) {
+                vizBtn.classList.toggle('rt-agent-view-mode-btn-active', immersion);
+                vizBtn.setAttribute('aria-selected', immersion ? 'true' : 'false');
+            }
+        };
+        globalThis._rpgSyncAgentImmersionUi = syncAgentImmersionUi;
+
         refreshManifest = async (source = 'auto') => {
+            const s = getSettings();
+            if (s.agentImmersionMode && !_manifestBypassImmersion) {
+                if (!areAgentCharacterDetailHandlersReady()) {
+                    _manifestBypassImmersion = true;
+                    try {
+                        await refreshManifest(source);
+                    } finally {
+                        _manifestBypassImmersion = false;
+                    }
+                }
+                await refreshImmersionView();
+                return;
+            }
+
             const list = agentPanel.querySelector('#rt-agent-manifest-list');
             if (!list) return;
 
@@ -5457,6 +5926,7 @@ function createPanel() {
                         const popupOpts = { okButton: 'Close', cancelButton: false, wide: true, large: true };
                         await ctx.callGenericPopup(popupDom, ctx.POPUP_TYPE?.TEXT ?? 1, '', popupOpts);
                     };
+                    globalThis._rpgAgentOpenPcDetail = openPcPopup;
 
                     const viewBtn = pcDiv.querySelector('.rt-npc-view');
                     if (viewBtn) {
@@ -5489,7 +5959,7 @@ function createPanel() {
                     list.appendChild(pcDiv);
                 }
 
-                const forceFullRefresh = source === 'manual-button';
+                const forceFullRefresh = source === 'manual-button' || source === 'layout-toggle';
                 const loadingDiv = document.createElement('div');
                 loadingDiv.id = 'rt-agent-manifest-loading';
                 loadingDiv.style.cssText = 'text-align: center; opacity: 0.5; font-size: 0.769em; padding: 10px;';
@@ -5498,7 +5968,7 @@ function createPanel() {
 
                 // ── DECOUPLED LOREBOOK RENDER ──
                 // Let the browser paint the PC card and "Loading..." immediately.
-                setTimeout(async () => {
+                const lorebookRenderTask = async () => {
                     try {
                         if (gen !== _manifestRenderGen) return;
                         console.time('[RPG Tracker] getLorebookManifest');
@@ -5551,9 +6021,14 @@ function createPanel() {
                             // ── Detect NPC books ──
                             const bookNameLowerFull = bookName.toLowerCase();
                             const displayNameLower = displayName.toLowerCase();
+                            const layoutS = getSettings();
                             const isNpcBook = displayNameLower === 'npcs' || displayNameLower === 'npc' ||
                                 bookNameLowerFull.endsWith('_npcs') || bookNameLowerFull.endsWith('_npc');
-                            const useNpcCardView = isNpcBook && s.npcPortraits !== false;
+                            const useNpcCardView = isNpcBook && layoutS.npcPortraits !== false;
+
+                            const isLocBook = displayNameLower === 'locations' || displayNameLower === 'location' ||
+                                bookNameLowerFull.endsWith('_locations') || bookNameLowerFull.endsWith('_location');
+                            const useLocImageView = isLocBook && !!layoutS.locationImages;
 
                             const folder = document.createElement('div');
                             folder.style.cssText = 'flex-shrink: 0; margin-bottom: 2px;';
@@ -5561,12 +6036,15 @@ function createPanel() {
                             const folderHdr = document.createElement('div');
                             folderHdr.style.cssText = 'display:flex; align-items:center; gap:6px; padding:5px 6px; cursor:pointer; border-radius:4px; background:rgba(255,255,255,0.04);';
                             if (useNpcCardView) folderHdr.classList.add('rt-npc-folder-hdr');
+                            if (useLocImageView) folderHdr.classList.add('rt-loc-folder-hdr');
                             folderHdr.innerHTML = `
                             ${useNpcCardView ? '<span class="rt-npc-folder-icon">👤</span>' : ''}
+                            ${useLocImageView ? '<span class="rt-loc-folder-icon">🗺️</span>' : ''}
                             <span class="rt-mf-icon" style="font-size:9px; opacity:0.5; width:10px; flex-shrink:0; font-family:monospace;">${isOpen ? '▼' : '▶'}</span>
                             <span style="font-weight:bold; font-size:11px; flex:1; color:var(--rt-text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(displayName)}</span>
                             <span style="font-size:9px; opacity:0.45; color:var(--rt-text-muted); flex-shrink:0;">${activeCount}/${items.length} (${totalTokens}t)</span>
                             ${isNpcBook ? '<button class="rt-npc-settings-btn" title="NPC Settings" style="background:none;border:none;cursor:pointer;font-size:11px;opacity:0.5;padding:0;margin:0;width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center;color:var(--rt-text-muted);flex-shrink:0;line-height:1;" onclick="event.stopPropagation()">⚙️</button>' : ''}
+                            ${isLocBook ? '<button class="rt-loc-settings-btn" title="Location Settings" style="background:none;border:none;cursor:pointer;font-size:11px;opacity:0.5;padding:0;margin:0;width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center;color:var(--rt-text-muted);flex-shrink:0;line-height:1;" onclick="event.stopPropagation()">⚙️</button>' : ''}
                         `;
 
                             const folderBody = document.createElement('div');
@@ -5773,6 +6251,7 @@ function createPanel() {
                                             updS.npcRelationshipBars = newRel;
                                             updS.npcRelationshipToast = newRelToast;
                                             applyNpcPortraitSetting(updS, newNpcPortraits);
+                                            $('#rpg_tracker_npc_portraits').prop('checked', newNpcPortraits);
                                             $('#rpg_tracker_npc_rel_toast').prop('checked', newRelToast);
 
                                             // Update the main settings panel inputs if present
@@ -5796,7 +6275,55 @@ function createPanel() {
                                             if (typeof globalThis._rpgRenderAgentModules === 'function') {
                                                 globalThis._rpgRenderAgentModules();
                                             }
-                                            await refreshManifest();
+                                            await refreshLorebookAgentViewsNow({ forceLayoutRefresh: true });
+                                        }
+                                    });
+                                }
+                            }
+
+                            // Location settings gear button handler
+                            if (isLocBook) {
+                                const locSettingsBtn = folderHdr.querySelector('.rt-loc-settings-btn');
+                                if (locSettingsBtn) {
+                                    locSettingsBtn.addEventListener('click', async (e) => {
+                                        e.stopPropagation();
+                                        const ctx = SillyTavern.getContext();
+                                        if (!ctx.callGenericPopup) return;
+                                        const curS = getSettings();
+                                        const popupHtml = `<div style="padding:16px;width:320px;text-align:left;font-family:var(--rt-font, system-ui, sans-serif);">
+                                    <div style="font-size:16px;font-weight:bold;color:#5eb8d4;margin-bottom:16px;">⚙️ Location Settings</div>
+                                    <div style="margin-bottom:6px;display:flex;align-items:center;gap:10px;">
+                                        <label style="font-size:12px;color:rgba(255,255,255,0.7);flex:1;">Show Location Images</label>
+                                        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                                            <input type="checkbox" id="rt-loc-images" ${!!curS.locationImages ? 'checked' : ''}
+                                                style="width:16px;height:16px;accent-color:#5eb8d4;cursor:pointer;">
+                                            <span style="font-size:11px;color:rgba(255,255,255,0.5);">${!!curS.locationImages ? 'Enabled' : 'Disabled'}</span>
+                                        </label>
+                                    </div>
+                                    <div style="font-size:10px;color:rgba(255,255,255,0.35);">When disabled, locations use the plain tree list without thumbnails or scene detail popups. Location auto-generation is turned off.</div>
+                                </div>`;
+
+                                        let newLocImages = !!curS.locationImages;
+                                        setTimeout(() => {
+                                            const locEl = document.getElementById('rt-loc-images');
+                                            if (locEl) {
+                                                locEl.addEventListener('change', () => {
+                                                    newLocImages = locEl.checked;
+                                                    if (locEl.nextElementSibling) locEl.nextElementSibling.textContent = newLocImages ? 'Enabled' : 'Disabled';
+                                                });
+                                            }
+                                        }, 0);
+
+                                        const result = await ctx.callGenericPopup(popupHtml, ctx.POPUP_TYPE?.CONFIRM ?? 3, '', {
+                                            okButton: 'Save', cancelButton: 'Cancel', wide: false,
+                                        });
+
+                                        if (result) {
+                                            const updS = getSettings();
+                                            applyLocationImageSetting(updS, newLocImages);
+                                            saveSettings();
+                                            toastr['success']('Location settings saved.', 'Location Settings');
+                                            await refreshLorebookAgentViewsNow({ forceLayoutRefresh: true });
                                         }
                                     });
                                 }
@@ -6322,7 +6849,161 @@ function createPanel() {
                                     const popupOpts = { okButton: 'Close', cancelButton: false, wide: true, large: true };
                                     await ctx.callGenericPopup(popupDom, ctx.POPUP_TYPE?.TEXT ?? 1, '', popupOpts);
                                 };
+                                globalThis._rpgAgentOpenNpcDetail = openNpcDetailPopup;
+                                globalThis._rpgAgentParseRelationship = parseRelationship;
 
+                            }
+
+                            // ════════════════════════════════════════════════════════════
+                            //  LOCATION HELPERS (tree view + detail popup)
+                            // ════════════════════════════════════════════════════════════
+                            /** @type {((node: any) => string)|null} */
+                            let getLocationPathFromNode = null;
+                            /** @type {((content: string) => string)|null} */
+                            let getLocationDescription = null;
+                            /** @type {((item: any, fullPath: string) => Promise<void>)|null} */
+                            let openLocationDetailPopup = null;
+
+                            if (isLocBook) {
+                                getLocationPathFromNode = (node) => {
+                                    const parts = [];
+                                    let curr = node;
+                                    while (curr && curr.name) {
+                                        parts.unshift(curr.name);
+                                        curr = curr.parent;
+                                    }
+                                    return buildLocationPath(parts);
+                                };
+
+                                getLocationDescription = (content) => {
+                                    if (!content) return '';
+                                    const cleanContent = content.replace(/\[\/?CORE\]/gi, '');
+                                    const coreMatch = cleanContent.match(/(?:^|\n)\s*(?:\[CORE\])?\s*([\s\S]*?)(?=\n\s*(?:Atmosphere|Notable Features|History|Connections|Dangers|Resources):|$)/i);
+                                    if (coreMatch?.[1]?.trim()) {
+                                        return coreMatch[1].trim().substring(0, 260);
+                                    }
+                                    const lines = cleanContent.split('\n').map(l => l.trim())
+                                        .filter(l => l && !/^\[ID:/i.test(l));
+                                    return lines.slice(0, 2).join(' ').substring(0, 260);
+                                };
+
+                                openLocationDetailPopup = async (item, fullPath) => {
+                                    const ctx = SillyTavern.getContext();
+                                    if (!ctx.callGenericPopup) return;
+
+                                    const normPath = normalizeLocationPath(fullPath || item.label);
+                                    const imageMeta = resolveLocationImageWithMeta(normPath);
+                                    const portraitSrc = imageMeta.src;
+                                    const hideImage = !s.locationImages;
+
+                                    const renderLocPopupHeroInner = (src) => {
+                                        const imgOrPlaceholder = src
+                                            ? `<img src="${escapeHtml(src)}" alt="${escapeHtml(normPath)}">`
+                                            : `<div class="rt-loc-hero-placeholder">🗺️</div>`;
+                                        return `${imgOrPlaceholder}<div class="rt-loc-image-gen-overlay" title="${src ? 'Manage image' : 'Generate image'}" style="font-size:28px;">${src ? '⚙️' : '🎨'}</div>`;
+                                    };
+
+                                    const breadcrumb = normPath.split(' :: ').map(seg => escapeHtml(seg)).join(' <span style="opacity:0.45;">›</span> ');
+                                    const desc = getLocationDescription ? getLocationDescription(item.content) : '';
+                                    const sectionsInitialHtml = renderSectionsHtml(item.content)
+                                        || `<div style="font-size:13px;color:var(--SmartThemeBodyColor, inherit);opacity:0.55;font-style:italic;">${escapeHtml(desc) || 'No structured sections found.'}</div>`;
+
+                                    const activeStyle = item.is_active
+                                        ? 'background:rgba(0,255,170,0.12);color:#00ffaa;border:1px solid rgba(0,255,170,0.25);'
+                                        : 'background:var(--SmartThemeBorderColor, rgba(128,128,128,0.1));color:var(--SmartThemeBodyColor, inherit);opacity:0.65;border:1px solid var(--SmartThemeBorderColor, rgba(128,128,128,0.2));';
+                                    const activeLabel = item.is_active ? '● Active' : '○ Inactive';
+
+                                    const popupDom = document.createElement('div');
+                                    popupDom.className = 'rt-loc-popup-root';
+                                    popupDom.innerHTML = `
+                                ${hideImage ? '' : `<div class="rt-loc-popup-hero-wrap">${renderLocPopupHeroInner(portraitSrc)}</div>`}
+                                <div class="rt-loc-popup-header">
+                                    <div class="rt-loc-popup-breadcrumb">${breadcrumb}</div>
+                                    <div class="rt-loc-popup-title-row">
+                                        <div class="rt-loc-popup-title">${escapeHtml(normPath.split(' :: ').pop() || normPath)}</div>
+                                        <div class="rt-loc-popup-actions">
+                                            <button class="rt-loc-popup-edit-btn menu_button" style="font-size:12px;padding:4px 12px;">✏️ Edit Text</button>
+                                        </div>
+                                    </div>
+                                    <span class="rt-loc-popup-status" style="${activeStyle}">${activeLabel}</span>
+                                </div>
+                                <div class="rt-loc-popup-body">
+                                    <div class="rt-loc-popup-view">
+                                        <div class="rt-loc-popup-sections">${sectionsInitialHtml}</div>
+                                    </div>
+                                    <div class="rt-loc-popup-edit" style="display:none;flex-direction:column;gap:10px;">
+                                        <textarea class="rt-loc-popup-textarea" spellcheck="false" style="width:100%;min-height:360px;box-sizing:border-box;background:var(--SmartThemeBlurTintColor, rgba(0,0,0,0.3));color:var(--SmartThemeBodyColor, inherit);border:1px solid rgba(94,184,212,0.35);border-radius:8px;padding:12px;font-family:monospace;font-size:13px;line-height:1.6;resize:vertical;"></textarea>
+                                        <div style="display:flex;gap:8px;justify-content:flex-end;">
+                                            <button class="rt-loc-popup-cancel-btn menu_button" style="font-size:12px;padding:5px 14px;">Cancel</button>
+                                            <button class="rt-loc-popup-save-btn menu_button" style="font-size:12px;padding:5px 18px;background:rgba(94,184,212,0.2);border-color:rgba(94,184,212,0.5);color:#5eb8d4;font-weight:bold;">💾 Save</button>
+                                        </div>
+                                    </div>
+                                </div>`;
+
+                                    const heroWrap = popupDom.querySelector('.rt-loc-popup-hero-wrap');
+                                    const viewPane = popupDom.querySelector('.rt-loc-popup-view');
+                                    const editPane = popupDom.querySelector('.rt-loc-popup-edit');
+                                    const textarea = /** @type {HTMLTextAreaElement} */ (popupDom.querySelector('.rt-loc-popup-textarea'));
+                                    const editBtn = popupDom.querySelector('.rt-loc-popup-edit-btn');
+                                    const cancelBtn = popupDom.querySelector('.rt-loc-popup-cancel-btn');
+                                    const saveBtn = /** @type {HTMLButtonElement} */ (popupDom.querySelector('.rt-loc-popup-save-btn'));
+
+                                    if (heroWrap) {
+                                        heroWrap.addEventListener('click', async (e) => {
+                                            e.stopPropagation();
+                                            const refreshPopupHero = () => {
+                                                const meta = resolveLocationImageWithMeta(normPath);
+                                                heroWrap.innerHTML = renderLocPopupHeroInner(meta.src);
+                                                if (typeof refreshManifest === 'function') refreshManifest();
+                                            };
+                                            await showLocationImageSettingsMenu(normPath, refreshPopupHero, item.content || '');
+                                        });
+                                    }
+
+                                    if (editBtn && viewPane && editPane && textarea) {
+                                        editBtn.addEventListener('click', () => {
+                                            textarea.value = item.content || '';
+                                            viewPane.style.display = 'none';
+                                            editPane.style.display = 'flex';
+                                        });
+                                        cancelBtn?.addEventListener('click', () => {
+                                            editPane.style.display = 'none';
+                                            viewPane.style.display = 'block';
+                                        });
+                                        saveBtn?.addEventListener('click', async () => {
+                                            if (isRouterRunning()) {
+                                                toastr.warning('Agent is running — wait for it to finish before saving.', 'Lorebook Agent');
+                                                return;
+                                            }
+                                            saveBtn.disabled = true;
+                                            const ok = await updateLorebookEntry(item.id, {
+                                                content: textarea.value,
+                                                key: item.keys,
+                                                comment: item.label,
+                                            });
+                                            if (ok) {
+                                                item.content = textarea.value;
+                                                editPane.style.display = 'none';
+                                                viewPane.style.display = 'block';
+                                                const sectionsDiv = popupDom.querySelector('.rt-loc-popup-sections');
+                                                if (sectionsDiv) {
+                                                    sectionsDiv.innerHTML = renderSectionsHtml(item.content)
+                                                        || `<div style="font-size:13px;opacity:0.55;font-style:italic;">${escapeHtml(getLocationDescription(item.content))}</div>`;
+                                                }
+                                                toastr.success('Location entry saved.', 'Lorebook Agent');
+                                                await refreshManifest();
+                                            } else {
+                                                toastr.error('Save failed.', 'Lorebook Agent');
+                                            }
+                                            saveBtn.disabled = false;
+                                        });
+                                    }
+
+                                    await ctx.callGenericPopup(popupDom, ctx.POPUP_TYPE?.TEXT ?? 1, '', {
+                                        okButton: 'Close', cancelButton: false, wide: true, large: true,
+                                    });
+                                };
+                                globalThis._rpgAgentOpenLocationDetail = openLocationDetailPopup;
                             }
 
                             // ════════════════════════════════════════════════════════════
@@ -6715,9 +7396,12 @@ function createPanel() {
                                     let tokensHtml = '';
                                     let cleanHtml = '';
                                     let viewNpcHtml = '';
+                                    let viewLocHtml = '';
+                                    let locThumbHtml = '';
                                     let relStatsHtml = '';
                                     let editHtml = '';
                                     let deleteHtml = '';
+                                    let locFullPath = '';
 
                                     const isWorldBook = bookNameLower.endsWith('_world') || bookNameLower === 'world';
 
@@ -6730,6 +7414,15 @@ function createPanel() {
                                                 relStatsHtml = renderCompactRelStats(node.item.id);
                                             }
                                         }
+                                        if (useLocImageView && getLocationPathFromNode) {
+                                            locFullPath = getLocationPathFromNode(node);
+                                            const imageMeta = resolveLocationImageWithMeta(locFullPath);
+                                            const thumbInner = imageMeta.src
+                                                ? `<img src="${escapeHtml(imageMeta.src)}" alt="">`
+                                                : `<span class="rt-loc-thumb-placeholder">🗺️</span>`;
+                                            locThumbHtml = `<div class="rt-loc-thumb-wrap" title="${imageMeta.src ? 'Manage location image' : 'Set location image'}">${thumbInner}</div>`;
+                                            viewLocHtml = `<button class="rt-agent-entry-view-loc" data-id="${node.item.id}" style="background:rgba(94,184,212,0.12); border:1px solid rgba(94,184,212,0.35); border-radius:3px; color:#5eb8d4; cursor:pointer; font-size:10px; padding:1px 5px; flex-shrink:0; line-height:1.2;" title="View location detail"><i class="fa-solid fa-map"></i></button>`;
+                                        }
                                         cleanHtml = !isWorldBook ? `<button class="rt-agent-entry-clean" data-id="${node.item.id}" style="background:none; border:none; color:#e67e22; cursor:pointer; font-size:9px; padding:1px 3px; flex-shrink:0;" title="Run targeted cleanup for this entry"><i class="fa-solid fa-broom"></i></button>` : '';
                                         editHtml = `<button class="rt-agent-entry-edit" data-id="${node.item.id}" style="background:none; border:none; color:var(--rt-accent); cursor:pointer; font-size:9px; padding:1px 3px; flex-shrink:0;" title="Edit this lore entry"><i class="fa-solid fa-pen-to-square"></i></button>`;
                                         deleteHtml = `<button class="rt-agent-entry-delete" data-id="${node.item.id}" style="background:none; border:none; color:var(--rt-text-muted); cursor:pointer; font-size:9px; padding:1px 3px; flex-shrink:0;" title="Delete entry"><i class="fa-solid fa-trash"></i></button>`;
@@ -6737,7 +7430,9 @@ function createPanel() {
 
                                     entryHdr.innerHTML = `
                             ${chevronHtml}
+                            ${locThumbHtml}
                             ${viewNpcHtml}
+                            ${viewLocHtml}
                             ${statusDotHtml}
                             <span class="rt-agent-entry-label-span" style="${labelStyle}">${escapeHtml(node.name)}${isDirty ? ' <span style="color:#ffa500; font-size:8px;" title="Unsaved edits">●</span>' : ''}</span>
                             ${relStatsHtml}
@@ -6752,6 +7447,40 @@ function createPanel() {
                                         viewNpcBtn.addEventListener('click', (e) => {
                                             e.stopPropagation();
                                             openNpcDetailPopup(node.item, parseRelationship(node.item.id));
+                                        });
+                                    }
+
+                                    const viewLocBtn = entryHdr.querySelector('.rt-agent-entry-view-loc');
+                                    if (viewLocBtn && node.item && openLocationDetailPopup && locFullPath) {
+                                        viewLocBtn.addEventListener('click', (e) => {
+                                            e.stopPropagation();
+                                            openLocationDetailPopup(node.item, locFullPath);
+                                        });
+                                    }
+
+                                    const locThumbWrap = entryHdr.querySelector('.rt-loc-thumb-wrap');
+                                    if (locThumbWrap && node.item && locFullPath) {
+                                        locThumbWrap.addEventListener('click', async (e) => {
+                                            e.stopPropagation();
+                                            await showLocationImageSettingsMenu(locFullPath, () => refreshManifest(), node.item.content || '');
+                                        });
+                                        locThumbWrap.addEventListener('dragover', (ev) => { ev.preventDefault(); locThumbWrap.classList.add('rt-loc-thumb-drag'); });
+                                        locThumbWrap.addEventListener('dragleave', () => { locThumbWrap.classList.remove('rt-loc-thumb-drag'); });
+                                        locThumbWrap.addEventListener('drop', async (ev) => {
+                                            ev.preventDefault();
+                                            ev.stopPropagation();
+                                            locThumbWrap.classList.remove('rt-loc-thumb-drag');
+                                            const file = ev.dataTransfer?.files?.[0];
+                                            if (!file || !file.type.startsWith('image/')) return;
+                                            try {
+                                                const dataUrl = await fileToDataUrl(file);
+                                                const scaled = await scaleImageToLandscape(dataUrl);
+                                                await applyLocationImageData(locFullPath, scaled);
+                                                toastr.success(`Location image applied for ${locFullPath}`, 'Location Image');
+                                                await refreshManifest();
+                                            } catch (err) {
+                                                toastr.error('Failed to apply location image.', 'Location Image');
+                                            }
                                         });
                                     }
 
@@ -6796,7 +7525,7 @@ function createPanel() {
 
                                     if (node.item) {
                                         entryHdr.addEventListener('click', (e) => {
-                                            if (/** @type {HTMLElement} */ (e.target).closest('.rt-agent-subfolder-toggle, .rt-agent-entry-delete, .rt-agent-entry-clean, .rt-agent-entry-edit, .rt-agent-entry-view-npc')) return;
+                                            if (/** @type {HTMLElement} */ (e.target).closest('.rt-agent-subfolder-toggle, .rt-agent-entry-delete, .rt-agent-entry-clean, .rt-agent-entry-edit, .rt-agent-entry-view-npc, .rt-agent-entry-view-loc, .rt-loc-thumb-wrap')) return;
                                             const opening = entryBody.style.display === 'none';
                                             entryBody.style.display = opening ? 'flex' : 'none';
                                             entryHdr.style.background = opening ? 'rgba(255,255,255,0.05)' : '';
@@ -6854,7 +7583,12 @@ function createPanel() {
                         const existingLoading = list.querySelector('#rt-agent-manifest-loading');
                         if (existingLoading) existingLoading.innerHTML = '<span style="color:#ff5555;">Error loading manifest.</span>';
                     }
-                }, 10);
+                };
+                if (_manifestBypassImmersion) {
+                    await lorebookRenderTask();
+                } else {
+                    setTimeout(() => { void lorebookRenderTask(); }, 10);
+                }
             } catch (e) {
                 if (gen !== _manifestRenderGen) return;
                 console.error('[RPG Tracker] refreshManifest failed:', e);
@@ -7908,6 +8642,20 @@ Rules:
         const refreshBtn = agentPanel.querySelector('#rt-agent-manifest-refresh');
         if (refreshBtn) refreshBtn.addEventListener('click', () => refreshManifest('manual-button'));
 
+        const viewModeSwitch = agentPanel.querySelector('#rt-agent-view-mode-switch');
+        if (viewModeSwitch) {
+            viewModeSwitch.addEventListener('click', async (e) => {
+                const btn = e.target.closest('.rt-agent-view-mode-btn');
+                if (!btn || btn.classList.contains('rt-agent-view-mode-btn-active')) return;
+                e.stopPropagation();
+                const s = getSettings();
+                s.agentImmersionMode = btn.id === 'rt-agent-view-mode-visualization';
+                saveSettings(true);
+                await refreshLorebookAgentViewsNow({ forceLayoutRefresh: true });
+            });
+        }
+        syncAgentImmersionUi();
+
         const activateBooksBtn = /** @type {HTMLButtonElement|null} */ (agentPanel.querySelector('#rt-agent-activate-books'));
         if (activateBooksBtn) activateBooksBtn.addEventListener('click', async () => {
             activateBooksBtn.disabled = true;
@@ -8830,6 +9578,9 @@ Rules:
             try { await _ctx.updateWorldInfoList(); } catch (_) { }
         }
         await renderRouterUI();
+        if (typeof refreshAgentManifest === 'function') {
+            await refreshAgentManifest();
+        }
         updateUndoLabel();
         syncLastRunDisplay();
     });
@@ -10312,10 +11063,11 @@ async function runPortraitMigrationIfNeeded() {
             saveSettings();
         });
 
-        $('#rpg_tracker_enable_portraits').prop('checked', settings.enablePortraits !== false).on('change', function () {
+        $('#rpg_tracker_enable_portraits').prop('checked', settings.enablePortraits !== false).on('change', async function () {
             settings.enablePortraits = !!$(this).prop('checked');
             saveSettings();
             refreshRenderedView();
+            await refreshLorebookAgentViewsNow({ forceLayoutRefresh: true });
         });
 
         $('#rpg_portrait_generator_source').val(settings.portraitGeneratorSource || 'native').on('change', function () {
@@ -10354,6 +11106,28 @@ async function runPortraitMigrationIfNeeded() {
                 forceCheckAutoGenerations(refreshAll);
             }
         });
+
+        $('#rpg_tracker_portrait_auto_locations').prop('checked', !!settings.portraitAutoGenerateLocations).on('change', function () {
+            if (!settings.locationImages || settings.portraitAutoGenerateSceneView) return;
+            applyLocationImageAutoMode(settings, { lorebookLocations: !!$(this).prop('checked') });
+            saveSettings();
+            if (settings.portraitAutoGenerateLocations) {
+                forceCheckAutoGenerations(refreshAll);
+            }
+        });
+
+        $('#rpg_tracker_portrait_auto_scene_view').prop('checked', !!settings.portraitAutoGenerateSceneView).on('change', function () {
+            applyLocationImageAutoMode(settings, { realTimeMode: !!$(this).prop('checked') });
+            saveSettings();
+            void refreshLorebookAgentViewsNow({ forceLayoutRefresh: true });
+        });
+
+        $('#rpg_portrait_regenerate_visited_locations').prop('checked', !!settings.portraitRegenerateVisitedLocations).on('change', function () {
+            if (!settings.portraitAutoGenerateSceneView) return;
+            syncLocationImageDependentUi(settings);
+            saveSettings();
+        });
+        syncLocationImageDependentUi(settings);
 
         $('#rpg_tracker_pollinations_key').val(settings.pollinationsApiKey || '').on('change', function () {
             settings.pollinationsApiKey = String($(this).val()).trim();
@@ -10526,7 +11300,8 @@ async function runPortraitMigrationIfNeeded() {
             const embedded = countEmbeddedPortraitDataUrls(s);
             const fileRefs = [...collectAllPortraitRefs(s)].filter(isManagedPortraitPath).length;
             const totalMaps = Object.keys(s.customPortraits || {}).length
-                + Object.values(s.chatStates || {}).reduce((n, cs) => n + Object.keys(cs.customPortraits || {}).length, 0);
+                + Object.keys(s.customLocationImages || {}).length
+                + Object.values(s.chatStates || {}).reduce((n, cs) => n + Object.keys(cs.customPortraits || {}).length + Object.keys(cs.customLocationImages || {}).length, 0);
             if (totalMaps === 0 && embedded === 0 && fileRefs === 0) {
                 return toastr['info']('No portraits to purge.', 'RPG Tracker');
             }
@@ -10938,6 +11713,27 @@ async function runPortraitMigrationIfNeeded() {
             saveSettings();
         });
 
+        $('#rpg_portrait_location_system_prompt').val(settings.portraitLocationSystemPrompt || '').on('input', function () {
+            settings.portraitLocationSystemPrompt = String($(this).val() || '');
+            saveSettings();
+        });
+
+        $('#rpg_portrait_location_include_present_npcs').prop('checked', !!settings.portraitLocationIncludePresentNpcs).on('change', function () {
+            const s = getSettings();
+            if (s.portraitAutoGenerateSceneView) {
+                syncLocationImageDependentUi(s);
+                return;
+            }
+            const enabled = !!$(this).prop('checked');
+            s.portraitLocationIncludePresentNpcs = enabled;
+            // Always swap the Location Scene Prompt with the matching factory default —
+            // this toggle exists to change character-inclusion wording in that prompt.
+            syncPortraitLocationPromptForNpcToggle(s, enabled, { force: true });
+            saveSettings(true);
+        });
+        // Align any leftover legacy factory prompt with the current toggle on load.
+        syncPortraitLocationPromptForNpcToggle(settings, !!settings.portraitLocationIncludePresentNpcs);
+
         $('#rpg_portrait_npc_btn_reset_prompt').on('click', function () {
             if (!confirm('Reset NPC/PC Portrait Prompt to default?')) return;
 
@@ -10970,6 +11766,23 @@ async function runPortraitMigrationIfNeeded() {
             $('#rpg_portrait_character_system_prompt').val(freshDefault);
             saveSettings();
             toastr['success']('Character/Party/Combat Portrait Prompt reset to default.', 'RPG Tracker');
+        });
+
+        $('#rpg_portrait_location_btn_reset_prompt').on('click', function () {
+            if (!confirm('Reset Location Scene Prompt to default?')) return;
+
+            const { extensionSettings } = SillyTavern.getContext();
+            if (extensionSettings[MODULE_NAME]) {
+                delete extensionSettings[MODULE_NAME].portraitLocationSystemPrompt;
+            }
+
+            const s = getSettings();
+            const freshDefault = getDefaultPortraitLocationSystemPrompt(!!s.portraitLocationIncludePresentNpcs);
+            s.portraitLocationSystemPrompt = freshDefault;
+
+            setPortraitLocationPromptTextarea(freshDefault);
+            saveSettings();
+            toastr['success']('Location Scene Prompt reset to default.', 'RPG Tracker');
         });
 
         $('#rpg_portrait_prompt_preset_save_btn').on('click', function () {
@@ -12606,13 +13419,29 @@ RULES:
             saveSettings();
         });
 
-        // NPC Settings Bindings
-        $('#rpg_tracker_npc_portraits').prop('checked', settings.npcPortraits !== false).on('change', async function () {
-            applyNpcPortraitSetting(settings, !!$(this).prop('checked'));
+        // NPC Settings Bindings — delegated so toggles stay live if settings HTML is re-injected.
+        $(document).off('change.rpgPortraitDisplay', '#rpg_tracker_npc_portraits, #rpg_tracker_location_images');
+        $(document).on('change.rpgPortraitDisplay', '#rpg_tracker_npc_portraits', async function () {
+            const s = getSettings();
+            applyNpcPortraitSetting(s, !!$(this).prop('checked'));
             saveSettings();
-            await refreshAgentManifestNow();
+            await refreshLorebookAgentViewsNow({ forceLayoutRefresh: true });
         });
+        $(document).on('change.rpgPortraitDisplay', '#rpg_tracker_location_images', async function () {
+            const s = getSettings();
+            if (s.portraitAutoGenerateSceneView && !$(this).prop('checked')) {
+                syncLocationImageDependentUi(s);
+                return;
+            }
+            applyLocationImageSetting(s, !!$(this).prop('checked'));
+            saveSettings();
+            await refreshLorebookAgentViewsNow({ forceLayoutRefresh: true });
+        });
+        $('#rpg_tracker_npc_portraits').prop('checked', settings.npcPortraits !== false);
         syncNpcPortraitDependentUi(settings);
+
+        $('#rpg_tracker_location_images').prop('checked', !!settings.locationImages);
+        syncLocationImageDependentUi(settings);
 
         $('#rpg_tracker_npc_major_words').val(settings.npcMajorWords ?? 25).on('change', function () {
             // Use 'change' instead of 'input' to only save once the user is done editing.
@@ -13609,7 +14438,27 @@ RULES:
             $('#rpg_tracker_portrait_auto_party').prop('checked', !!s.portraitAutoGenerateParty);
             $('#rpg_tracker_portrait_auto_enemies').prop('checked', !!s.portraitAutoGenerateEnemies);
             $('#rpg_tracker_portrait_auto_npcs').prop('checked', !!s.portraitAutoGenerateNpcs);
+            $('#rpg_tracker_portrait_auto_locations').prop('checked', !!s.portraitAutoGenerateLocations);
+            $('#rpg_tracker_portrait_auto_scene_view').prop('checked', !!s.portraitAutoGenerateSceneView);
+            $('#rpg_tracker_location_images').prop('checked', !!s.locationImages);
+            syncLocationImageDependentUi(s);
+            syncNpcPortraitDependentUi(s);
             $('#rpg_tracker_pollinations_key').val(s.pollinationsApiKey || '');
+
+            $('#rpg_portrait_connection_source').val(s.portraitConnectionSource || 'default');
+            $('#rpg_portrait_connection_profile').val(s.portraitConnectionProfileId || '');
+            $('#rpg_portrait_completion_preset').val(s.portraitCompletionPresetId || '');
+            $('#rpg_portrait_ollama_url').val(s.portraitOllamaUrl || 'http://localhost:11434');
+            $('#rpg_portrait_ollama_model').val(s.portraitOllamaModel || '');
+            $('#rpg_portrait_openai_url').val(s.portraitOpenaiUrl || '');
+            $('#rpg_portrait_openai_key').val(s.portraitOpenaiKey || '');
+            $('#rpg_portrait_openai_model').val(s.portraitOpenaiModel || '');
+            $('#rpg_portrait_openai_model_manual').val(s.portraitOpenaiModel || '');
+            $('#rpg_portrait_profile_group').toggle(s.portraitConnectionSource === 'profile');
+            $('#rpg_portrait_ollama_group').toggle(s.portraitConnectionSource === 'ollama');
+            $('#rpg_portrait_openai_group').toggle(s.portraitConnectionSource === 'openai');
+            $('#rpg_portrait_location_include_present_npcs').prop('checked', !!s.portraitLocationIncludePresentNpcs);
+            $('#rpg_portrait_location_system_prompt').val(s.portraitLocationSystemPrompt || getDefaultPortraitLocationSystemPrompt(!!s.portraitLocationIncludePresentNpcs));
 
             // Inventory/Core Prompt
             $('#rpg_tracker_inventory_worth_mode').val(s.inventoryWorthMode || 'hover');

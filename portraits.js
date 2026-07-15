@@ -1,4 +1,4 @@
-import { getSettings, getActiveChatId } from './state-manager.js';
+import { getSettings, getActiveChatId, getEffectiveRouterCampaignPrefix } from './state-manager.js';
 import { saveSettings } from './index.js';
 import { sendStateRequest } from './llm-client.js';
 import { parseMemoBlocks } from './renderer.js';
@@ -10,6 +10,7 @@ import {
     isManagedPortraitPath,
     purgeAllPortraitData,
     countPortraitPathRefs,
+    resolvePortraitDisplaySrc,
 } from './portrait-storage.js';
 
 // Read an image File as a full-resolution Base64 data URL
@@ -105,6 +106,23 @@ export const POLLINATIONS_IMAGE_MODELS = [
 ];
 
 // ── AI Portrait Prompt Generation ──────────────────────────────────────────────
+
+/** Connection overlay for portrait / location image prompt LLM calls. */
+export function getPortraitConnectionSettings(baseSettings) {
+    const s = baseSettings || getSettings();
+    return {
+        connectionSource: s.portraitConnectionSource ?? 'default',
+        connectionProfileId: s.portraitConnectionProfileId || '',
+        completionPresetId: s.portraitCompletionPresetId || '',
+        ollamaUrl: s.portraitOllamaUrl || 'http://localhost:11434',
+        ollamaModel: s.portraitOllamaModel || '',
+        openaiUrl: s.portraitOpenaiUrl || '',
+        openaiKey: s.portraitOpenaiKey || '',
+        openaiModel: s.portraitOpenaiModel || '',
+        maxTokens: s.maxTokens,
+        debugMode: s.debugMode,
+    };
+}
 
 /**
  * Gathers context and calls the LLM to generate an image prompt for a character.
@@ -247,20 +265,7 @@ export async function generatePortraitPrompt(entityName) {
 
     const userPrompt = contextParts.join('\n\n---\n\n');
 
-    const portraitSettings = {
-        connectionSource: s.portraitConnectionSource ?? 'default',
-        connectionProfileId: s.portraitConnectionProfileId || '',
-        completionPresetId: s.portraitCompletionPresetId || '',
-        ollamaUrl: s.portraitOllamaUrl || 'http://localhost:11434',
-        ollamaModel: s.portraitOllamaModel || '',
-        openaiUrl: s.portraitOpenaiUrl || '',
-        openaiKey: s.portraitOpenaiKey || '',
-        openaiModel: s.portraitOpenaiModel || '',
-        maxTokens: s.maxTokens,
-        debugMode: s.debugMode,
-    };
-
-    const result = await sendStateRequest(portraitSettings, systemPrompt, userPrompt);
+    const result = await sendStateRequest(getPortraitConnectionSettings(s), systemPrompt, userPrompt);
     return (result || '').trim();
 }
 
@@ -318,22 +323,7 @@ export async function generateNpcPortraitPrompt(entityName, npcContent) {
 
     const userPrompt = contextParts.join('\n\n---\n\n');
 
-    // NPC lorebook portrait prompts use the Lorebook Agent AI, not the portrait AI,
-    // since the lorebook agent has the relevant NPC context and connection configured.
-    const lorebookAiSettings = {
-        connectionSource: s.routerConnectionSource ?? 'default',
-        connectionProfileId: s.routerConnectionProfileId || '',
-        completionPresetId: s.routerCompletionPresetId || '',
-        ollamaUrl: s.routerOllamaUrl || 'http://localhost:11434',
-        ollamaModel: s.routerOllamaModel || '',
-        openaiUrl: s.routerOpenaiUrl || '',
-        openaiKey: s.routerOpenaiKey || '',
-        openaiModel: s.routerOpenaiModel || '',
-        maxTokens: s.maxTokens,
-        debugMode: s.debugMode,
-    };
-
-    const result = await sendStateRequest(lorebookAiSettings, systemPrompt, userPrompt);
+    const result = await sendStateRequest(getPortraitConnectionSettings(s), systemPrompt, userPrompt);
     return (result || '').trim();
 }
 
@@ -1096,6 +1086,15 @@ export async function forceCheckAutoGenerations(refresh) {
             }
         }
     }
+
+    if (s.portraitAutoGenerateLocations && !s.portraitAutoGenerateSceneView && s.locationImages) {
+        const locEntries = await loadLocationLorebookEntries();
+        for (const entry of locEntries) {
+            const path = normalizeLocationPath(entry.label);
+            knownEntities.add(`LOC::${path.toUpperCase()}`);
+            triggerBackgroundLocationGeneration(path, refresh, entry.content);
+        }
+    }
 }
 
 /**
@@ -1151,6 +1150,7 @@ export async function checkAndTriggerAutoGenerations(refresh) {
         for (const entry of npcEntries) {
             knownEntities.add(entry.comment.trim().toUpperCase());
         }
+        await checkAndTriggerLocationAutoGenerations(refresh, { isFirstCheck: true });
         console.log('[RPG Tracker] checkAndTriggerAutoGenerations: knownEntities after first check:', Array.from(knownEntities));
         return;
     }
@@ -1204,6 +1204,449 @@ export async function checkAndTriggerAutoGenerations(refresh) {
     } else {
         for (const entry of npcEntries) {
             knownEntities.add(entry.comment.trim().toUpperCase());
+        }
+    }
+
+    await checkAndTriggerLocationAutoGenerations(refresh, { isFirstCheck: false });
+}
+
+// ── Location images (hierarchical lore paths) ─────────────────────────────────
+
+/** Normalize a location path to `Segment :: Segment` form. */
+export function normalizeLocationPath(path) {
+    if (!path) return '';
+    return path.split('::').map(p => p.trim()).filter(Boolean).join(' :: ');
+}
+
+/** Build a location path from an array of hierarchy segments. */
+export function buildLocationPath(parts) {
+    if (!Array.isArray(parts)) return normalizeLocationPath(parts);
+    return parts.map(p => String(p || '').trim()).filter(Boolean).join(' :: ');
+}
+
+/**
+ * Resolve a location image for the exact path only (no parent fallback).
+ * @param {string} fullPath
+ * @returns {{ src: string, resolvedPath: string }}
+ */
+export function resolveLocationImageWithMeta(fullPath) {
+    const s = getSettings();
+    const norm = normalizeLocationPath(fullPath);
+    const src = s.customLocationImages?.[norm];
+    return {
+        src: src ? resolvePortraitDisplaySrc(src) : '',
+        resolvedPath: norm,
+    };
+}
+
+/** @param {string} normPath Normalized full path */
+export function getAncestorLocationPaths(normPath) {
+    const parts = normalizeLocationPath(normPath).split(' :: ').filter(Boolean);
+    const ancestors = [];
+    for (let i = parts.length - 1; i >= 1; i--) {
+        ancestors.push(parts.slice(0, i).join(' :: '));
+    }
+    return ancestors;
+}
+
+/** @param {string} path */
+export function resolveLocationImage(path) {
+    return resolveLocationImageWithMeta(path).src;
+}
+
+/** @param {string} path */
+export function hasLocationImage(path) {
+    const s = getSettings();
+    const norm = normalizeLocationPath(path);
+    return !!(s.customLocationImages && s.customLocationImages[norm]);
+}
+
+/**
+ * @param {string} locationPath Full hierarchical path
+ * @param {string|null} src Image URL, data URL, managed path, or null to clear
+ */
+export async function applyLocationImageData(locationPath, src) {
+    const s = getSettings();
+    if (!s.customLocationImages) s.customLocationImages = {};
+    const normPath = normalizeLocationPath(locationPath);
+    const chatId = getActiveChatId();
+    const previous = s.customLocationImages[normPath];
+    const storageKey = `loc__${normPath}`;
+
+    if (!src) {
+        delete s.customLocationImages[normPath];
+        if (previous && isManagedPortraitPath(previous) && countPortraitPathRefs(s, previous) === 0) {
+            await deletePortraitFile(previous);
+        }
+    } else {
+        const stored = await persistPortraitSrc(src, chatId, storageKey);
+        s.customLocationImages[normPath] = stored;
+
+        if (s.chatLinkEnabled && chatId && s.chatStates?.[chatId]?.customLocationImages) {
+            s.chatStates[chatId].customLocationImages[normPath] = stored;
+        }
+
+        if (previous && previous !== stored && isManagedPortraitPath(previous) && countPortraitPathRefs(s, previous) === 0) {
+            await deletePortraitFile(previous);
+        }
+    }
+    await saveSettings(true);
+}
+
+/** Scale/crop an image to a 16:9 landscape JPEG data URL. */
+export function scaleImageToLandscape(dataUrl, width = 768, height = 432) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            const dstAspect = width / height;
+            const srcAspect = img.width / img.height;
+            let sx = 0;
+            let sy = 0;
+            let sw = img.width;
+            let sh = img.height;
+            if (srcAspect > dstAspect) {
+                sh = img.height;
+                sw = sh * dstAspect;
+                sx = (img.width - sw) / 2;
+            } else {
+                sw = img.width;
+                sh = sw / dstAspect;
+                sy = (img.height - sh) / 2;
+            }
+            ctx.drawImage(img, sx, sy, sw, sh, 0, 0, width, height);
+            resolve(canvas.toDataURL('image/jpeg', 0.85));
+        };
+        img.onerror = reject;
+        img.src = dataUrl;
+    });
+}
+
+/**
+ * @returns {Promise<Map<string, { content: string }>>}
+ */
+async function loadLocationLorebookMap() {
+    const ctx = SillyTavern.getContext();
+    const map = new Map();
+    if (!ctx.chatId) return map;
+
+    const prefix = getEffectiveRouterCampaignPrefix(ctx.chatId);
+    const bookName = prefix ? `${prefix}_Locations` : 'Locations';
+    try {
+        if (typeof ctx.updateWorldInfoList === 'function') {
+            await ctx.updateWorldInfoList();
+        }
+        const book = await ctx.loadWorldInfo(bookName);
+        if (!book?.entries) return map;
+        for (const entry of Object.values(book.entries)) {
+            const label = normalizeLocationPath((entry.comment || '').trim());
+            if (label) map.set(label, { content: entry.content || '' });
+        }
+    } catch (err) {
+        console.error('[RPG Tracker] loadLocationLorebookMap error:', err);
+    }
+    return map;
+}
+
+/**
+ * Last N narrator/assistant chat outputs (excludes user messages).
+ * @param {object} ctx
+ * @param {number} [count]
+ * @returns {string}
+ */
+function formatRecentNarratorOutputs(ctx, count = 2) {
+    if (!ctx?.chat?.length || count <= 0) return '';
+    const outputs = [];
+    for (let i = ctx.chat.length - 1; i >= 0 && outputs.length < count; i--) {
+        const m = ctx.chat[i];
+        if (m.is_system || m.is_user) continue;
+        const text = (m.mes || m.content || '').trim();
+        if (!text) continue;
+        outputs.unshift(m);
+    }
+    if (!outputs.length) return '';
+    return outputs.map(m => {
+        const name = m.name || 'Narrator';
+        const text = (m.mes || m.content || '').trim();
+        return `${name}:\n${text}`;
+    }).join('\n\n');
+}
+
+/**
+ * Linked Player Character for the active chat (Campaign Records PC card).
+ * @param {object} [settings]
+ * @param {object} [ctx]
+ * @returns {{ name: string, bio: string }|null}
+ */
+export function getLinkedPlayerCharacter(settings, ctx) {
+    const s = settings || getSettings();
+    const c = ctx || SillyTavern.getContext();
+    const chatId = c.chatId || (typeof globalThis._rpgCurrentChatId === 'function' ? globalThis._rpgCurrentChatId() : null);
+    if (!chatId || !s.chatStates?.[chatId]?.playerCharacter) return null;
+    const pc = s.chatStates[chatId].playerCharacter;
+    const name = String(pc.name || '').trim();
+    if (!name) return null;
+    return { name, bio: String(pc.bio || '').trim() };
+}
+
+/** @param {string} label */
+function normalizeCharacterLabel(label) {
+    return String(label || '').replace(/\s*\(.*?\)/g, '').trim().toLowerCase();
+}
+
+/**
+ * NPCs currently active in Lorebook Agent memory (activeRouterKeys).
+ * @param {object} [settings]
+ * @returns {Promise<Array<{ label: string, content: string }>>}
+ */
+async function loadPresentNpcsFromActiveKeys(settings) {
+    const s = settings || getSettings();
+    const ctx = SillyTavern.getContext();
+    const activeKeys = s.activeRouterKeys || [];
+    if (!activeKeys.length) return [];
+
+    const needed = new Set();
+    for (const k of activeKeys) {
+        const [bookName] = k.split('::');
+        if (!bookName) continue;
+        const lower = bookName.toLowerCase();
+        if (lower.endsWith('_npcs') || lower.endsWith('_npc') || lower === 'npcs' || lower === 'npc') {
+            needed.add(bookName);
+        }
+    }
+    if (!needed.size) return [];
+
+    const books = {};
+    const loads = await Promise.all([...needed].map(async (bookName) => {
+        try {
+            return [bookName, await ctx.loadWorldInfo(bookName)];
+        } catch {
+            return [bookName, null];
+        }
+    }));
+    for (const [bookName, book] of loads) {
+        if (book) books[bookName] = book;
+    }
+
+    const npcs = [];
+    for (const k of activeKeys) {
+        const [bookName, uid] = k.split('::');
+        const lower = (bookName || '').toLowerCase();
+        if (!lower.endsWith('_npcs') && !lower.endsWith('_npc') && lower !== 'npcs' && lower !== 'npc') continue;
+        const entry = books[bookName]?.entries?.[uid];
+        if (!entry) continue;
+        const label = (entry.comment || entry.key?.[0] || '').trim();
+        if (!label) continue;
+        npcs.push({ label, content: (entry.content || '').trim() });
+    }
+    return npcs;
+}
+
+/**
+ * Player Character (always) plus optional active Lorebook NPCs for location scene prompts.
+ * @param {object} [settings]
+ * @param {object} [ctx]
+ * @returns {Promise<Array<{ label: string, content: string, isPlayerCharacter?: boolean }>>}
+ */
+async function loadPresentCharactersForLocationPrompt(settings, ctx) {
+    const s = settings || getSettings();
+    const c = ctx || SillyTavern.getContext();
+    /** @type {Array<{ label: string, content: string, isPlayerCharacter?: boolean }>} */
+    const present = [];
+
+    const pc = getLinkedPlayerCharacter(s, c);
+    if (pc) {
+        present.push({
+            label: `Player Character: ${pc.name}`,
+            content: pc.bio || '(No PC bio — infer appearance from recent narrator output and scene context.)',
+            isPlayerCharacter: true,
+        });
+    }
+
+    if (s.portraitLocationIncludePresentNpcs) {
+        const npcs = await loadPresentNpcsFromActiveKeys(s);
+        const pcNorm = pc ? normalizeCharacterLabel(pc.name) : '';
+        for (const npc of npcs) {
+            if (pcNorm && normalizeCharacterLabel(npc.label) === pcNorm) continue;
+            present.push(npc);
+        }
+    }
+
+    return present;
+}
+
+/**
+ * Generates an image prompt for a location lorebook entry.
+ * Parent locations in the hierarchy are included as visual continuity guides, not substitutes.
+ * @param {string} locationPath
+ * @param {string} locContent
+ * @returns {Promise<string>}
+ */
+export async function generateLocationImagePrompt(locationPath, locContent) {
+    const s = getSettings();
+    const ctx = SillyTavern.getContext();
+    const normPath = normalizeLocationPath(locationPath);
+
+    let contextParts = [`Location Path: ${normPath}`];
+    if (locContent && locContent.trim()) {
+        contextParts.push(`Location Lorebook Entry (PRIMARY — depict this specific place):\n${locContent.trim()}`);
+    }
+
+    const loreMap = await loadLocationLorebookMap();
+    const ancestors = getAncestorLocationPaths(normPath);
+    if (ancestors.length > 0) {
+        const parentBlocks = [];
+        for (let i = 0; i < ancestors.length; i++) {
+            const ancestorPath = ancestors[i];
+            const lore = loreMap.get(ancestorPath);
+            const hasArt = hasLocationImage(ancestorPath);
+            if (!lore?.content && !hasArt) continue;
+            const role = i === 0 ? 'Immediate parent' : 'Ancestor';
+            let block = `${role}: "${ancestorPath}"`;
+            if (lore?.content) {
+                block += `\n${lore.content.trim().substring(0, 900)}`;
+            }
+            if (hasArt) {
+                block += `\n(Reference scene art exists for this parent — match its palette, architecture, era, materials, and atmosphere.)`;
+            }
+            parentBlocks.push(block);
+        }
+        if (parentBlocks.length > 0) {
+            contextParts.push(
+                `Parent Location Chain (style/theme guides only — generate a DISTINCT image for "${normPath}", not a duplicate of a parent):\n${parentBlocks.join('\n\n')}`,
+            );
+        }
+    }
+
+    try {
+        const narratorBlock = formatRecentNarratorOutputs(ctx, 2);
+        if (narratorBlock) {
+            contextParts.push(`Recent Narrator Output (last 2 replies — use for mood, staging, and moment):\n${narratorBlock.substring(0, 6000)}`);
+        }
+    } catch { /* ignore */ }
+
+    try {
+        const presentCharacters = await loadPresentCharactersForLocationPrompt(s, ctx);
+        if (presentCharacters.length > 0) {
+            const charBlocks = presentCharacters.map(ch =>
+                `### ${ch.label}\n${ch.content || '(No lore content — infer appearance from name and scene context.)'}`,
+            );
+            contextParts.push(
+                `Characters Present Now (include in the scene):\n${charBlocks.join('\n\n')}`,
+            );
+        }
+    } catch { /* ignore */ }
+
+    try {
+        const persona = ctx.substituteParams?.('{{persona}}') || '';
+        if (persona.trim()) {
+            contextParts.push(`User Persona (for art style context):\n${persona.trim()}`);
+        }
+    } catch { /* ignore */ }
+
+    try {
+        const charId = ctx.characterId;
+        const charData = ctx.characters?.[charId];
+        if (charData?.description) {
+            contextParts.push(`Narrator Card Description (for world context):\n${charData.description.substring(0, 1500)}`);
+        }
+    } catch { /* ignore */ }
+
+    const leafName = normPath.split(' :: ').pop() || normPath;
+    const systemPrompt = (s.portraitLocationSystemPrompt || '')
+        .replace(/\{\{name\}\}/g, leafName)
+        .replace(/\{\{path\}\}/g, normPath)
+        .replace(/\{\{wordtarget\}\}/g, String(s.portraitPromptWordTarget || 200));
+
+    const userPrompt = contextParts.join('\n\n---\n\n');
+
+    const result = await sendStateRequest(getPortraitConnectionSettings(s), systemPrompt, userPrompt);
+    return (result || '').trim();
+}
+
+const activeLocationGenerations = new Set();
+
+/**
+ * @param {string} locationPath
+ * @param {function} refresh
+ * @param {string} [locContent]
+ * @param {{ forceReplace?: boolean, realtimeArrival?: boolean }} [opts]
+ */
+export function triggerBackgroundLocationGeneration(locationPath, refresh, locContent = '', opts = {}) {
+    const s = getSettings();
+    // Real-Time Mode: only Scene View arrival may auto-generate; block Lorebook Agent paths.
+    if (s.portraitAutoGenerateSceneView && !opts.realtimeArrival) return;
+
+    const normPath = normalizeLocationPath(locationPath);
+    if (!normPath) return;
+    const forceReplace = !!opts.forceReplace;
+    if (hasLocationImage(normPath) && !forceReplace) return;
+    if (activeLocationGenerations.has(normPath)) return;
+
+    activeLocationGenerations.add(normPath);
+    const leaf = normPath.split(' :: ').pop() || normPath;
+    toastr['info'](`${forceReplace ? 'Regenerating' : 'Auto-generating'} location image for ${leaf} in background...`, 'RPG Tracker');
+
+    (async () => {
+        try {
+            const prompt = await generateLocationImagePrompt(normPath, locContent);
+            if (!prompt) {
+                activeLocationGenerations.delete(normPath);
+                return;
+            }
+            const dataUrl = await generatePortraitDirect(prompt, normPath);
+            const scaled = await scaleImageToLandscape(dataUrl);
+            await applyLocationImageData(normPath, scaled);
+            toastr['success'](`${forceReplace ? 'Location image regenerated' : 'Location image auto-generated'} for ${leaf}!`, 'RPG Tracker');
+            if (typeof refresh === 'function') refresh();
+        } catch (err) {
+            console.error(`[RPG Tracker] Background location image generation failed for ${normPath}:`, err);
+            const errMsg = String(err.message || err);
+            toastr['error'](`Location image generation failed for "${leaf}": ${errMsg.substring(0, 120)}`, 'RPG Tracker');
+        } finally {
+            activeLocationGenerations.delete(normPath);
+        }
+    })();
+}
+
+/**
+ * Load location lorebook entries for auto-generation.
+ * @returns {Promise<Array<{label: string, content: string}>>}
+ */
+async function loadLocationLorebookEntries() {
+    const s = getSettings();
+    // Real-Time Mode owns location art; skip Lorebook Agent batch generation.
+    if (!s.portraitAutoGenerateLocations || s.portraitAutoGenerateSceneView || !s.locationImages) return [];
+
+    const map = await loadLocationLorebookMap();
+    return [...map.entries()].map(([label, { content }]) => ({ label, content }));
+}
+
+/**
+ * @param {function} refresh
+ * @param {{ isFirstCheck?: boolean }} [opts]
+ */
+export async function checkAndTriggerLocationAutoGenerations(refresh, opts = {}) {
+    const s = getSettings();
+    if (s.enablePortraits === false) return;
+    // Real-Time Mode: location images are created on Scene View arrival only.
+    if (!s.portraitAutoGenerateLocations || s.portraitAutoGenerateSceneView || !s.locationImages) return;
+
+    const locEntries = await loadLocationLorebookEntries();
+    if (opts.isFirstCheck) {
+        for (const entry of locEntries) {
+            knownEntities.add(`LOC::${normalizeLocationPath(entry.label).toUpperCase()}`);
+        }
+        return;
+    }
+
+    for (const entry of locEntries) {
+        const path = normalizeLocationPath(entry.label);
+        if (!hasLocationImage(path)) {
+            triggerBackgroundLocationGeneration(path, refresh, entry.content);
         }
     }
 }
