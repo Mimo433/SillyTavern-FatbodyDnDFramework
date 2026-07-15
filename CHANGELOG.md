@@ -2,6 +2,11 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [5.4.4] - 2026-07-15
+
+### Changed
+- **Random events + RollTheDice**: `<random_events>` instructs parallel batch rolls (occurrence + type). Tool schema now encourages multiple parallel invocations per turn instead of forbidding them.
+
 ## [5.4.3a] - 2026-07-15
 
 ### Changed

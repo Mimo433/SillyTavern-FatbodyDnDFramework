@@ -275,6 +275,10 @@ export function transformBaseSectionContent(tag, innerContent, settings) {
     const mods = settings.syspromptModules || {};
     const d100Mode = !!settings.diceD100Mode;
 
+    if (tag === 'random_events' && !(settings.rngEnabled && settings.diceFunctionTool)) {
+        innerContent = innerContent.replace(/\n- Issue both RollTheDice calls in one parallel batch[^\n]+/g, '');
+    }
+
     if (tag === 'relationship_tracking') {
         if (!settings.npcRelationshipBars) return '';
         return `<relationship_tracking>\n${buildRelationshipTrackingSysprompt(getNpcRelationshipMax(settings))}\n</relationship_tracking>`;

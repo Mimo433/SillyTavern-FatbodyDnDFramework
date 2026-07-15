@@ -293,7 +293,7 @@ export function registerDiceFunctionTool() {
         // Register d20 tool if enabled
         if (settings.rngToolD20) {
             const baseFormula = '1d20';
-            const formulaDescription = `A SINGLE dice formula to roll, e.g. "${baseFormula}", "2d6+3", "${baseFormula}+5". Supports one or more die groups joined by + or - (e.g. "${baseFormula}+1d4+2"), and keep/drop modifiers (e.g. "2d20kh1" for advantage, "2d20kl1" for disadvantage). Provide EXACTLY ONE formula string — do NOT separate multiple formulas with commas, and do NOT repeat/duplicate the same formula in one call. If you need more than one roll, call this tool again separately for each roll.`;
+            const formulaDescription = `A SINGLE dice formula to roll per invocation, e.g. "${baseFormula}", "2d6+3", "${baseFormula}+5". Supports one or more die groups joined by + or - (e.g. "${baseFormula}+1d4+2"), and keep/drop modifiers (e.g. "2d20kh1" for advantage, "2d20kl1" for disadvantage). Provide EXACTLY ONE formula string per call — do NOT comma-separate multiple formulas in one invocation. When several independent rolls are needed, issue multiple parallel RollTheDice invocations in the same turn (e.g. initiative for each combatant, or random-event occurrence + type).`;
 
             const rollDiceSchema = isLegacy ? {
                 type: 'object',
@@ -315,7 +315,7 @@ export function registerDiceFunctionTool() {
             registerFunctionTool({
                 name: 'RollTheDice',
                 displayName: isLegacy ? 'Dice Roll' : 'Dice Roll (with DC)',
-                description: 'Rolls the dice using the provided formula and returns the numeric result. Use when it is necessary to roll the dice to determine the outcome of an action or when the user requests it. The formula parameter must be a single valid dice expression (e.g. "1d20+3") — never a comma-separated list or multiple repeated formulas.',
+                description: 'Rolls the dice using the provided formula and returns the numeric result. Use when it is necessary to roll the dice to determine the outcome of an action or when the user requests it. Each invocation takes one formula (e.g. "1d20+3"). For multiple independent rolls, issue parallel invocations in the same turn — never comma-join formulas into one call.',
                 parameters: rollDiceSchema,
                 action: async (args) => {
                     const requestedFormula = args?.formula || (isLegacy ? '1d6' : '1d20');
@@ -348,7 +348,7 @@ export function registerDiceFunctionTool() {
         // Register d100 tool if enabled
         if (settings.rngToolD100) {
             const baseFormula = '1d100';
-            const formulaDescription = `A SINGLE dice formula to roll, e.g. "${baseFormula}", "2d6+3", "${baseFormula}+5". Supports one or more die groups joined by + or - (e.g. "${baseFormula}+1d4+2"), and keep/drop modifiers. Provide EXACTLY ONE formula string — do NOT separate multiple formulas with commas.`;
+            const formulaDescription = `A SINGLE dice formula to roll per invocation, e.g. "${baseFormula}", "2d6+3", "${baseFormula}+5". Supports one or more die groups joined by + or - (e.g. "${baseFormula}+1d4+2"), and keep/drop modifiers. Provide EXACTLY ONE formula string per call — do NOT comma-separate multiple formulas in one invocation. When several independent rolls are needed, issue multiple parallel RollTheDiceD100 invocations in the same turn.`;
 
             const rollDiceSchema = {
                 type: 'object',
@@ -363,7 +363,7 @@ export function registerDiceFunctionTool() {
             registerFunctionTool({
                 name: 'RollTheDiceD100',
                 displayName: 'Dice Roll d100 (with DC)',
-                description: 'Rolls a d100 (1-100) using the provided formula and returns the numeric result. Use for absolutely any percentage probability check, including combat mechanics (e.g. hit chance, evasion, critical hits), narrative checks (e.g. hacking success, persuasion odds), or environmental/situational hazard probabilities (e.g. a ship having a 25% failure chance of breaking down due to running low on fuel, weather shifts, random encounters, etc.). The dc parameter is the direct success/trigger percentage chance (e.g. 83 for an 83% chance). A result less than or equal to the DC (roll <= DC) indicates HIT/SUCCESS, and a result greater than the DC (roll > DC) indicates MISS/FAILURE. The formula parameter must be a single valid dice expression (e.g. "1d100").',
+                description: 'Rolls a d100 (1-100) using the provided formula and returns the numeric result. Use for percentage probability checks. Each invocation takes one formula (e.g. "1d100"). For multiple independent rolls, issue parallel invocations in the same turn. The dc parameter is the direct success/trigger percentage (roll ≤ dc = success).',
                 parameters: rollDiceSchema,
                 action: async (args) => {
                     const requestedFormula = args?.formula || '1d100';

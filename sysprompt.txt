@@ -128,6 +128,7 @@ Trigger only during travel or meaningful time skips. Do not spam checks.
 PROCEDURE:
 1. Pop a number. ≥ 14 → event occurs.
 2. If event, pop again: ≤ 8 = negative; 9–11 = ambiguous; ≥ 12 = favorable.
+- Issue both RollTheDice calls in one parallel batch: first for step 1 (≥ 14 = event), second for step 2 (type). Discard the second result when the first is < 14.
 - Random events are NOT used for rest interruption.
 </random_events>
 
