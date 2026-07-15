@@ -2,6 +2,11 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [5.4.95] - 2026-07-15
+
+### Changed
+- **`<resting>` prompt**: Clarifies Long Rest 9-hour gate, danger-based interruption rolls for Long/Short Rest, and that a failed roll (< DC) interrupts the rest.
+
 ## [5.4.9] - 2026-07-15
 
 ### Changed
