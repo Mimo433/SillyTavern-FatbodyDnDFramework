@@ -10399,7 +10399,7 @@ async function runPortraitMigrationIfNeeded() {
             registerDiceFunctionTool();
         });
 
-        $('#rpg_tracker_chat_link_enabled').on('change', function () {
+        $('#rpg_tracker_chat_link_enabled').prop('checked', !!settings.chatLinkEnabled).on('change', function () {
             const s = getSettings();
             const turningOn = !!$(this).prop('checked');
 
@@ -10422,6 +10422,8 @@ async function runPortraitMigrationIfNeeded() {
                 }
             }
         });
+
+        updateChatLinkUI();
 
         $('#rpg_tracker_clear_chat_states').on('click', function () {
             const s = getSettings();
@@ -13521,6 +13523,7 @@ RULES:
 
             // General toggles
             $('#rpg_tracker_enabled').prop('checked', !!s.enabled);
+            $('#rpg_tracker_chat_link_enabled').prop('checked', !!s.chatLinkEnabled);
             $('#rpg_tracker_debug').prop('checked', !!s.debugMode);
             $('#rpg_tracker_daynight_cycle').prop('checked', !!s.dayNightCycleEnabled);
             $('#rpg_tracker_auto_reset_prompts').prop('checked', !!s.autoResetPromptsOnUpdate);
