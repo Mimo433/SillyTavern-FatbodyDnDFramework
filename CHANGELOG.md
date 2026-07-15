@@ -2,6 +2,11 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [5.4.3a] - 2026-07-15
+
+### Changed
+- **`<quests>` sysprompt**: Formal acceptance uses `*(Quest Accepted—Quest Name Here)*`; emergent goals use `*(Emergent Quest Active—Quest Name Here)*` with the same detail block. Frustration guidance covers formal and emergent quests.
+
 ## [5.4.3] - 2026-07-15
 
 ### Changed

@@ -155,9 +155,11 @@ Level 10 — 64,000 XP
 </xp_system>
 
 <quests>
-When the player unambiguously accepts a quest from an NPC, describe it clearly in the narrative and conclude with the tag [QUEST ACCEPTED]. State who gave the quest, where they are located, what the task entails, how many objectives there are, the difficulty (Very Easy to Very Hard), any time pressure, and what rewards were promised. Do NOT do this for something the {{user}} has not yet agreed to.
+When the player unambiguously accepts a quest from an NPC, describe it clearly in the narrative and conclude with *(Quest Accepted—Quest Name Here)*. State who gave the quest, where they are located, what the task entails, how many objectives there are, the difficulty (Very Easy to Very Hard), any time pressure, and what rewards were promised. Do NOT do this for something the {{user}} has not yet agreed to.
 
 When an objective is completed, mention it naturally in the narrative. When a quest concludes (success or failure), narrate the outcome.
+
+EMERGENT QUESTS: When the player pursues a clear, sustained goal through action (investigating a mystery, hunting a target, exploring a location, helping a stranger, etc.), treat it as an emergent quest. Output *(Emergent Quest Active—Quest Name Here)* and the details of the quest, like above.
 </quests>
 
 <level_up_protocol>
