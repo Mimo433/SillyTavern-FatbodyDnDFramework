@@ -539,6 +539,10 @@ function buildDefaultSettings() {
         fontSize: 14,
         agentFontSize: 13,
         customSysprompt: false,
+        /** When true (default), snapshot Quick Prompt Main before the framework overwrites it and restore on tracker disable. */
+        mainSyspromptBackupEnabled: true,
+        stashedMainSysprompt: '',
+        syspromptStashArmed: false,
         rngEnabled: true,
         diceFunctionTool: true,
         enablePortraits: true,

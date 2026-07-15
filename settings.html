@@ -27,6 +27,25 @@
                         </label>
                         <button id="rpg_tracker_clear_chat_states" class="menu_button interactable" style="margin-top: 4px; margin-left: 4px; width: calc(100% - 4px); font-size: 0.9em;"><i class="fa-solid fa-trash-can"></i> Remove all chat links</button>
 
+                        <!-- MAIN PROMPT BACKUP -->
+                        <small style="display: block; margin-top: 10px; margin-bottom: 2px; font-weight: bold; opacity: 0.65; text-transform: uppercase; font-size: 0.7em; letter-spacing: 0.4px;">Main Prompt Backup</small>
+                        <div style="font-size: 0.78em; opacity: 0.65; line-height: 1.4; padding: 0 4px; margin-bottom: 6px;">
+                            When the State Tracker is on (and Custom Sysprompt Mode is off), the framework writes its system prompt to <b>Quick Prompt → Main</b>, replacing whatever was there. This backup saves that previous Main text so you can get it back — automatically before the first overwrite, and again when you disable the tracker with the <b>⏻</b> button on the tracker panel header (or by unchecking <b>Enable State Tracker</b> in settings). To jump back to your normal, non-D&amp;D RP, click <b>⏻</b> on the panel — your original Main prompt is restored right away, no profile switching. Use the buttons below anytime to refresh the saved copy (for example after editing Main yourself).
+                        </div>
+                        <label class="checkbox_label" style="padding-left: 4px;">
+                            <input id="rpg_main_sysprompt_backup_enabled" type="checkbox" />
+                            <span>Enable Main prompt backup &amp; restore</span>
+                            <i class="fa-solid fa-circle-question interactable"
+                                title="On by default. When enabled, your Quick Prompt Main text is snapshotted before the framework overwrites it and restored when you click the ⏻ button on the tracker panel (or uncheck Enable State Tracker) — so you can return to normal, non-D&amp;D RP that way. You can also save or restore manually with the buttons below."></i>
+                        </label>
+                        <div id="rpg_main_sysprompt_backup_controls" class="flex-container flexFlowColumn gap-1" style="padding-left: 4px; margin-top: 4px;">
+                            <div class="flex-container gap-1" style="width: 100%;">
+                                <button id="rpg_main_sysprompt_backup_stash" class="menu_button interactable" style="flex: 1; font-size: 0.9em;"><i class="fa-solid fa-floppy-disk"></i> Save current Main to backup</button>
+                                <button id="rpg_main_sysprompt_backup_restore" class="menu_button interactable" style="flex: 1; font-size: 0.9em;"><i class="fa-solid fa-rotate-left"></i> Restore backup to Main</button>
+                            </div>
+                            <div id="rpg_main_sysprompt_backup_status" style="font-size: 0.75em; opacity: 0.7; font-style: italic; min-height: 1.2em;"></div>
+                        </div>
+
                         <!-- APPEARANCE -->
                         <small style="display: block; margin-top: 10px; margin-bottom: 2px; font-weight: bold; opacity: 0.65; text-transform: uppercase; font-size: 0.7em; letter-spacing: 0.4px;">Appearance</small>
                         <label style="font-size: 0.82em; opacity: 0.75;">Panel Layout</label>
@@ -461,6 +480,8 @@
                     <label class="checkbox_label" style="margin-bottom: 8px;">
                         <input id="rpg_tracker_enabled" type="checkbox" />
                         <span>Enable State Tracker</span>
+                        <i class="fa-solid fa-circle-question interactable"
+                            title="When enabled (and Custom Sysprompt Mode is off), the framework system prompt is written to Quick Prompt Main. Your previous Main prompt is backed up automatically before the first overwrite and restored when you click the ⏻ button on the tracker panel (or uncheck this box) — so you can quickly return to normal, non-D&amp;D RP without changing profiles."></i>
                     </label>
 
                     <div class="inline-drawer" style="margin-bottom: 8px;">

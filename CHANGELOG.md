@@ -2,6 +2,11 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [5.3.7] - 2026-07-15
+
+### Added
+- **Main Prompt Backup**: Automatically snapshots Quick Prompt Main before the framework overwrites it; restored when you click ⏻ on the tracker panel (or uncheck Enable State Tracker). Manual save/restore controls in General & Visuals settings.
+
 ## [5.3.2] - 2026-07-14
 
 ### Fixed

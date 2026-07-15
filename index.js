@@ -3995,12 +3995,7 @@ function createPanel() {
         enableBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             const s = getSettings();
-            s.enabled = !s.enabled;
-            saveSettings();
-            updatePanelStatus();
-            if (s.enabled) {
-                scheduleAutoApply();
-            }
+            void handleTrackerEnabledChange(s, !s.enabled);
         });
     }
 
@@ -9467,11 +9462,108 @@ export async function fetchBaseSyspromptRaw(settingsOverride = null) {
     return content || '';
 }
 
+function getMainSyspromptTextarea() {
+    return /** @type {HTMLTextAreaElement|null} */ (document.getElementById('main_prompt_quick_edit_textarea'));
+}
+
+function isMainSyspromptBackupEnabled(settings) {
+    return settings.mainSyspromptBackupEnabled !== false;
+}
+
+/** Snapshot Quick Prompt Main before the framework overwrites it (once per tracker-on period). */
+function armMainSyspromptStash(settings, force = false, { manual = false } = {}) {
+    if (!isMainSyspromptBackupEnabled(settings)) return false;
+    if (!manual && (settings.customSysprompt || !settings.enabled)) return false;
+    if (settings.syspromptStashArmed && !force) return true;
+    const ta = getMainSyspromptTextarea();
+    if (!ta) return false;
+    settings.stashedMainSysprompt = ta.value;
+    settings.syspromptStashArmed = true;
+    saveSettings();
+    updateMainSyspromptBackupStatusUi(settings);
+    return true;
+}
+
+/** Restore stashed Quick Prompt Main when the tracker is turned off (or manually from settings). */
+function restoreMainSyspromptStash(settings, { manual = false } = {}) {
+    if (!isMainSyspromptBackupEnabled(settings) || !settings.syspromptStashArmed) return false;
+    if (!manual && settings.customSysprompt) return false;
+    const ta = getMainSyspromptTextarea();
+    if (!ta) return false;
+    ta.value = settings.stashedMainSysprompt ?? '';
+    ta.dispatchEvent(new Event('blur', { bubbles: true }));
+    if (!manual) {
+        settings.syspromptStashArmed = false;
+        saveSettings();
+    }
+    updateMainSyspromptBackupStatusUi(settings);
+    return true;
+}
+
+function updateMainSyspromptBackupStatusUi(settings = getSettings()) {
+    const statusEl = document.getElementById('rpg_main_sysprompt_backup_status');
+    const controlsEl = document.getElementById('rpg_main_sysprompt_backup_controls');
+    const enabledCb = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_main_sysprompt_backup_enabled'));
+    const backupOn = isMainSyspromptBackupEnabled(settings);
+
+    if (enabledCb) enabledCb.checked = backupOn;
+    if (controlsEl) {
+        controlsEl.style.opacity = backupOn ? '1' : '0.55';
+        controlsEl.style.pointerEvents = backupOn ? '' : 'none';
+    }
+    if (!statusEl) return;
+
+    if (!backupOn) {
+        statusEl.textContent = 'Backup is disabled — enable above to save or restore.';
+        return;
+    }
+    if (!settings.syspromptStashArmed) {
+        statusEl.textContent = 'No backup saved yet. It is created automatically before the framework overwrites Main, or use Save above.';
+        return;
+    }
+    const len = (settings.stashedMainSysprompt ?? '').length;
+    statusEl.textContent = len
+        ? `Backup saved (${len.toLocaleString()} characters).`
+        : 'Backup saved (empty Main prompt).';
+}
+
+function syncMainSyspromptBackupControlsUi() {
+    updateMainSyspromptBackupStatusUi(getSettings());
+}
+
+async function handleTrackerEnabledChange(settings, enabled) {
+    settings.enabled = !!enabled;
+    saveSettings();
+    updatePanelStatus();
+    if (settings.enabled) {
+        armMainSyspromptStash(settings, true);
+        await autoApplySysprompt(true);
+    } else {
+        restoreMainSyspromptStash(settings);
+        void resetCombatProfileOverride(settings);
+    }
+}
+
 let _autoApplyTimer = null;
+let _stashDeferCount = 0;
+const MAX_STASH_DEFER = 25;
+
 export async function autoApplySysprompt(force = false) {
     const s = getSettings();
     if (s.customSysprompt) return;
     if (!force && !s.enabled) return;
+
+    if (s.enabled && isMainSyspromptBackupEnabled(s)) {
+        const armed = armMainSyspromptStash(s);
+        if (!armed && !s.syspromptStashArmed) {
+            if (_stashDeferCount < MAX_STASH_DEFER) {
+                _stashDeferCount++;
+                scheduleAutoApply();
+                return;
+            }
+        }
+    }
+    _stashDeferCount = 0;
 
     const content = await fetchBaseSyspromptRaw(s);
     if (!content) return;
@@ -10072,20 +10164,57 @@ async function runPortraitMigrationIfNeeded() {
         }
 
         $('#rpg_tracker_enabled').prop('checked', settings.enabled).on('change', function () {
-            settings.enabled = !!$(this).prop('checked');
-            saveSettings();
-            updatePanelStatus();
-            if (!settings.enabled) {
-                void resetCombatProfileOverride(settings);
-            } else {
-                scheduleAutoApply();
-            }
+            void handleTrackerEnabledChange(settings, !!$(this).prop('checked'));
         });
 
         $('#rpg_tracker_debug').prop('checked', settings.debugMode).on('change', function () {
             settings.debugMode = !!$(this).prop('checked');
             saveSettings();
         });
+
+        $('#rpg_main_sysprompt_backup_enabled').prop('checked', isMainSyspromptBackupEnabled(settings)).on('change', function () {
+            const fresh = getSettings();
+            fresh.mainSyspromptBackupEnabled = !!$(this).prop('checked');
+            saveSettings();
+            syncMainSyspromptBackupControlsUi();
+        });
+
+        $('#rpg_main_sysprompt_backup_stash').on('click', function () {
+            const fresh = getSettings();
+            if (!isMainSyspromptBackupEnabled(fresh)) {
+                return toastr['warning']('Main prompt backup is disabled. Enable it above first.', 'RPG Tracker');
+            }
+            if (armMainSyspromptStash(fresh, true, { manual: true })) {
+                toastr['success']('Current Quick Prompt Main saved to backup.', 'RPG Tracker');
+            } else if (!getMainSyspromptTextarea()) {
+                toastr['warning']('Quick Prompt Main is not open — open Quick Prompt first, then try again.', 'RPG Tracker');
+            } else {
+                toastr['error']('Could not save backup.', 'RPG Tracker');
+            }
+        });
+
+        $('#rpg_main_sysprompt_backup_restore').on('click', function () {
+            const fresh = getSettings();
+            if (!isMainSyspromptBackupEnabled(fresh)) {
+                return toastr['warning']('Main prompt backup is disabled. Enable it above first.', 'RPG Tracker');
+            }
+            if (!fresh.syspromptStashArmed) {
+                return toastr['info']('No backup saved yet. Use Save current Main to backup first.', 'RPG Tracker');
+            }
+            if (restoreMainSyspromptStash(fresh, { manual: true })) {
+                const note = fresh.enabled && !fresh.customSysprompt
+                    ? ' Click ⏻ on the tracker panel to keep it — the framework may overwrite Main again while the tracker is on.'
+                    : '';
+                toastr['success'](`Backed-up Main prompt restored.${note}`, 'RPG Tracker');
+            } else if (!getMainSyspromptTextarea()) {
+                toastr['warning']('Quick Prompt Main is not open — open Quick Prompt first, then try again.', 'RPG Tracker');
+            } else {
+                toastr['error']('Could not restore backup.', 'RPG Tracker');
+            }
+        });
+
+        syncMainSyspromptBackupControlsUi();
+
         $('#rpg_tracker_daynight_cycle').prop('checked', !!settings.dayNightCycleEnabled).on('change', function () {
             settings.dayNightCycleEnabled = !!$(this).prop('checked');
             saveSettings();
@@ -13395,6 +13524,8 @@ RULES:
             $('#rpg_tracker_debug').prop('checked', !!s.debugMode);
             $('#rpg_tracker_daynight_cycle').prop('checked', !!s.dayNightCycleEnabled);
             $('#rpg_tracker_auto_reset_prompts').prop('checked', !!s.autoResetPromptsOnUpdate);
+            $('#rpg_main_sysprompt_backup_enabled').prop('checked', isMainSyspromptBackupEnabled(s));
+            syncMainSyspromptBackupControlsUi();
             $('#rpg_tracker_legacy_dice').prop('checked', !!s.legacyDiceNaming);
             $('#rpg_tracker_dice_d100_mode').prop('checked', !!s.diceD100Mode);
             $('#rpg_tracker_enable_portraits').prop('checked', s.enablePortraits !== false);
@@ -13470,6 +13601,12 @@ RULES:
 
     } catch (e) {
         console.error("[RPG Tracker] Failed to build settings UI", e);
+    }
+
+    // Fresh installs default to tracker on — schedule first apply so Main is stashed then overwritten.
+    {
+        const s = getSettings();
+        if (s.enabled && !s.customSysprompt) scheduleAutoApply();
     }
 
     // Add wand button to toggle panel visibility
