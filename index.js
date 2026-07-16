@@ -477,6 +477,7 @@ function applyLocationImageSetting(settings, enabled) {
 
 /**
  * Real-Time Mode enables a fixed bundle of location portrait options.
+ * Regenerate-on-revisit is always on while Real-Time Mode is active (no separate toggle).
  * @param {object} settings
  */
 function applyRealTimeModeBundle(settings) {
@@ -570,9 +571,15 @@ export function syncLocationImageDependentUi(settings) {
     // Clickable whenever Real-Time Mode is off — turning it on also enables Lorebook Locations.
     syncCheckbox('rpg_tracker_portrait_auto_locations', lorebookAutoOn, !imagesEnabled || realTimeOn);
     syncCheckbox('rpg_tracker_portrait_auto_scene_view', realTimeOn, !imagesEnabled);
-    syncCheckbox('rpg_portrait_regenerate_visited_locations', realTimeOn, !imagesEnabled || !realTimeOn);
     syncCheckbox('rpg_tracker_location_images', imagesEnabled, realTimeOn);
     syncCheckbox('rpg_portrait_location_include_present_npcs', realTimeOn || !!settings.portraitLocationIncludePresentNpcs, !imagesEnabled || realTimeOn);
+
+    const standardCore = document.getElementById('rpg_loc_images_standard_core');
+    const realtimeGroup = document.getElementById('rpg_loc_images_realtime_group');
+    const realtimeNote = document.getElementById('rpg_loc_realtime_active_note');
+    if (standardCore) standardCore.style.display = realTimeOn ? 'none' : '';
+    if (realtimeNote) realtimeNote.style.display = realTimeOn ? 'block' : 'none';
+    if (realtimeGroup) realtimeGroup.classList.toggle('rt-loc-realtime-active', realTimeOn);
 
     if (typeof globalThis._rpgSyncAgentImmersionUi === 'function') {
         globalThis._rpgSyncAgentImmersionUi();
@@ -1246,7 +1253,6 @@ function loadChatState(chatId) {
     s.portraitAutoGenerateNpcs = saved.portraitAutoGenerateNpcs ?? false;
     s.portraitAutoGenerateLocations = saved.portraitAutoGenerateLocations ?? false;
     s.portraitAutoGenerateSceneView = saved.portraitAutoGenerateSceneView ?? false;
-    s.portraitRegenerateVisitedLocations = saved.portraitRegenerateVisitedLocations ?? false;
     s.locationImages = !!saved.locationImages;
     s.portraitLocationIncludePresentNpcs = saved.portraitLocationIncludePresentNpcs ?? false;
     if (s.portraitAutoGenerateSceneView) {
@@ -1308,7 +1314,6 @@ function loadChatState(chatId) {
     $('#rpg_tracker_portrait_auto_npcs').prop('checked', !!s.portraitAutoGenerateNpcs);
     $('#rpg_tracker_portrait_auto_locations').prop('checked', !!s.portraitAutoGenerateLocations);
     $('#rpg_tracker_portrait_auto_scene_view').prop('checked', !!s.portraitAutoGenerateSceneView);
-    $('#rpg_portrait_regenerate_visited_locations').prop('checked', !!s.portraitRegenerateVisitedLocations);
     $('#rpg_tracker_location_images').prop('checked', !!s.locationImages);
     syncNpcPortraitDependentUi(s);
     syncLocationImageDependentUi(s);
@@ -2363,7 +2368,7 @@ function loadProfile(name) {
     s.portraitAutoGenerateNpcs = p.portraitAutoGenerateNpcs ?? false;
     s.portraitAutoGenerateLocations = p.portraitAutoGenerateLocations ?? false;
     s.portraitAutoGenerateSceneView = p.portraitAutoGenerateSceneView ?? false;
-    s.portraitRegenerateVisitedLocations = p.portraitRegenerateVisitedLocations ?? false;
+    s.portraitRegenerateVisitedLocations = !!s.portraitAutoGenerateSceneView;
     s.locationImages = !!p.locationImages;
     s.portraitConnectionSource = p.portraitConnectionSource ?? "default";
     s.portraitConnectionProfileId = p.portraitConnectionProfileId || "";
@@ -2419,7 +2424,6 @@ function loadProfile(name) {
     $('#rpg_tracker_portrait_auto_npcs').prop('checked', !!s.portraitAutoGenerateNpcs);
     $('#rpg_tracker_portrait_auto_locations').prop('checked', !!s.portraitAutoGenerateLocations);
     $('#rpg_tracker_portrait_auto_scene_view').prop('checked', !!s.portraitAutoGenerateSceneView);
-    $('#rpg_portrait_regenerate_visited_locations').prop('checked', !!s.portraitRegenerateVisitedLocations);
     $('#rpg_tracker_location_images').prop('checked', !!s.locationImages);
     syncNpcPortraitDependentUi(s);
     syncLocationImageDependentUi(s);
@@ -11151,11 +11155,6 @@ async function runPortraitMigrationIfNeeded() {
             void refreshLorebookAgentViewsNow({ forceLayoutRefresh: true });
         });
 
-        $('#rpg_portrait_regenerate_visited_locations').prop('checked', !!settings.portraitRegenerateVisitedLocations).on('change', function () {
-            if (!settings.portraitAutoGenerateSceneView) return;
-            syncLocationImageDependentUi(settings);
-            saveSettings();
-        });
         syncLocationImageDependentUi(settings);
 
         $('#rpg_tracker_pollinations_key').val(settings.pollinationsApiKey || '').on('change', function () {

@@ -406,22 +406,17 @@ export function maybeAutoGenerateImmersionSceneArt(scene, refresh) {
     if (!storagePath) return;
 
     const lastPath = getLastImmersionSceneArtPath();
-    const regenVisited = !!s.portraitRegenerateVisitedLocations;
     const locationChanged = storagePath !== lastPath;
     const hasImage = !!(scene.locationImage || hasLocationImage(storagePath));
 
-    if (!regenVisited) {
-        if (hasImage) {
-            rememberImmersionSceneArtPath(storagePath);
-            return;
-        }
-    } else if (!locationChanged && hasImage) {
+    // Real-Time Mode always regenerates on arrival (including revisits to the same path).
+    if (!locationChanged && hasImage) {
         return;
     }
 
     rememberImmersionSceneArtPath(storagePath);
     triggerBackgroundLocationGeneration(storagePath, refresh, scene.locationContent || '', {
         realtimeArrival: true,
-        forceReplace: regenVisited && hasLocationImage(storagePath),
+        forceReplace: hasLocationImage(storagePath),
     });
 }

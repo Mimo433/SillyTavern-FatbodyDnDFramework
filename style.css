@@ -3001,6 +3001,60 @@ textarea.rt-cr-input {
     overflow: visible;
 }
 
+/* Location Images & Visualization ALPHA — settings drawer sections */
+.rt-loc-settings-section {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.rt-loc-settings-subheader {
+    margin: 10px 0 6px;
+    padding: 6px 8px 6px 10px;
+    font-size: 0.78em;
+    font-weight: bold;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--rt-text-muted, rgba(255, 255, 255, 0.72));
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    border-left: 3px solid rgba(94, 184, 212, 0.45);
+    background: rgba(0, 0, 0, 0.18);
+    border-radius: 0 4px 4px 0;
+}
+
+.rt-loc-realtime-section {
+    margin-top: 2px;
+}
+
+.rt-loc-realtime-section.rt-loc-realtime-active {
+    padding: 0 8px 8px;
+    margin: 4px -4px 0;
+    border-radius: 6px;
+    background: rgba(94, 184, 212, 0.06);
+    border: 1px solid rgba(94, 184, 212, 0.22);
+}
+
+.rt-loc-realtime-section.rt-loc-realtime-active .rt-loc-settings-subheader {
+    margin-top: 0;
+    border-top: none;
+    border-left-color: rgba(94, 184, 212, 0.85);
+    color: #8fd4ea;
+    background: transparent;
+    padding-left: 2px;
+}
+
+.rt-loc-realtime-active-note {
+    font-size: 0.72em;
+    line-height: 1.35;
+    opacity: 0.75;
+    margin: 0 4px 6px;
+    padding: 5px 8px;
+    border-radius: 4px;
+    background: rgba(94, 184, 212, 0.1);
+    border: 1px solid rgba(94, 184, 212, 0.18);
+    color: #a8e0f0;
+}
+
 /* ── Lorebook Agent view mode switch (Campaign Records / Visualization Mode) ── */
 .rt-agent-view-mode-switch {
     display: inline-flex;

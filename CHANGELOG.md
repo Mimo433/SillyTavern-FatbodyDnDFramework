@@ -2,6 +2,13 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [5.5.20] - 2026-07-16
+
+### Changed
+- **Location Images & Visualization ALPHA layout**: Real-Time Visualization Mode has its own separated section in the drawer; standard auto-generation options hide while it is active.
+- **Include Present NPCs in Location Scene Prompts**: Moved back to the standard location group (not Real-Time-specific); label capitalization fixed.
+- **Real-Time Visualization Mode**: Removed the separate regenerate-on-revisit toggle — revisits always refresh while Real-Time mode is on.
+
 ## [5.5.19] - 2026-07-16
 
 ### Changed
