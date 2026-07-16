@@ -2,11 +2,11 @@
 
 *A D&D-based RPG platform/simulation engine for SillyTavern.*
 
-Out of the box, this framework essentially turns SillyTavern into something like AI Dungeon, but with actual mechanics/consequences! This is a mechanical-integrity-first philosophy where your choices matter. I wasn't satisfied with any of the commercial offerings available (AI Realm, AI Dungeon, Friends & Fables, etc.), so I made my own D&D platform inside SillyTavern.
+A D&D-based RPG platform/simulation engine for SillyTavern.
 
-In addition to fantasy, the system works just as well for casual "slice of life" scenarios or modern settings, so you're by no means limited to wizards and goblins. Everything is FULLY customizable and homebrew-friendly, and I mean fully. You can even play it as a dating sim with the relationship component.
+This framework essentially turns SillyTavern into something like AI Dungeon, but with actual mechanics/consequences! Started off as a humble "RPG State Tracker" but has since expanded into a more ambitious game engine, simulation system, and modular RPG framework where you can basically make your own game. Mechanical integrity and simulation depth is key here. This isn't a narrative-first philosophy; it aims for relentless "simulation autism." The backbone of the system is time simulation.
 
-**Crucially, the system is input-output, not just some glorified stats collector. Everything in the State Tracker is fed back to the AI. What you see is what the AI also sees.**
+In addition to fantasy, the system works just as well for casual "slice of life" scenarios, modern settings, or anything else imaginable, so you're by no means limited to wizards and goblins. Everything is FULLY customizable and homebrew-friendly, complete with AI wizards, so next to no technical knowledge is required.
 
 ---
 
