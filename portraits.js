@@ -781,6 +781,25 @@ export function getPartyMembers() {
 }
 
 /**
+ * Queue background portrait auto-generation for the linked Player Character when enabled.
+ * @param {object} settings
+ * @param {function} refresh
+ * @param {{ seedKnownOnly?: boolean }} [opts]
+ */
+function triggerPlayerPortraitAutoGenIfNeeded(settings, refresh, opts = {}) {
+    if (!settings.portraitAutoGeneratePlayer || settings.enablePortraits === false) return;
+    const pc = getLinkedPlayerCharacter(settings);
+    if (!pc) return;
+    const key = pc.name.toUpperCase();
+    if (opts.seedKnownOnly) {
+        knownEntities.add(key);
+        return;
+    }
+    knownEntities.add(key);
+    triggerBackgroundPortraitGeneration(pc.name, refresh, pc.bio || null);
+}
+
+/**
  * Sequentially auto-generates and auto-applies portraits for all party members and the player character.
  * Skips those who already have portraits.
  * @param {function} refresh - callback to refresh the UI
@@ -1045,6 +1064,8 @@ export async function forceCheckAutoGenerations(refresh) {
         }
     }
 
+    triggerPlayerPortraitAutoGenIfNeeded(s, refresh);
+
     if (s.portraitAutoGenerateEnemies) {
         const enemies = getEnemyEntities();
         console.log('[RPG Tracker] forceCheckAutoGenerations: checking enemies:', enemies);
@@ -1144,6 +1165,7 @@ export async function checkAndTriggerAutoGenerations(refresh) {
         for (const name of currentParty) {
             knownEntities.add(name.toUpperCase());
         }
+        triggerPlayerPortraitAutoGenIfNeeded(s, refresh, { seedKnownOnly: true });
         for (const name of currentEnemies) {
             knownEntities.add(name.toUpperCase());
         }
@@ -1172,6 +1194,21 @@ export async function checkAndTriggerAutoGenerations(refresh) {
         for (const name of currentParty) {
             knownEntities.add(name.toUpperCase());
         }
+    }
+
+    if (s.portraitAutoGeneratePlayer) {
+        const pc = getLinkedPlayerCharacter(s);
+        if (pc) {
+            const key = pc.name.toUpperCase();
+            if (!knownEntities.has(key)) {
+                console.log('[RPG Tracker] checkAndTriggerAutoGenerations: Linked player character detected:', pc.name);
+                knownEntities.add(key);
+                triggerBackgroundPortraitGeneration(pc.name, refresh, pc.bio || null);
+            }
+        }
+    } else {
+        const pc = getLinkedPlayerCharacter(s);
+        if (pc) knownEntities.add(pc.name.toUpperCase());
     }
 
     if (s.portraitAutoGenerateEnemies) {

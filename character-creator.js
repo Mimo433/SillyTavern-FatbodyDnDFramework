@@ -4,6 +4,7 @@ import { buildOnboardingXpHint, buildOnboardingTimeHint } from './constants.js';
 import { escapeHtml } from './memo-processor.js';
 import { getRequestHeaders } from '../../../../script.js';
 import { saveSettings, sendDirectPrompt, refreshAgentManifestNow, refreshRenderedView } from './index.js';
+import { triggerBackgroundPortraitGeneration } from './portraits.js';
 import { openPcSectionEditor } from './ui-editors.js';
 
 const _CR_CLASS_LISTS = {
@@ -735,6 +736,11 @@ export function showPersonaConfirmOverlay(bioText, charName, wordCount, extraHin
              saveChatState(currentChatId);
              
              await refreshAgentManifestNow();
+
+             const fresh = getSettings();
+             if (fresh.portraitAutoGeneratePlayer && fresh.enablePortraits !== false) {
+                 triggerBackgroundPortraitGeneration(safeName, refreshRenderedView, finalBio);
+             }
              
              toastr['success'](`"${safeName}" added as Player in Lorebook Agent.`, 'Character Creator');
          } else {

@@ -147,10 +147,16 @@
 
                             <small style="display: block; padding-left: 4px; font-size: 0.78em; opacity: 0.6; margin-top: 2px;">Auto-generate for:</small>
                             <label class="checkbox_label" style="padding-left: 4px;">
+                                <input id="rpg_tracker_portrait_auto_player" type="checkbox" />
+                                <span>Player character</span>
+                                <i class="fa-solid fa-circle-question interactable"
+                                    title="When enabled, a portrait is automatically generated in the background for the linked Player Character in Campaign Records (if they do not already have one). This is separate from party members in the PARTY block."></i>
+                            </label>
+                            <label class="checkbox_label" style="padding-left: 4px;">
                                 <input id="rpg_tracker_portrait_auto_party" type="checkbox" />
                                 <span>Party members</span>
                                 <i class="fa-solid fa-circle-question interactable"
-                                    title="When enabled, portraits will be automatically generated in the background for new party members added to the PARTY block if they don't already have one."></i>
+                                    title="When enabled, portraits will be automatically generated in the background for new party members added to the PARTY block if they don't already have one. Does not include the linked Player Character."></i>
                             </label>
                             <label class="checkbox_label" style="padding-left: 4px;">
                                 <input id="rpg_tracker_portrait_auto_enemies" type="checkbox" />
@@ -1033,12 +1039,21 @@
                                 <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
                             </div>
                             <div class="inline-drawer-content" style="padding: 10px; font-size: 0.82em; line-height: 1.45; background: rgba(0, 0, 0, 0.15);">
+                                <p style="margin: 0 0 10px; opacity: 0.85;">Creating a World Skeleton is optional but recommended — it gives World Progression a Day 0 baseline to simulate against before your campaign accumulates organic lore.</p>
                                 <ol style="margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px;">
-                                    <li><b>Create the Atmosphere Summary</b>: Either write it manually or click <i>Auto-Generate</i> to grab it from your recent chat story. This establishes the setting's theme.</li>
-                                    <li><b>Generate the Skeleton</b> (Recommended): Click <i>Generate Skeleton</i>. This creates factions, locations, NPCs, and conflicts to simulate off-screen background activity.</li>
-                                    <li><b>Set up Focus Randomization</b> (Optional but Recommended): Enable this to force diversity in report coverage, rather than focusing only on the player's immediate bubble.</li>
-                                    <li><b>Generate the first report</b>: Trigger a report immediately using the <i>Generate Now</i> button, or let it fire automatically as the campaign progresses.</li>
+                                    <li><b>Create the Atmosphere Summary</b>: Either write it manually or click <i>Auto-Generate</i> to grab it from your recent chat story (if one exists already). This establishes the setting's theme.</li>
+                                    <li><b>Generate the Skeleton</b>: Click <i>Generate Skeleton</i>. This creates factions, locations, NPCs, and conflicts to simulate off-screen background activity, creating a Day 0 baseline. Remember that you can also add to the Skeleton Lorebook (after generation) yourself or edit the generated entities from the native SillyTavern Lorebook UI. This way, you can even have a fully granularly customized World Skeleton to base the World Reports on.</li>
+                                    <li><b>Set up Focus Randomization</b> (Optional but Recommended): Enable this to force diversity in report coverage, rather than focusing only on the player's immediate bubble. Without Focus Randomization, the World Report may end up repeatedly covering the same threads because it has nothing forcing it to deviate. Not necessarily bad per se, but Focus Randomization guarantees a variety of entities are simulated in subsequent World Reports. It turns it into a &ldquo;lottery.&rdquo;</li>
+                                    <li><b>Generate the First Report</b>: Trigger a report immediately using the <i>Generate Now</i> button, or let it fire automatically as the campaign progresses. If you run it later, it will incorporate entities that have organically accumulated in your adventure up to that point. Immediate generation is Skeleton-only.</li>
                                 </ol>
+                                <div style="margin-top: 12px; padding-top: 10px; border-top: 1px dashed rgba(255,255,255,0.1);">
+                                    <div style="font-size: 0.78em; font-weight: bold; opacity: 0.65; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px;">Miscellaneous</div>
+                                    <ul style="margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; opacity: 0.9;">
+                                        <li>Remember that benched party members can also become part of World Reports. For example, if you leave a party member in the base as <code>[BENCHED]</code>, World Progression may generate background activity for them.</li>
+                                        <li>24h seems to be a decent interval for World Report auto-generation, but you are encouraged to experiment with shorter intervals (or longer, for that matter).</li>
+                                        <li>You can always also trigger World Progression manually whenever you like.</li>
+                                    </ul>
+                                </div>
                             </div>
                         </div>
 

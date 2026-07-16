@@ -1253,6 +1253,7 @@ function loadChatState(chatId) {
     s.portraitGeneratorSource = saved.portraitGeneratorSource ?? "native";
     s.portraitSkipPromptDialog = saved.portraitSkipPromptDialog ?? false;
     s.portraitAutoGenerateParty = saved.portraitAutoGenerateParty ?? false;
+    s.portraitAutoGeneratePlayer = saved.portraitAutoGeneratePlayer ?? false;
     s.portraitAutoGenerateEnemies = saved.portraitAutoGenerateEnemies ?? false;
     s.portraitAutoGenerateNpcs = saved.portraitAutoGenerateNpcs ?? false;
     s.portraitAutoGenerateLocations = saved.portraitAutoGenerateLocations ?? false;
@@ -1314,6 +1315,7 @@ function loadChatState(chatId) {
     $('#rpg_tracker_pollinations_group').toggle((s.portraitGeneratorSource || 'native') === 'pollinations');
     $('#rpg_tracker_portrait_skip_prompt').prop('checked', !!s.portraitSkipPromptDialog);
     $('#rpg_tracker_portrait_auto_party').prop('checked', !!s.portraitAutoGenerateParty);
+    $('#rpg_tracker_portrait_auto_player').prop('checked', !!s.portraitAutoGeneratePlayer);
     $('#rpg_tracker_portrait_auto_enemies').prop('checked', !!s.portraitAutoGenerateEnemies);
     $('#rpg_tracker_portrait_auto_npcs').prop('checked', !!s.portraitAutoGenerateNpcs);
     $('#rpg_tracker_portrait_auto_locations').prop('checked', !!s.portraitAutoGenerateLocations);
@@ -2368,6 +2370,7 @@ function loadProfile(name) {
     s.portraitGeneratorSource = p.portraitGeneratorSource ?? "native";
     s.portraitSkipPromptDialog = p.portraitSkipPromptDialog ?? false;
     s.portraitAutoGenerateParty = p.portraitAutoGenerateParty ?? false;
+    s.portraitAutoGeneratePlayer = p.portraitAutoGeneratePlayer ?? false;
     s.portraitAutoGenerateEnemies = p.portraitAutoGenerateEnemies ?? false;
     s.portraitAutoGenerateNpcs = p.portraitAutoGenerateNpcs ?? false;
     s.portraitAutoGenerateLocations = p.portraitAutoGenerateLocations ?? false;
@@ -2424,6 +2427,7 @@ function loadProfile(name) {
     $('#rpg_tracker_pollinations_group').toggle((s.portraitGeneratorSource || 'native') === 'pollinations');
     $('#rpg_tracker_portrait_skip_prompt').prop('checked', !!s.portraitSkipPromptDialog);
     $('#rpg_tracker_portrait_auto_party').prop('checked', !!s.portraitAutoGenerateParty);
+    $('#rpg_tracker_portrait_auto_player').prop('checked', !!s.portraitAutoGeneratePlayer);
     $('#rpg_tracker_portrait_auto_enemies').prop('checked', !!s.portraitAutoGenerateEnemies);
     $('#rpg_tracker_portrait_auto_npcs').prop('checked', !!s.portraitAutoGenerateNpcs);
     $('#rpg_tracker_portrait_auto_locations').prop('checked', !!s.portraitAutoGenerateLocations);
@@ -11119,6 +11123,14 @@ async function runPortraitMigrationIfNeeded() {
             saveSettings();
         });
 
+        $('#rpg_tracker_portrait_auto_player').prop('checked', !!settings.portraitAutoGeneratePlayer).on('change', function () {
+            settings.portraitAutoGeneratePlayer = !!$(this).prop('checked');
+            saveSettings();
+            if (settings.portraitAutoGeneratePlayer) {
+                forceCheckAutoGenerations(refreshAll);
+            }
+        });
+
         $('#rpg_tracker_portrait_auto_party').prop('checked', !!settings.portraitAutoGenerateParty).on('change', function () {
             settings.portraitAutoGenerateParty = !!$(this).prop('checked');
             saveSettings();
@@ -14479,6 +14491,7 @@ RULES:
             $('#rpg_tracker_pollinations_group').toggle((s.portraitGeneratorSource || 'native') === 'pollinations');
             $('#rpg_tracker_portrait_skip_prompt').prop('checked', !!s.portraitSkipPromptDialog);
             $('#rpg_tracker_portrait_auto_party').prop('checked', !!s.portraitAutoGenerateParty);
+            $('#rpg_tracker_portrait_auto_player').prop('checked', !!s.portraitAutoGeneratePlayer);
             $('#rpg_tracker_portrait_auto_enemies').prop('checked', !!s.portraitAutoGenerateEnemies);
             $('#rpg_tracker_portrait_auto_npcs').prop('checked', !!s.portraitAutoGenerateNpcs);
             $('#rpg_tracker_portrait_auto_locations').prop('checked', !!s.portraitAutoGenerateLocations);
