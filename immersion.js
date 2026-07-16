@@ -1,6 +1,6 @@
 import { getSettings, getEffectiveRouterCampaignPrefix, saveChatState } from './state-manager.js';
 import { escapeHtml } from './memo-processor.js';
-import { normalizeLocationPath, resolveLocationImageWithMeta, triggerBackgroundLocationGeneration, hasLocationImage, getLinkedPlayerCharacter, isLocationImageGenerating } from './portraits.js';
+import { normalizeLocationPath, resolveLocationImageWithMeta, triggerBackgroundLocationGeneration, hasLocationImage, getLinkedPlayerCharacter, isLocationImageGenerating, resolvePortraitSrcForPlayerCharacter } from './portraits.js';
 import { resolvePortraitDisplaySrc } from './portrait-storage.js';
 import { resolveCurrentLocationPath, formatLocationBreadcrumb } from './location-resolver.js';
 
@@ -126,7 +126,7 @@ function prependPlayerCharacterToSceneNpcs(npcs, settings, ctx) {
     if (!pc) return npcs;
     const pcNorm = normalizeSceneCharacterLabel(pc.name);
     const rest = npcs.filter(n => normalizeSceneCharacterLabel(n.label) !== pcNorm);
-    const portraitSrc = resolvePortraitDisplaySrc(s.customPortraits?.[pc.name] || '');
+    const portraitSrc = resolvePortraitSrcForPlayerCharacter(s, pc.name);
     return [{
         id: 'player-character',
         entryId: '',

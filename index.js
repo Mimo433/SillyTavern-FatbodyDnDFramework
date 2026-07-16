@@ -9,12 +9,12 @@ import { initializeDebugViewer, toggleDebugViewer } from './debug-viewer.js';
 import { installSwipeSchedulerDebug } from './swipe-scheduler-debug.js';
 import { runRouterPass, rollbackRouterPass, reapplyRouterPass, getLorebookManifest, deleteLorebookEntry, updateLorebookEntry, disableManagedEntries, isRouterRunning, stopRouterPass, purgeWorldHistoryForChat } from './router.js';
 import { getRequestHeaders } from '../../../../script.js';
-import { fileToDataUrl, scaleImageTo512Square, scaleImageToLandscape, applyPortraitData, applyLocationImageData, generatePortraitPrompt, generateNpcPortraitPrompt, generateLocationImagePrompt, showPortraitPromptPopup, generatePortraitDirect, autoGeneratePartyPortraits, removeAllPortraits, checkAndTriggerAutoGenerations, autoGenerateEnemyPortraits, forceCheckAutoGenerations, resetAutoGenerationTracking, resolveLocationImageWithMeta, normalizeLocationPath, buildLocationPath, getLinkedPlayerCharacter } from './portraits.js';
+import { fileToDataUrl, scaleImageTo512Square, scaleImageToLandscape, applyPortraitData, applyLocationImageData, generatePortraitPrompt, generateNpcPortraitPrompt, generateLocationImagePrompt, showPortraitPromptPopup, generatePortraitDirect, autoGeneratePartyPortraits, removeAllPortraits, checkAndTriggerAutoGenerations, autoGenerateEnemyPortraits, forceCheckAutoGenerations, resetAutoGenerationTracking, resolveLocationImageWithMeta, normalizeLocationPath, buildLocationPath, getLinkedPlayerCharacter, resolvePortraitSrcForPlayerCharacter } from './portraits.js';
 import { buildImmersionSceneState, renderImmersionViewHtml, getCurrentLocationText, loadLocationEntryByPath, loadNpcEntryByKey, maybeAutoGenerateImmersionSceneArt, resetImmersionSceneArtTracking, hydrateImmersionSceneArtPath } from './immersion.js';
 import { migrateAllEmbeddedPortraits, countEmbeddedPortraitDataUrls, purgeAllPortraitData, resolvePortraitDisplaySrc, collectAllPortraitRefs, isManagedPortraitPath, isPortraitMigrationLocked, setPortraitMigrationLocked, PORTRAIT_STORAGE_FOLDER } from './portrait-storage.js';
 import { loadPanelGeometry, loadDeltaHeight, makeDraggable, makeResizableTR, makeResizableBR, makeResizableBL, setupResizeObserver, setupDeltaResize, canResizePanels, jqueryToggleSlide } from './ui-geometry.js';
 import { applyCustomTheme, openThemeWizard, refreshSavedThemesList, handleRecolor, undoThemeChange } from './theme-manager.js';
-import { showCharacterRollPanel, showPcImportPanel } from './character-creator.js';
+import { showCharacterRollPanel, showPcImportPanel, handleCharacterCreatorGenerate } from './character-creator.js';
 import { handleCategorySettings, openCustomFieldEditor, openPromptEditor, refreshOrderList, exportModules, importModulesFromJson, openNpcSectionEditor, openPcSectionEditor } from './ui-editors.js';
 import { openGameSystemWizard, openManageGameSystems, openSystemPromptControlRoom, syncAllNarratorTogglesForUnlockState, extractTopLevelSections, normalizeSectionOrder, getSectionRowDescriptor, transformBaseSectionContent, isBlankSectionContent } from './game-systems.js';
 import { openManageGameCartridges } from './game-cartridges.js';
@@ -83,7 +83,11 @@ function renderRelTierDetailed(type, value, max) {
 
 function isAgentPanelVisible() {
     const el = document.getElementById('rpg-tracker-agent');
-    return !!el && el.style.display !== 'none';
+    if (!el) return false;
+    const isDetached = localStorage.getItem('rpg_tracker_agent_detached') === 'true';
+    if (isDetached) return el.style.display !== 'none';
+    const s = getSettings();
+    return s.trackerContentMode === 'agent';
 }
 
 function scheduleDeferred(fn) {
@@ -1198,6 +1202,7 @@ export function refreshQuestPrompt(s) {
         prompt = prompt.replace(/  DEADLINE:.*\n/g, '');
         prompt = prompt.replace(/- DEADLINE.*\n/g, '');
         prompt = prompt.replace(/- DEADLINE \/ FRUSTRATION_COEFF:.*\n/g, '');
+        prompt = prompt.replace(/- Only use DEADLINE if the quest has a time limit\.\n/g, '');
     }
     if (!s.syspromptModules?.questsFrustration) {
         prompt = prompt.replace(/  FRUSTRATION_COEFF:.*\n/g, '');
@@ -2239,7 +2244,10 @@ export async function sendDirectPrompt(message) {
 
     const settings = getSettings();
     const { generateRaw } = SillyTavern.getContext();
-    if (!generateRaw) return;
+    if (!generateRaw) {
+        toastr['warning']('Text generation is not available. Connect an API in SillyTavern settings.', 'RPG Tracker');
+        return;
+    }
 
     try {
         _stateModelRunning = true;
@@ -2341,6 +2349,8 @@ export async function sendDirectPrompt(message) {
             } else {
                 toastr['info']('No changes were made.', 'RPG Tracker');
             }
+        } else {
+            toastr['warning']('State Model returned no output. Check your API connection and State Model settings.', 'RPG Tracker');
         }
     } catch (err) {
         if (err.name === 'AbortError') {
@@ -3248,6 +3258,19 @@ export function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRe
     const drawerStartDateInput = /** @type {HTMLInputElement|null} */ (el.querySelector('#rt-onboarding-start-date'));
     if (drawerStartDateInput) syncStartDateInput(drawerStartDateInput);
 
+    // Character Creator Generate — delegated so clicks survive refreshRenderedView innerHTML swaps
+    if (!el._crGenerateDelegated) {
+        el._crGenerateDelegated = true;
+        el.addEventListener('click', (e) => {
+            const target = /** @type {HTMLElement|null} */ (e.target instanceof Element ? e.target.closest('#rt-cr-generate-btn') : null);
+            if (!target || /** @type {HTMLButtonElement} */ (target).disabled) return;
+            const emptyEl = el.querySelector('.rt-empty');
+            if (!emptyEl) return;
+            e.preventDefault();
+            handleCharacterCreatorGenerate(emptyEl);
+        });
+    }
+
     el.querySelectorAll('.rt-random-char-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
             const archetype = btn.dataset.archetype;
@@ -3953,14 +3976,23 @@ export function refreshRenderedView() {
         el.innerHTML = html;
         bindRenderedCardEvents(el, memo, false);
 
+        // Restore Character Creator panel if it was open before the DOM swap (onboarding screen only)
+        if (!memo || !memo.trim()) {
+            const emptyEl = el.querySelector('.rt-empty');
+            if (emptyEl && s.characterCreatorPanelOpen) {
+                showCharacterRollPanel(emptyEl);
+            }
+        }
+
         // Update footer location: try parsing from recent chat status footer first, fallback to memo
         const ctx = SillyTavern.getContext();
         const locText = getCurrentLocationText(memo, ctx);
-        const footerLoc = document.getElementById('rt-footer-location');
-        if (footerLoc) {
-            footerLoc.textContent = locText || 'Unknown Location';
-            footerLoc.title = locText ? `Location: ${locText}` : 'Unknown Location';
-        }
+        const locLabel = locText || 'Unknown Location';
+        const locTitle = locText ? `Location: ${locText}` : 'Unknown Location';
+        document.querySelectorAll('#rt-footer-location, #rt-agent-footer-location').forEach((el) => {
+            el.textContent = locLabel;
+            el.title = locTitle;
+        });
 
         // In Tab Mode, surface the current in-world time in the footer so it stays
         // glanceable without needing to open the Time tab.
@@ -4168,27 +4200,33 @@ function createPanel() {
     document.querySelectorAll('body > .rpg-tracker-detached-panel').forEach(el => el.remove());
     document.querySelector('body > #rpg-tracker-agent')?.remove();
 
+    const agentDetachedOnLoad = localStorage.getItem('rpg_tracker_agent_detached') === 'true';
+    const agentModeOnLoad = settings.trackerContentMode === 'agent';
+    const mainPanelCollapsedOnLoad = (agentModeOnLoad && !agentDetachedOnLoad)
+        ? !!settings.agentCollapsed
+        : !!settings.trackerCollapsed;
+    const agentPanelCollapsedClass = (agentDetachedOnLoad && settings.agentCollapsed) ? 'rt-panel-collapsed ' : '';
+
     const panel = document.createElement('div');
     panel.id = 'rpg-tracker-panel';
-    panel.className = `rpg-tracker-panel ${settings.trackerCollapsed ? 'rt-panel-collapsed ' : ''}${settings.trackerTheme || 'rt-theme-native'}`;
+    panel.className = `rpg-tracker-panel ${mainPanelCollapsedOnLoad ? 'rt-panel-collapsed ' : ''}${settings.trackerTheme || 'rt-theme-native'}`;
     panel.style.setProperty('--rt-base-size', (settings.fontSize || 13) + 'px');
     panel.innerHTML = `
             <div class="rt-resizer-tr" id="rt-resizer-tr" title="Resize from top-right"></div>
             <div class="rpg-tracker-header" id="rpg-tracker-header">
                 <div class="rt-header-starfield" aria-hidden="true"></div>
+                <div class="rt-header-face rt-header-face-active" id="rt-header-face-tracker">
                 <div class="rpg-tracker-header-left">
                     <div class="rpg-tracker-status-indicator active" id="rpg-tracker-status"></div>
                     <span class="rt-header-title-desktop">Multihog D&D Framework</span>
                     <span class="rt-header-title-mobile" style="display: none;">Multihog D&D</span>
                     <div id="rt-daynight-badge-slot"></div>
                     <button class="rpg-tracker-stop-btn" id="rpg-tracker-stop-btn" title="Stop Generation" style="display:none;">■</button>
-                    <button class="rpg-tracker-icon-btn" id="rpg-tracker-chat-link-btn" style="font-size:13px;" title="Chat Link ON">🔗</button>
-                    <button class="rpg-tracker-icon-btn" id="rpg-tracker-agent-btn" title="Lorebook Agent">🤖</button>
-                    <button class="rpg-tracker-icon-btn" id="rpg-tracker-prompt-btn" title="Toggle direct prompt">💬</button>
-                    <button class="rpg-tracker-icon-btn" id="rpg-tracker-view-btn" title="Toggle rendered view">⊞</button>
                 </div>
                 <div class="rpg-tracker-header-center" id="rpg-tracker-pause-banner"></div>
                 <div class="rpg-tracker-header-right">
+                    <button class="rpg-tracker-icon-btn" id="rpg-tracker-chat-link-btn" style="font-size:13px;" title="Chat Link ON">🔗</button>
+                    <button class="rpg-tracker-icon-btn" id="rpg-tracker-view-btn" title="Toggle rendered view">⊞</button>
                     <button class="rpg-tracker-icon-btn" id="rpg-tracker-enable-btn" title="${settings.enabled ? 'Disable State Tracker' : 'Enable State Tracker'}" style="${settings.enabled ? '' : 'opacity:0.4;'}" >⏻</button>
                     <button class="rpg-tracker-icon-btn" id="rpg-tracker-update-btn" title="Update State Now">🔄</button>
                     <button class="rpg-tracker-icon-btn" id="rpg-tracker-pause-btn" title="Pause Tracker">⏸</button>
@@ -4198,22 +4236,11 @@ function createPanel() {
                     <button class="rpg-tracker-icon-btn" id="rpg-tracker-collapse-btn" title="Collapse Panel"><i class="fa-solid ${settings.trackerCollapsed ? 'fa-chevron-down' : 'fa-chevron-up'}"></i></button>
                     <button class="rpg-tracker-icon-btn" id="rpg-tracker-close-btn" title="Hide panel">✕</button>
                 </div>
-            </div>
-            <div class="rpg-tracker-content">
-                <textarea class="rpg-tracker-memo-area" id="rpg-tracker-memo">${settings.currentMemo}</textarea>
-                <div class="rpg-tracker-render-view" id="rpg-tracker-render" style="display:none;"></div>
-            </div>
-            <div class="rpg-tracker-delta-resize-handle" id="rpg-tracker-delta-handle" style="display:none;"></div>
-            <div class="rpg-tracker-delta-panel" id="rpg-tracker-delta" style="display:none;">
-                <div class="rpg-tracker-delta-toolbar">
-                    <span class="rpg-tracker-delta-title">Change Log</span>
-                    <button class="rpg-tracker-icon-btn" id="rpg-tracker-delta-clear" title="Clear log">✕</button>
                 </div>
-                <div id="rpg-tracker-delta-content">${settings.lastDelta || '<span class="delta-empty">No changes yet.</span>'}</div>
-            </div>
-            <div class="rpg-tracker-panel rpg-tracker-agent-panel ${settings.agentCollapsed ? 'rt-panel-collapsed ' : ''}${settings.trackerTheme || 'rt-theme-native'}" id="rpg-tracker-agent" style="display:none; position: absolute; right: 0; top: 30px; width: 300px; max-height: calc(100% - 30px); z-index: 1000; flex-direction: column; resize: none !important; overflow: hidden !important;">
-                <div class="rpg-tracker-header" style="cursor: default;">
-                    <span class="rpg-tracker-header-left"><i class="fa-solid fa-robot"></i> <span>Lorebook Agent: Autonomous Librarian</span></span>
+                <div class="rt-header-face rt-header-face-inactive" id="rt-header-face-agent">
+                    <div class="rpg-tracker-header-left">
+                        <i class="fa-solid fa-robot"></i> <span>Lorebook Agent: Autonomous Librarian</span>
+                    </div>
                     <div class="rpg-tracker-header-center" id="rt-agent-pause-banner" style="color:#ffa500; font-size:0.7em; font-weight:bold; letter-spacing:0.04em;">${settings.routerPaused ? 'AGENT PAUSED' : ''}</div>
                     <div class="rpg-tracker-header-right">
                         <button class="rpg-tracker-icon-btn" id="rt-agent-router-manual-run" title="Run Research Now" style="color: var(--rt-accent);"><i class="fa-solid fa-play"></i></button>
@@ -4241,12 +4268,25 @@ function createPanel() {
                          </div>
                         <button class="rpg-tracker-icon-btn" id="rt-agent-router-enable-btn" title="${settings.routerEnabled ? 'Disable Lorebook Agent' : 'Enable Lorebook Agent'}" style="${settings.routerEnabled ? '' : 'opacity:0.35;'}">⏻</button>
                         <button class="rpg-tracker-icon-btn" id="rt-agent-router-pause-btn" title="${settings.routerPaused ? 'Resume Agent (auto-runs paused)' : 'Pause Agent (skip auto-runs)'}" style="${settings.routerPaused ? 'color:#ffa500;' : ''}">${settings.routerPaused ? '▶' : '⏸'}</button>
-                        <button class="rpg-tracker-icon-btn" id="rt-agent-prompt-btn" title="Toggle direct prompt">💬</button>
                         <button class="rpg-tracker-icon-btn" id="rt-agent-router-detach" title="Detach Lorebook Agent">⧉</button>
                         <button class="rpg-tracker-icon-btn" id="rt-agent-router-collapse-btn" title="Collapse Panel"><i class="fa-solid ${settings.agentCollapsed ? 'fa-chevron-down' : 'fa-chevron-up'}"></i></button>
                         <button class="rpg-tracker-icon-btn" id="rpg-tracker-agent-close" title="Close">✕</button>
                     </div>
                 </div>
+            </div>
+            <div class="rpg-tracker-content">
+                <div class="rt-panel-mode-switch-wrap" id="rt-panel-mode-switch-wrap">
+                    <div class="rt-agent-view-mode-switch rt-panel-mode-switch" id="rt-panel-mode-switch" role="tablist" aria-label="Panel content mode">
+                        <button type="button" id="rt-panel-mode-tracker" class="rt-agent-view-mode-btn rt-agent-view-mode-btn-active" role="tab" aria-selected="true">State Tracker</button>
+                        <button type="button" id="rt-panel-mode-agent" class="rt-agent-view-mode-btn" role="tab" aria-selected="false">Lorebook Agent</button>
+                    </div>
+                </div>
+                <div class="rt-panel-mode-pane" id="rt-panel-tracker-pane">
+                <textarea class="rpg-tracker-memo-area" id="rpg-tracker-memo">${settings.currentMemo}</textarea>
+                <div class="rpg-tracker-render-view" id="rpg-tracker-render" style="display:none;"></div>
+                </div>
+                <div class="rt-panel-mode-pane" id="rt-panel-agent-pane" style="display:none;">
+            <div class="rpg-tracker-panel rpg-tracker-agent-panel rt-agent-integrated ${agentPanelCollapsedClass}${settings.trackerTheme || 'rt-theme-native'}" id="rpg-tracker-agent">
                 <div class="rpg-tracker-content" style="flex: 1; min-height: 0; resize: none; padding: 10px; color: var(--rt-text); display: flex; flex-direction: column;">
                     <!-- Quick Settings Collapsible Header -->
                     <div id="rt-agent-settings-header" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; cursor: pointer; padding-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.08); user-select: none; flex-shrink: 0;">
@@ -4456,15 +4496,34 @@ function createPanel() {
                     </div>
                 </div>
                 <div class="rpg-tracker-footer" id="rt-agent-footer">
-                    <div id="rt-agent-last-run" style="text-align: center; font-size: 0.8em; opacity: 0.65; color: var(--rt-text-muted); padding: 2px 0 4px; line-height: 1.3; flex-shrink: 0;"></div>
-                    <div class="rpg-tracker-nav">
-                        <button class="rpg-tracker-nav-btn" id="rt-agent-nav-back" title="Undo last lorebook pass">←</button>
-                        <span class="rpg-tracker-nav-label" id="rt-agent-nav-label">[ LIVE ]</span>
-                        <button class="rpg-tracker-nav-btn" id="rt-agent-nav-fwd" title="Redo lorebook pass">→</button>
+                    <div class="rt-footer-starfield" aria-hidden="true"></div>
+                    <div class="rt-agent-footer-left">
+                        <div class="rpg-tracker-nav">
+                            <button class="rpg-tracker-nav-btn" id="rt-agent-nav-back" title="Undo last lorebook pass">←</button>
+                            <span class="rpg-tracker-nav-label" id="rt-agent-nav-label">[ LIVE ]</span>
+                            <button class="rpg-tracker-nav-btn" id="rt-agent-nav-fwd" title="Redo lorebook pass">→</button>
+                        </div>
+                    </div>
+                    <div class="rt-agent-footer-center">
+                        <div id="rt-agent-footer-location" class="rt-footer-location-text" title="Current Location (Main, Sub)"></div>
+                    </div>
+                    <div class="rt-agent-footer-right">
+                        <div id="rt-agent-last-run"></div>
+                        <button class="rpg-tracker-icon-btn rt-footer-prompt-btn" id="rt-agent-prompt-btn" title="Toggle direct prompt">💬</button>
                     </div>
                 </div>
                 <div class="rt-resizer-br" id="rt-agent-resizer-br" title="Resize from bottom-right"></div>
                 <div class="rt-resizer-bl" id="rt-agent-resizer-bl" title="Resize from bottom-left"></div>
+            </div>
+                </div>
+            </div>
+            <div class="rpg-tracker-delta-resize-handle" id="rpg-tracker-delta-handle" style="display:none;"></div>
+            <div class="rpg-tracker-delta-panel" id="rpg-tracker-delta" style="display:none;">
+                <div class="rpg-tracker-delta-toolbar">
+                    <span class="rpg-tracker-delta-title">Change Log</span>
+                    <button class="rpg-tracker-icon-btn" id="rpg-tracker-delta-clear" title="Clear log">✕</button>
+                </div>
+                <div id="rpg-tracker-delta-content">${settings.lastDelta || '<span class="delta-empty">No changes yet.</span>'}</div>
             </div>
             <div class="rpg-tracker-prompt-bar" id="rpg-tracker-prompt-bar" style="display:none;">
                 <textarea class="rpg-tracker-prompt-input" id="rpg-tracker-prompt-input" rows="2" placeholder="Instruct the tracker model… (Enter to send, Shift+Enter for newline)"></textarea>
@@ -4477,6 +4536,7 @@ function createPanel() {
                 </div>
             </div>
             <div class="rpg-tracker-footer" id="rt-main-footer">
+                <div class="rt-footer-starfield" aria-hidden="true"></div>
                 <div class="rt-mobile-top-row">
                     <button class="rt-footer-toggle-btn" id="rt-footer-expand-btn" title="Toggle Settings Drawer"><i class="fa-solid fa-chevron-up"></i></button>
                     <div class="rpg-tracker-nav">
@@ -4490,7 +4550,7 @@ function createPanel() {
                 </div>
                 <div class="rt-footer-center-group" id="rt-footer-center-group" style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0;">
                     <div id="rt-footer-time" style="display: none; font-size: 0.769em; color: var(--rt-accent); white-space: nowrap; flex-shrink: 0; opacity: 0.9; cursor: help;" title="Current in-world time"></div>
-                    <div id="rt-footer-location" style="font-size: 0.769em; color: var(--rt-accent); flex: 1; min-width: 0; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.9; cursor: help;" title="Current Location (Main, Sub)"></div>
+                    <div id="rt-footer-location" class="rt-footer-location-text" title="Current Location (Main, Sub)"></div>
                 </div>
                 <div class="flex-container gap-1 alignitemscenter rt-utility-footer-group">
                     <button class="rpg-tracker-nav-btn" id="rpg-tracker-chat-link-footer-btn" title="Chat Link ON" style="padding: 1px 8px; font-size: 0.85em;">🔗 Link</button>
@@ -4498,6 +4558,7 @@ function createPanel() {
                     <button class="rpg-tracker-nav-btn" id="rpg-tracker-delta-btn" title="Toggle change log" style="padding: 1px 5px; font-size: 0.692em; opacity: 0.8; margin-left: 5px;">δ</button>
                     <button class="rpg-tracker-nav-btn" id="rpg-tracker-memo-clear" style="padding: 1px 5px; font-size: 0.692em; opacity: 0.8; margin-left: 5px;" title="Clear memo and history">CLEAR</button>
                 </div>
+                <button class="rpg-tracker-icon-btn rt-footer-prompt-btn" id="rpg-tracker-prompt-btn" title="Toggle direct prompt">💬</button>
             </div>
         `;
 
@@ -4691,10 +4752,9 @@ function createPanel() {
     }
 
     // ── Router Agent UI ──
-    const agentBtn = /** @type {HTMLElement} */ (panel.querySelector('#rpg-tracker-agent-btn'));
     const agentPanel = /** @type {HTMLElement} */ (panel.querySelector('#rpg-tracker-agent'));
     agentPanel.style.setProperty('--rt-base-size', (settings.agentFontSize || 13) + 'px');
-    const agentCloseBtn = /** @type {HTMLElement} */ (panel.querySelector('#rpg-tracker-agent-close'));
+    const agentCloseBtn = /** @type {HTMLElement} */ (document.getElementById('rpg-tracker-agent-close'));
 
     renderRouterUI = async function () {
         const s = getSettings();
@@ -4859,75 +4919,49 @@ function createPanel() {
     };
     let updateAgentBtnUI = () => { };
 
-    if (agentBtn && agentPanel && agentCloseBtn) {
+    const isAgentDetachedForCollapse = () => localStorage.getItem('rpg_tracker_agent_detached') === 'true';
+
+    function applyPanelCollapseUi() {
+        const s = getSettings();
+        const detached = isAgentDetachedForCollapse();
+        const integratedAgent = s.trackerContentMode === 'agent' && !detached;
+
+        if (integratedAgent) {
+            panel.classList.toggle('rt-panel-collapsed', !!s.agentCollapsed);
+            agentPanel.classList.remove('rt-panel-collapsed');
+        } else if (detached) {
+            panel.classList.toggle('rt-panel-collapsed', !!s.trackerCollapsed);
+            agentPanel.classList.toggle('rt-panel-collapsed', !!s.agentCollapsed);
+        } else {
+            panel.classList.toggle('rt-panel-collapsed', !!s.trackerCollapsed);
+            if (agentPanel.classList.contains('rt-agent-integrated')) {
+                agentPanel.classList.remove('rt-panel-collapsed');
+            }
+        }
+
+        const trackerIcon = panel.querySelector('#rpg-tracker-collapse-btn i');
+        if (trackerIcon) {
+            trackerIcon.className = s.trackerCollapsed ? 'fa-solid fa-chevron-down' : 'fa-solid fa-chevron-up';
+        }
+        const agentIcon = panel.querySelector('#rt-agent-router-collapse-btn i')
+            || agentPanel.querySelector('#rt-agent-router-collapse-btn i');
+        if (agentIcon) {
+            agentIcon.className = s.agentCollapsed ? 'fa-solid fa-chevron-down' : 'fa-solid fa-chevron-up';
+        }
+    }
+
+    if (agentPanel && agentCloseBtn) {
         const isAgentDetached = () => localStorage.getItem('rpg_tracker_agent_detached') === 'true';
+        /** Header controls live on #rt-header-face-agent (main panel or detached agent header). */
+        const queryAgentUi = (sel) => agentPanel.querySelector(sel) || panel.querySelector(sel);
 
-        updateAgentBtnUI = () => {
-            const isVisible = agentPanel.style.display !== 'none';
-            if (isVisible) {
-                agentBtn.classList.add('active');
-            } else {
-                agentBtn.classList.remove('active');
-            }
-        };
-
-        agentBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const isHidden = (/** @type {HTMLElement} */ (agentPanel)).style.display === 'none';
-            if (isHidden) {
-                const s = getSettings();
-                (/** @type {HTMLElement} */ (agentPanel)).style.display = 'flex';
-                localStorage.setItem('rpg_tracker_agent_visible', 'true');
-                // Auto-expand the main tracker if it's collapsed; agent panel is an absolute
-                // child, so overflow:hidden on the main panel would clip it otherwise.
-                if (s.trackerCollapsed) {
-                    s.trackerCollapsed = false;
-                    localStorage.setItem('rpg_tracker_collapsed', 'false');
-                    panel.classList.remove('rt-panel-collapsed');
-                    const colIcon = panel.querySelector('#rpg-tracker-collapse-btn i');
-                    if (colIcon) colIcon.className = 'fa-solid fa-chevron-up';
-                }
-
-                // Hide Raw/Rendered view if docked
-                if (!isAgentDetached()) {
-                    const taEl = panel.querySelector('#rpg-tracker-memo');
-                    const rvEl = panel.querySelector('#rpg-tracker-render');
-                    if (taEl) taEl.style.display = 'none';
-                    if (rvEl) rvEl.style.display = 'none';
-                }
-
-                syncRouterPrefixDisplays(s.routerCampaignPrefix || '');
-                syncAgentImmersionUi();
-                renderRouterUI();
-                refreshManifest();
-
-                // Show undock tip once on first launch if docked
-                if (!isAgentDetached() && !s.routerUndockHintShown) {
-                    s.routerUndockHintShown = true;
-                    saveSettings();
-                    toastr['info'](
-                        'Tip: Click the ⧉ (Detach) button in the Agent header to run the Lorebook Agent as a standalone draggable panel. It is designed to work best when undocked!',
-                        'Lorebook Agent',
-                        { timeOut: 8000, closeButton: true }
-                    );
-                }
-            } else {
-                (/** @type {HTMLElement} */ (agentPanel)).style.display = 'none';
-                localStorage.setItem('rpg_tracker_agent_visible', 'false');
-                // Restore Raw/Rendered view if docked
-                if (!isAgentDetached()) {
-                    applyViewState();
-                }
-            }
-            updateAgentBtnUI();
-        });
         agentCloseBtn.addEventListener('click', () => {
-            (/** @type {HTMLElement} */ (agentPanel)).style.display = 'none';
-            localStorage.setItem('rpg_tracker_agent_visible', 'false');
-            if (!isAgentDetached()) {
-                applyViewState();
+            if (isAgentDetached()) {
+                agentPanel.style.display = 'none';
+                updateAgentBtnUI();
+                return;
             }
-            updateAgentBtnUI();
+            applyPanelContentMode('tracker');
         });
         const helpBtn = agentPanel.querySelector('#rt-agent-help-btn');
         if (helpBtn) {
@@ -4948,7 +4982,7 @@ function createPanel() {
             const sidebarCheck = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_tracker_router_enabled'));
             if (sidebarCheck) sidebarCheck.checked = !!s.routerEnabled;
             // Keep header ⏻ button in sync
-            const agentEnableBtn = /** @type {HTMLElement|null} */ (agentPanel.querySelector('#rt-agent-router-enable-btn'));
+            const agentEnableBtn = /** @type {HTMLElement|null} */ (queryAgentUi('#rt-agent-router-enable-btn'));
             if (agentEnableBtn) {
                 agentEnableBtn.style.opacity = s.routerEnabled ? '' : '0.35';
                 agentEnableBtn.title = s.routerEnabled ? 'Disable Lorebook Agent' : 'Enable Lorebook Agent';
@@ -4964,20 +4998,10 @@ function createPanel() {
             const s = getSettings();
             s.agentCollapsed = !s.agentCollapsed;
             localStorage.setItem('rpg_tracker_agent_collapsed', String(s.agentCollapsed));
-
-            if (s.agentCollapsed) {
-                agentPanel.classList.add('rt-panel-collapsed');
-            } else {
-                agentPanel.classList.remove('rt-panel-collapsed');
-            }
-
-            const icon = agentPanel.querySelector('#rt-agent-router-collapse-btn i');
-            if (icon) {
-                icon.className = s.agentCollapsed ? 'fa-solid fa-chevron-down' : 'fa-solid fa-chevron-up';
-            }
+            applyPanelCollapseUi();
         };
 
-        const agentCollapseBtn = agentPanel.querySelector('#rt-agent-router-collapse-btn');
+        const agentCollapseBtn = queryAgentUi('#rt-agent-router-collapse-btn');
         if (agentCollapseBtn) {
             agentCollapseBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -4985,9 +5009,9 @@ function createPanel() {
             });
         }
 
-        const agentHeader = agentPanel.querySelector('.rpg-tracker-header');
-        if (agentHeader) {
-            agentHeader.addEventListener('dblclick', (e) => {
+        const agentHeaderFace = panel.querySelector('#rt-header-face-agent');
+        if (agentHeaderFace) {
+            agentHeaderFace.addEventListener('dblclick', (e) => {
                 if (e.target instanceof Element && e.target.closest('button, input, select, textarea')) return;
                 toggleAgentCollapse();
             });
@@ -5257,7 +5281,7 @@ function createPanel() {
         }
 
         // ── Agent enable button (header ⏻) ──
-        const agentEnableBtn = agentPanel.querySelector('#rt-agent-router-enable-btn');
+        const agentEnableBtn = queryAgentUi('#rt-agent-router-enable-btn');
         if (agentEnableBtn) {
             agentEnableBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -5882,7 +5906,7 @@ function createPanel() {
                         const cleanBio = pc.bio.replace(/\[\/?CORE\]/gi, '');
                         desc = cleanBio.split('\n').map(l => l.trim()).filter(l => l && !/^\[ID:/i.test(l)).slice(0, 2).join(' ').substring(0, 260);
                     }
-                    const portraitSrc = resolvePortraitDisplaySrc(s.customPortraits?.[pc.name] || '');
+                    const portraitSrc = resolvePortraitSrcForPlayerCharacter(s, pc.name);
 
                     const pcDiv = document.createElement('div');
                     pcDiv.className = 'rt-npc-card';
@@ -5927,7 +5951,7 @@ function createPanel() {
                     const openPcPopup = async (startInEditMode = false) => {
                         const ctx = SillyTavern.getContext();
                         if (!ctx.callGenericPopup) return;
-                        const popupPortraitSrc = resolvePortraitDisplaySrc(s.customPortraits?.[pc.name] || '');
+                        const popupPortraitSrc = resolvePortraitSrcForPlayerCharacter(s, pc.name);
                         const hidePortrait = s.npcPortraits === false;
                         const popupPortraitEl = popupPortraitSrc
                             ? `<img src="${escapeHtml(popupPortraitSrc)}" style="width:100%;height:auto;aspect-ratio:1;object-fit:cover;border-radius:12px;border:2px solid rgba(120,80,220,0.5);box-shadow:0 4px 20px rgba(0,0,0,0.4);" alt="${escapeHtml(pc.name)}">`
@@ -9133,7 +9157,7 @@ Rules:
             });
         }
 
-        const agentPromptBtn = agentPanel.querySelector('#rt-agent-prompt-btn');
+        const agentPromptBtn = queryAgentUi('#rt-agent-prompt-btn');
         if (agentPromptBtn) {
             agentPromptBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -9281,8 +9305,8 @@ Rules:
         }
 
         // ── Agent pause button ──
-        const agentPauseBtn = agentPanel.querySelector('#rt-agent-router-pause-btn');
-        const agentPauseBanner = /** @type {HTMLElement} */ (agentPanel.querySelector('#rt-agent-pause-banner'));
+        const agentPauseBtn = queryAgentUi('#rt-agent-router-pause-btn');
+        const agentPauseBanner = /** @type {HTMLElement} */ (queryAgentUi('#rt-agent-pause-banner'));
         if (agentPauseBtn) {
             agentPauseBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -9300,7 +9324,7 @@ Rules:
 
 
 
-        const manualRunBtn = agentPanel.querySelector('#rt-agent-router-manual-run');
+        const manualRunBtn = queryAgentUi('#rt-agent-router-manual-run');
         if (manualRunBtn) {
             manualRunBtn.addEventListener('click', async (e) => {
                 e.stopPropagation();
@@ -9312,7 +9336,7 @@ Rules:
             });
         }
 
-        const agentStopBtn = agentPanel.querySelector('#rt-agent-stop-btn');
+        const agentStopBtn = queryAgentUi('#rt-agent-stop-btn');
         if (agentStopBtn) {
             agentStopBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -9321,15 +9345,15 @@ Rules:
         }
 
         // ── Cleanup dropdown submenu ─────────────────────────────────────────────
-        const cleanupBroomBtn = agentPanel.querySelector('#rt-agent-router-cleanup');
-        const cleanupDropdown = agentPanel.querySelector('#rt-cleanup-dropdown');
-        const cleanupRunBtn = agentPanel.querySelector('#rt-cleanup-run-btn');
-        const cleanupSettingsToggle = agentPanel.querySelector('#rt-cleanup-settings-toggle');
-        const cleanupSettingsPanel = agentPanel.querySelector('#rt-cleanup-settings-panel');
-        const cleanupThresholdInp = /** @type {HTMLInputElement|null} */ (agentPanel.querySelector('#rt-cleanup-threshold-inp'));
-        const cleanupEveryInp = /** @type {HTMLInputElement|null} */ (agentPanel.querySelector('#rt-cleanup-every-inp'));
-        const cleanupUseThresholdChk = /** @type {HTMLInputElement|null} */ (agentPanel.querySelector('#rt-cleanup-use-threshold-chk'));
-        const cleanupThresholdRow = /** @type {HTMLElement|null} */ (agentPanel.querySelector('#rt-cleanup-threshold-row'));
+        const cleanupBroomBtn = queryAgentUi('#rt-agent-router-cleanup');
+        const cleanupDropdown = queryAgentUi('#rt-cleanup-dropdown');
+        const cleanupRunBtn = queryAgentUi('#rt-cleanup-run-btn');
+        const cleanupSettingsToggle = queryAgentUi('#rt-cleanup-settings-toggle');
+        const cleanupSettingsPanel = queryAgentUi('#rt-cleanup-settings-panel');
+        const cleanupThresholdInp = /** @type {HTMLInputElement|null} */ (queryAgentUi('#rt-cleanup-threshold-inp'));
+        const cleanupEveryInp = /** @type {HTMLInputElement|null} */ (queryAgentUi('#rt-cleanup-every-inp'));
+        const cleanupUseThresholdChk = /** @type {HTMLInputElement|null} */ (queryAgentUi('#rt-cleanup-use-threshold-chk'));
+        const cleanupThresholdRow = /** @type {HTMLElement|null} */ (queryAgentUi('#rt-cleanup-threshold-row'));
 
         if (cleanupBroomBtn && cleanupDropdown) {
             // Toggle dropdown on broom click
@@ -9437,7 +9461,7 @@ Rules:
         }
 
         // ── Lorebook Agent Detaching ──
-        const detachBtn = /** @type {HTMLElement} */ (agentPanel.querySelector('#rt-agent-router-detach'));
+        const detachBtn = /** @type {HTMLElement} */ (queryAgentUi('#rt-agent-router-detach'));
         if (detachBtn) {
             const DETACHED_AGENT_KEY = 'rpg_tracker_agent_detached';
             const GEO_KEY = 'rpg_tracker_geometry_lorebook_agent';
@@ -9457,32 +9481,69 @@ Rules:
             /** @type {(() => void) | null} */
             let destroyAgentDraggable = null;
 
+            const headerFaceAgent = panel.querySelector('#rt-header-face-agent');
+            const mainHeader = panel.querySelector('#rpg-tracker-header');
+            const agentPane = panel.querySelector('#rt-panel-agent-pane');
+
+            const moveAgentHeaderToDetached = () => {
+                let detachedHeader = agentPanel.querySelector('#rt-agent-detached-header');
+                if (!detachedHeader) {
+                    detachedHeader = document.createElement('div');
+                    detachedHeader.id = 'rt-agent-detached-header';
+                    detachedHeader.className = 'rpg-tracker-header';
+                    detachedHeader.style.cursor = 'default';
+                    agentPanel.insertBefore(detachedHeader, agentPanel.firstChild);
+                }
+                if (headerFaceAgent instanceof HTMLElement && headerFaceAgent.parentElement !== detachedHeader) {
+                    headerFaceAgent.classList.add('rt-header-face-active');
+                    headerFaceAgent.classList.remove('rt-header-face-inactive');
+                    headerFaceAgent.style.display = 'flex';
+                    detachedHeader.appendChild(headerFaceAgent);
+                }
+                return detachedHeader;
+            };
+
+            const moveAgentHeaderToIntegrated = () => {
+                if (headerFaceAgent instanceof HTMLElement && mainHeader instanceof HTMLElement
+                    && headerFaceAgent.parentElement !== mainHeader) {
+                    mainHeader.appendChild(headerFaceAgent);
+                }
+                agentPanel.querySelector('#rt-agent-detached-header')?.remove();
+            };
+
             const applyDetachedState = () => {
+                panel.classList.toggle('rt-agent-detached-mode', isDetached());
+
                 if (isDetached()) {
+                    agentPanel.classList.remove('rt-agent-integrated');
                     agentPanel.classList.add('rt-detached-panel');
-                    const isAgentVisible = localStorage.getItem('rpg_tracker_agent_visible') !== 'false';
-                    agentPanel.style.display = isAgentVisible ? 'flex' : 'none'; // Respect saved visibility
+                    const s = getSettings();
+                    const showDetached = s.trackerContentMode === 'agent';
+                    agentPanel.style.display = showDetached ? 'flex' : 'none';
                     document.body.appendChild(agentPanel);
-                    syncRouterPrefixDisplays(getSettings().routerCampaignPrefix || '');
-                    renderRouterUI(); // Ensure it's populated
+                    moveAgentHeaderToDetached();
+                    syncRouterPrefixDisplays(s.routerCampaignPrefix || '');
+                    renderRouterUI();
                     refreshManifest();
-                    const header = agentPanel.querySelector('.rpg-tracker-header');
-                    if (header instanceof HTMLElement) {
-                        destroyAgentDraggable = makeDraggable(agentPanel, header, GEO_KEY);
+
+                    const detachedHeader = agentPanel.querySelector('#rt-agent-detached-header');
+                    if (destroyAgentDraggable) {
+                        destroyAgentDraggable();
+                        destroyAgentDraggable = null;
+                    }
+                    if (detachedHeader instanceof HTMLElement) {
+                        destroyAgentDraggable = makeDraggable(agentPanel, detachedHeader, GEO_KEY);
                     }
                     detachBtn.innerHTML = '↓';
                     detachBtn.title = 'Re-attach Lorebook Agent';
 
-                    // Reset styling overrides set for docked mode
                     agentPanel.style.position = 'absolute';
                     agentPanel.style.boxShadow = '';
                     agentPanel.style.border = '';
 
                     if (isMobileLayout()) {
-                        // Mobile: fill viewport; resize is desktop-only
                         applyMobileAgentGeometry();
                     } else {
-                        // Restore geometry with off-screen protection
                         try {
                             const savedStr = localStorage.getItem(GEO_KEY);
                             const saved = savedStr ? JSON.parse(savedStr) : null;
@@ -9521,7 +9582,7 @@ Rules:
                         }
                     }
 
-                    // Restore main panel view since agent is now detached
+                    applyPanelContentMode('tracker', { skipPersist: true });
                     applyViewState();
                 } else {
                     if (destroyAgentDraggable) {
@@ -9529,39 +9590,37 @@ Rules:
                         destroyAgentDraggable = null;
                     }
                     agentPanel.classList.remove('rt-detached-panel');
-                    panel.appendChild(agentPanel);
+                    agentPanel.classList.add('rt-agent-integrated');
+                    moveAgentHeaderToIntegrated();
 
-                    // Style to cover the main panel content area when docked
-                    agentPanel.style.left = '0';
-                    agentPanel.style.top = '30px';
-                    agentPanel.style.right = '0';
-                    agentPanel.style.width = '100%';
-                    agentPanel.style.height = 'calc(100% - 30px)';
-                    agentPanel.style.maxHeight = 'calc(100% - 30px)';
-                    agentPanel.style.position = 'absolute';
-                    agentPanel.style.boxShadow = 'none';
-                    agentPanel.style.border = 'none';
+                    const attachParent = agentPane instanceof HTMLElement ? agentPane : panel;
+                    attachParent.appendChild(agentPanel);
+
+                    agentPanel.style.position = '';
+                    agentPanel.style.left = '';
+                    agentPanel.style.top = '';
+                    agentPanel.style.right = '';
+                    agentPanel.style.width = '';
+                    agentPanel.style.height = '';
+                    agentPanel.style.maxHeight = '';
+                    agentPanel.style.boxShadow = '';
+                    agentPanel.style.border = '';
 
                     detachBtn.innerHTML = '⧉';
                     detachBtn.title = 'Detach Lorebook Agent';
 
-                    // Synchronize visibility of the main panel views
-                    const isVisible = agentPanel.style.display !== 'none';
-                    if (isVisible) {
-                        const taEl = panel.querySelector('#rpg-tracker-memo');
-                        const rvEl = panel.querySelector('#rpg-tracker-render');
-                        if (taEl) taEl.style.display = 'none';
-                        if (rvEl) rvEl.style.display = 'none';
-                    } else {
-                        applyViewState();
-                    }
+                    applyPanelContentMode(getSettings().trackerContentMode || 'tracker');
                 }
                 updateAgentBtnUI();
             };
 
             detachBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                localStorage.setItem('rpg_tracker_agent_visible', 'true');
+                const s = getSettings();
+                if (!isDetached()) {
+                    s.trackerContentMode = 'agent';
+                    localStorage.setItem('rpg_tracker_content_mode', 'agent');
+                }
                 localStorage.setItem(DETACHED_AGENT_KEY, isDetached() ? 'false' : 'true');
                 applyDetachedState();
             });
@@ -9569,16 +9628,6 @@ Rules:
             // Initial apply
             if (isDetached()) {
                 applyDetachedState();
-            } else {
-                // Ensure docked styles are applied initially
-                agentPanel.style.left = '0';
-                agentPanel.style.top = '30px';
-                agentPanel.style.right = '0';
-                agentPanel.style.width = '100%';
-                agentPanel.style.height = 'calc(100% - 30px)';
-                agentPanel.style.position = 'absolute';
-                agentPanel.style.boxShadow = 'none';
-                agentPanel.style.border = 'none';
             }
 
             window.addEventListener('resize', () => {
@@ -9870,10 +9919,90 @@ Rules:
         settings.renderedViewActive = true;
     }
 
+    function applyPanelContentMode(mode, options = {}) {
+        const isAgentDetached = () => localStorage.getItem('rpg_tracker_agent_detached') === 'true';
+        const effectiveMode = mode === 'agent' ? 'agent' : 'tracker';
+        const s = getSettings();
+        s.trackerContentMode = effectiveMode;
+        if (!options.skipPersist) {
+            localStorage.setItem('rpg_tracker_content_mode', effectiveMode);
+            localStorage.removeItem('rpg_tracker_agent_visible');
+        }
+
+        const modeTrackerBtn = panel.querySelector('#rt-panel-mode-tracker');
+        const modeAgentBtn = panel.querySelector('#rt-panel-mode-agent');
+        const trackerPane = panel.querySelector('#rt-panel-tracker-pane');
+        const agentPaneEl = panel.querySelector('#rt-panel-agent-pane');
+        const headerFaceTracker = panel.querySelector('#rt-header-face-tracker');
+        const headerFaceAgent = panel.querySelector('#rt-header-face-agent');
+
+        if (isAgentDetached()) {
+            panel.classList.remove('rt-panel-mode-agent');
+            if (headerFaceTracker instanceof HTMLElement) headerFaceTracker.style.display = 'flex';
+            if (headerFaceAgent instanceof HTMLElement && headerFaceAgent.closest('#rpg-tracker-header')) {
+                headerFaceAgent.style.display = 'none';
+            }
+            if (trackerPane instanceof HTMLElement) trackerPane.style.display = 'flex';
+            if (agentPaneEl instanceof HTMLElement) agentPaneEl.style.display = 'none';
+            applyViewState();
+            updateAgentBtnUI();
+            applyPanelCollapseUi();
+            return;
+        }
+
+        const isAgent = effectiveMode === 'agent';
+        panel.classList.toggle('rt-panel-mode-agent', isAgent);
+
+        if (modeTrackerBtn) {
+            modeTrackerBtn.classList.toggle('rt-agent-view-mode-btn-active', !isAgent);
+            modeTrackerBtn.setAttribute('aria-selected', String(!isAgent));
+        }
+        if (modeAgentBtn) {
+            modeAgentBtn.classList.toggle('rt-agent-view-mode-btn-active', isAgent);
+            modeAgentBtn.setAttribute('aria-selected', String(isAgent));
+        }
+
+        if (headerFaceTracker instanceof HTMLElement) {
+            headerFaceTracker.classList.toggle('rt-header-face-active', !isAgent);
+            headerFaceTracker.classList.toggle('rt-header-face-inactive', isAgent);
+            headerFaceTracker.style.display = 'flex';
+        }
+        if (headerFaceAgent instanceof HTMLElement && headerFaceAgent.closest('#rpg-tracker-header')) {
+            headerFaceAgent.classList.toggle('rt-header-face-active', isAgent);
+            headerFaceAgent.classList.toggle('rt-header-face-inactive', !isAgent);
+            headerFaceAgent.style.display = 'flex';
+        }
+
+        if (trackerPane instanceof HTMLElement) {
+            trackerPane.style.display = isAgent ? 'none' : 'flex';
+        }
+        if (agentPaneEl instanceof HTMLElement) {
+            agentPaneEl.style.display = isAgent ? 'flex' : 'none';
+        }
+        if (agentPanel) {
+            agentPanel.style.display = isAgent ? 'flex' : 'none';
+        }
+
+        if (isAgent) {
+            syncRouterPrefixDisplays(s.routerCampaignPrefix || '');
+            if (typeof globalThis._rpgSyncAgentImmersionUi === 'function') {
+                globalThis._rpgSyncAgentImmersionUi();
+            }
+            if (typeof renderRouterUI === 'function') renderRouterUI();
+            void refreshManifest();
+        } else {
+            applyViewState();
+        }
+        updateAgentBtnUI();
+        applyPanelCollapseUi();
+    }
+
     function applyViewState() {
         const isAgentDetached = () => localStorage.getItem('rpg_tracker_agent_detached') === 'true';
-        if (!isAgentDetached() && agentPanel && agentPanel.style.display !== 'none') {
-            agentPanel.style.display = 'none';
+        const s = getSettings();
+        if (!isAgentDetached() && s.trackerContentMode === 'agent') {
+            updateAgentBtnUI();
+            return;
         }
 
         const taEl = panel.querySelector('#rpg-tracker-memo');
@@ -9900,6 +10029,31 @@ Rules:
             updateAgentBtnUI();
         }
     }
+
+    const modeTrackerBtn = panel.querySelector('#rt-panel-mode-tracker');
+    const modeAgentBtn = panel.querySelector('#rt-panel-mode-agent');
+    if (modeTrackerBtn) {
+        modeTrackerBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            applyPanelContentMode('tracker');
+        });
+    }
+    if (modeAgentBtn) {
+        modeAgentBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const s = getSettings();
+            if (s.trackerCollapsed) {
+                s.trackerCollapsed = false;
+                localStorage.setItem('rpg_tracker_collapsed', 'false');
+                panel.classList.remove('rt-panel-collapsed');
+                const colIcon = panel.querySelector('#rpg-tracker-collapse-btn i');
+                if (colIcon) colIcon.className = 'fa-solid fa-chevron-up';
+            }
+            applyPanelContentMode('agent');
+        });
+    }
+
+    applyPanelContentMode(settings.trackerContentMode || 'tracker', { skipPersist: true });
 
     applyViewState();
 
@@ -9975,17 +10129,7 @@ Rules:
         const s = getSettings();
         s.trackerCollapsed = !s.trackerCollapsed;
         localStorage.setItem('rpg_tracker_collapsed', String(s.trackerCollapsed));
-
-        if (s.trackerCollapsed) {
-            panel.classList.add('rt-panel-collapsed');
-        } else {
-            panel.classList.remove('rt-panel-collapsed');
-        }
-
-        const icon = panel.querySelector('#rpg-tracker-collapse-btn i');
-        if (icon) {
-            icon.className = s.trackerCollapsed ? 'fa-solid fa-chevron-down' : 'fa-solid fa-chevron-up';
-        }
+        applyPanelCollapseUi();
     };
 
     panel.querySelector('#rpg-tracker-collapse-btn').addEventListener('click', (e) => {
@@ -11181,6 +11325,18 @@ async function runPortraitMigrationIfNeeded() {
             // Fix "active only" quest prompt that caused models to drop completed quests before sync
             if (settings.stockPrompts.quests?.includes('active** quests only') ||
                 settings.stockPrompts.quests?.includes('do not keep archived quests')) {
+                refreshQuestPrompt(settings);
+                changed = true;
+            }
+
+            // Refresh quest prompt when it still tells the model to retain archived quests in [QUESTS]
+            if (settings.stockPrompts.quests?.includes('Never delete old quests') ||
+                settings.stockPrompts.quests?.includes('do not delete or omit it from your output') ||
+                settings.stockPrompts.quests?.includes('Maintain the complete list of all quests at all times') ||
+                (settings.stockPrompts.quests?.includes('OBJ_ACTIVE') &&
+                    !settings.stockPrompts.quests?.includes('NEVER deviate from this format')) ||
+                (settings.stockPrompts.quests?.includes('OBJ_ACTIVE') &&
+                    !settings.stockPrompts.quests?.includes('Only use DEADLINE if the quest has a time limit'))) {
                 refreshQuestPrompt(settings);
                 changed = true;
             }

@@ -4,7 +4,6 @@ import { buildOnboardingXpHint, buildOnboardingTimeHint } from './constants.js';
 import { escapeHtml } from './memo-processor.js';
 import { getRequestHeaders } from '../../../../script.js';
 import { saveSettings, sendDirectPrompt, refreshAgentManifestNow, refreshRenderedView, syncTimeFormatSettingsUi } from './index.js';
-import { triggerBackgroundPortraitGeneration } from './portraits.js';
 import { openPcSectionEditor } from './ui-editors.js';
 
 const _CR_CLASS_LISTS = {
@@ -173,6 +172,24 @@ export function resetCharacterCreatorFields(panel, populateClasses) {
     saveSettings();
 }
 
+/** Resolve the live onboarding container after a render refresh. */
+function resolveOnboardingEl(fallbackEl) {
+    const renderRoot = document.getElementById('rpg-tracker-render');
+    return /** @type {HTMLElement|null} */ (renderRoot?.querySelector('.rt-empty') || fallbackEl || null);
+}
+
+/**
+ * Entry point for delegated Generate clicks (survives refreshRenderedView innerHTML swaps).
+ * @param {HTMLElement} el - the .rt-empty element
+ */
+export function handleCharacterCreatorGenerate(el) {
+    const onboardingEl = resolveOnboardingEl(el);
+    if (!onboardingEl) return;
+    const panel = /** @type {HTMLElement|null} */ (onboardingEl.querySelector('#rt-char-roll-panel'));
+    if (!panel) return;
+    void handleCharRollGenerate(onboardingEl, panel);
+}
+
 /**
  * Shows the inline Character Roll panel inside the .rt-empty onboarding area.
  * @param {HTMLElement} el - the .rt-empty element
@@ -183,6 +200,8 @@ export function showCharacterRollPanel(el) {
     const heroEl = /** @type {HTMLElement|null} */ (el.querySelector('.rt-onboarding-hero'));
     const secondaryEl = /** @type {HTMLElement|null} */ (el.querySelector('.rt-onboarding-secondary'));
     const allBtnGroups = /** @type {NodeListOf<HTMLElement>} */ (el.querySelectorAll('.rt-onboarding-buttons'));
+
+    getSettings().characterCreatorPanelOpen = true;
 
     if (heroEl) heroEl.style.display = 'none';
     if (secondaryEl) secondaryEl.style.display = 'none';
@@ -276,6 +295,7 @@ export function showCharacterRollPanel(el) {
     if (backBtn && !backBtn._crBound) {
         backBtn._crBound = true;
         backBtn.addEventListener('click', () => {
+            getSettings().characterCreatorPanelOpen = false;
             panel.style.display = 'none';
             if (heroEl) heroEl.style.display = '';
             if (secondaryEl) secondaryEl.style.display = '';
@@ -292,11 +312,7 @@ export function showCharacterRollPanel(el) {
         resetBtn.addEventListener('click', () => resetCharacterCreatorFields(panel, populateClasses));
     }
 
-    const genBtn = panel.querySelector('#rt-cr-generate-btn');
-    if (genBtn && !genBtn._crBound) {
-        genBtn._crBound = true;
-        genBtn.addEventListener('click', () => { void handleCharRollGenerate(el, panel); });
-    }
+    // Generate clicks are bound via delegation in bindRenderedCardEvents (index.js).
 
     // --- Presets ---
     const presetSelect  = panel.querySelector('#rt-cr-preset-select');
@@ -507,22 +523,29 @@ ${cardSnippet ? `\n--- CHARACTER CARD CONTEXT ---${cardSnippet}` : ''}
 • All stats, gear, and saves${hasXp ? ', and XP' : ''} must be consistent with Level ${level}.
 ${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}${settingHint}`;
 
-    el.querySelectorAll('.rt-random-char-btn').forEach(b => { /** @type {HTMLButtonElement} */ (b).disabled = true; });
-    const genBtn = /** @type {HTMLButtonElement|null} */ (panel.querySelector('#rt-cr-generate-btn'));
+    const onboardingEl = resolveOnboardingEl(el) || el;
+    const livePanel = onboardingEl.querySelector('#rt-char-roll-panel') || panel;
+    onboardingEl.querySelectorAll('.rt-random-char-btn').forEach(b => { /** @type {HTMLButtonElement} */ (b).disabled = true; });
+    const genBtn = /** @type {HTMLButtonElement|null} */ (livePanel.querySelector('#rt-cr-generate-btn'));
     if (genBtn) { genBtn.disabled = true; genBtn.textContent = '🎲 Generating...'; }
 
-    await sendDirectPrompt(prompt);
+    try {
+        await sendDirectPrompt(prompt);
 
-    if (genBtn) { genBtn.disabled = false; genBtn.textContent = '🎲 Generate Character'; }
-    el.querySelectorAll('.rt-random-char-btn').forEach(b => { /** @type {HTMLButtonElement} */ (b).disabled = false; });
-
-    if (wantPersona) {
-        const s2 = getSettings();
-        const extractedName = extractCharNameFromMemo(s2.currentMemo);
-        const charName = extractedName || nameVal || 'My Character';
-        const finalExtraHints = extraHints + (cardSnippet ? `\n\n--- CHARACTER CARD CONTEXT ---${cardSnippet}` : '');
-        const bio = await generatePersonaBio(charName, wordCount, finalExtraHints);
-        if (bio) showPersonaConfirmOverlay(bio, charName, wordCount, extraHints);
+        if (wantPersona) {
+            const s2 = getSettings();
+            const extractedName = extractCharNameFromMemo(s2.currentMemo);
+            const charName = extractedName || nameVal || 'My Character';
+            const finalExtraHints = extraHints + (cardSnippet ? `\n\n--- CHARACTER CARD CONTEXT ---${cardSnippet}` : '');
+            const bio = await generatePersonaBio(charName, wordCount, finalExtraHints);
+            if (bio) showPersonaConfirmOverlay(bio, charName, wordCount, extraHints);
+        }
+    } finally {
+        const resetEl = resolveOnboardingEl(el) || el;
+        const resetPanel = resetEl.querySelector('#rt-char-roll-panel') || panel;
+        resetEl.querySelectorAll('.rt-random-char-btn').forEach(b => { /** @type {HTMLButtonElement} */ (b).disabled = false; });
+        const resetBtn = /** @type {HTMLButtonElement|null} */ (resetPanel?.querySelector('#rt-cr-generate-btn'));
+        if (resetBtn) { resetBtn.disabled = false; resetBtn.textContent = '🎲 Generate Character'; }
     }
 }
 
@@ -739,11 +762,6 @@ export function showPersonaConfirmOverlay(bioText, charName, wordCount, extraHin
              
              await refreshAgentManifestNow();
 
-             const fresh = getSettings();
-             if (fresh.portraitAutoGeneratePlayer && fresh.enablePortraits !== false) {
-                 triggerBackgroundPortraitGeneration(safeName, refreshRenderedView, finalBio);
-             }
-             
              toastr['success'](`"${safeName}" added as Player in Lorebook Agent.`, 'Character Creator');
          } else {
              toastr['error']('No active chat found to link the Player Character.', 'Character Creator');

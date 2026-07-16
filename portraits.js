@@ -756,6 +756,72 @@ export async function generateWithNativeExtension(prompt, entityName, localApply
 }
 
 /**
+ * Scans the current [CHARACTER] block in state memo for character names.
+ * Uses the same HP-line and plain-name parsing as party/enemy scanners.
+ * @param {object} [settings]
+ * @returns {string[]}
+ */
+export function getCharacterBlockNames(settings) {
+    const s = settings || getSettings();
+    if (!s.currentMemo) return [];
+    const blocks = parseMemoBlocks(s.currentMemo);
+    const charBlock = blocks['CHARACTER'] || '';
+    const names = [];
+    for (const line of charBlock.split('\n')) {
+        const cleanLine = line.trim().replace(/^\s*[-*+•–—](?:\s+|(?=[A-Za-z]))/, '');
+        if (!cleanLine) continue;
+        const hpMatch = cleanLine.match(/^(.+?):\s*([\d,]+)(?:\/([\d,]+))?\s*HP/i);
+        if (hpMatch) {
+            names.push(hpMatch[1].trim());
+            continue;
+        }
+        if (names.length === 0) {
+            const plainNameColonMatch = cleanLine.match(/^(.+?):\s*(.*)/);
+            if (plainNameColonMatch) {
+                if (plainNameColonMatch[1].trim().toLowerCase() === 'name') {
+                    names.push(plainNameColonMatch[2].trim());
+                } else {
+                    names.push(plainNameColonMatch[1].trim());
+                }
+            } else {
+                names.push(cleanLine);
+            }
+        }
+    }
+    return names.filter(Boolean);
+}
+
+/** @param {object} [settings] @returns {string|null} */
+export function getPrimaryCharacterBlockName(settings) {
+    const names = getCharacterBlockNames(settings);
+    return names[0] || null;
+}
+
+/**
+ * Resolve a portrait for the Lorebook Agent PC card by checking the linked PC name
+ * and any [CHARACTER] block name(s) in the state memo (alias / inheritance).
+ * @param {object} [settings]
+ * @param {string} [pcName]
+ * @returns {string} display-ready src or ''
+ */
+export function resolvePortraitSrcForPlayerCharacter(settings, pcName) {
+    const s = settings || getSettings();
+    const candidates = [];
+    if (pcName) candidates.push(pcName);
+    for (const memoName of getCharacterBlockNames(s)) {
+        if (!candidates.some(c => normalizeCharacterLabel(c) === normalizeCharacterLabel(memoName))) {
+            candidates.push(memoName);
+        }
+    }
+    for (const name of candidates) {
+        const normName = normalizeEntityName(name);
+        const src = s.customPortraits?.[normName];
+        if (src) return resolvePortraitDisplaySrc(src);
+    }
+    return '';
+}
+
+/**
  * Scans the current PARTY block in state memo for member names.
  * @returns {string[]} list of party member names
  */
@@ -781,22 +847,28 @@ export function getPartyMembers() {
 }
 
 /**
- * Queue background portrait auto-generation for the linked Player Character when enabled.
+ * Queue background portrait auto-generation for the [CHARACTER] block name when enabled.
  * @param {object} settings
  * @param {function} refresh
  * @param {{ seedKnownOnly?: boolean }} [opts]
  */
+function seedPlayerCharacterKnownEntities(settings) {
+    const charName = getPrimaryCharacterBlockName(settings);
+    if (charName) knownEntities.add(charName.toUpperCase());
+    const pc = getLinkedPlayerCharacter(settings);
+    if (pc) knownEntities.add(pc.name.toUpperCase());
+}
+
 function triggerPlayerPortraitAutoGenIfNeeded(settings, refresh, opts = {}) {
     if (!settings.portraitAutoGeneratePlayer || settings.enablePortraits === false) return;
-    const pc = getLinkedPlayerCharacter(settings);
-    if (!pc) return;
-    const key = pc.name.toUpperCase();
+    const charName = getPrimaryCharacterBlockName(settings);
+    if (!charName) return;
     if (opts.seedKnownOnly) {
-        knownEntities.add(key);
+        seedPlayerCharacterKnownEntities(settings);
         return;
     }
-    knownEntities.add(key);
-    triggerBackgroundPortraitGeneration(pc.name, refresh, pc.bio || null);
+    seedPlayerCharacterKnownEntities(settings);
+    triggerBackgroundPortraitGeneration(charName, refresh);
 }
 
 /**
@@ -1197,18 +1269,17 @@ export async function checkAndTriggerAutoGenerations(refresh) {
     }
 
     if (s.portraitAutoGeneratePlayer) {
-        const pc = getLinkedPlayerCharacter(s);
-        if (pc) {
-            const key = pc.name.toUpperCase();
+        const charName = getPrimaryCharacterBlockName(s);
+        if (charName) {
+            const key = charName.toUpperCase();
             if (!knownEntities.has(key)) {
-                console.log('[RPG Tracker] checkAndTriggerAutoGenerations: Linked player character detected:', pc.name);
-                knownEntities.add(key);
-                triggerBackgroundPortraitGeneration(pc.name, refresh, pc.bio || null);
+                console.log('[RPG Tracker] checkAndTriggerAutoGenerations: [CHARACTER] block name detected:', charName);
+                seedPlayerCharacterKnownEntities(s);
+                triggerBackgroundPortraitGeneration(charName, refresh);
             }
         }
     } else {
-        const pc = getLinkedPlayerCharacter(s);
-        if (pc) knownEntities.add(pc.name.toUpperCase());
+        seedPlayerCharacterKnownEntities(s);
     }
 
     if (s.portraitAutoGenerateEnemies) {

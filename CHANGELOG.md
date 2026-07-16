@@ -2,6 +2,27 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [5.6.0] - 2026-07-17
+
+### Added
+- **Card-flip panel mode**: State Tracker and Lorebook Agent share one docked panel with a top mode switch; headers swap per mode. Detached Lorebook Agent unchanged.
+- **Night footer starfield**: Distinct twinkling stars in State Tracker and Lorebook Agent footers during night phases.
+
+### Changed
+- **Footer layout**: Direct prompt (💬) bottom-right in both modes; Lorebook Agent footer mirrors State Tracker (`[ LIVE ]` left, last-run right).
+- **Footer location**: Larger glowing location text in both footers, tint follows day/night cycle.
+- **Panel mode switch**: Lorebook Agent tab matches State Tracker (plain grey toggle).
+- **Mobile Lorebook Agent header**: Detach hidden on mobile; collapse chevron matches State Tracker.
+- **QUESTS prompt**: Stricter format rules; deadline only when needed; active quests only in output.
+
+### Fixed
+- **Character Creator Generate**: Event delegation + toasts for silent failures; panel reopens after re-render.
+- **Player portrait auto-generation**: Targets `[CHARACTER]` block, not duplicate Lorebook PC bio generation.
+- **Panel init crash**: `syncAgentImmersionUi` scope fix restores extension settings on load.
+- **Lorebook Agent minimize**: Integrated collapse minimizes main panel (header-only), not a blank body.
+- **Detached Lorebook Agent header**: Restored thin pre-card-flip header bar.
+- **Sun badge glow**: No longer clipped above/below the day/night sun disc.
+
 ## [5.5.65] - 2026-07-16
 
 ### Fixed

@@ -239,6 +239,173 @@
     overflow: visible !important;
 }
 
+/* ── State Tracker / Lorebook Agent card-flip mode (integrated docked layout) ── */
+.rt-header-face {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    position: relative;
+}
+
+/*
+ * Both faces are absolutely layered over the full header width so the bar never
+ * shrink-wraps to content (which left the right half empty). Header height is
+ * kept stable with an explicit min-height so flipping modes does not jump.
+ */
+.rpg-tracker-panel:not(.rt-agent-detached-mode) #rpg-tracker-header {
+    display: block;
+    position: relative;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0;
+    min-height: 40px;
+}
+
+.rpg-tracker-panel:not(.rt-agent-detached-mode) #rpg-tracker-header > .rt-header-face {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 12px;
+    box-sizing: border-box;
+    width: auto;
+    min-width: 0;
+}
+
+.rpg-tracker-panel:not(.rt-agent-detached-mode) #rpg-tracker-header > .rt-header-face.rt-header-face-inactive {
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.rpg-tracker-panel:not(.rt-agent-detached-mode) #rpg-tracker-header > .rt-header-face.rt-header-face-active {
+    visibility: visible;
+    pointer-events: auto;
+}
+
+.rt-header-face .rpg-tracker-header-left {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: visible;
+}
+
+.rt-header-face .rpg-tracker-header-left .rt-header-title-desktop,
+.rt-header-face .rpg-tracker-header-left .rt-header-title-mobile {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.rt-header-face .rpg-tracker-header-right {
+    flex: 0 0 auto;
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: nowrap;
+}
+
+#rt-header-face-agent .rpg-tracker-header-left {
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+#rt-header-face-agent .rpg-tracker-header-left span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Detached agent header: thin bar like pre-card-flip (5.5.5), not integrated flip layout */
+#rpg-tracker-agent.rt-detached-panel #rt-agent-detached-header {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 6px 10px;
+    min-height: 0;
+    height: auto;
+    position: relative;
+}
+
+#rpg-tracker-agent.rt-detached-panel #rt-agent-detached-header > .rt-header-face {
+    position: static;
+    inset: auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 0;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+}
+
+.rt-panel-mode-switch-wrap {
+    flex-shrink: 0;
+    padding: 8px 10px 6px;
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background: linear-gradient(180deg, var(--rt-card-bg, rgba(18, 18, 28, 0.98)) 70%, transparent);
+}
+
+.rt-panel-mode-switch {
+    width: 100%;
+}
+
+.rt-panel-mode-pane {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+}
+
+#rpg-tracker-agent.rt-agent-integrated {
+    position: static !important;
+    width: 100% !important;
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none !important;
+    z-index: auto;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    resize: none !important;
+    overflow: hidden;
+}
+
+#rpg-tracker-agent.rt-agent-integrated .rt-resizer-br,
+#rpg-tracker-agent.rt-agent-integrated .rt-resizer-bl {
+    display: none !important;
+    pointer-events: none !important;
+}
+
+.rpg-tracker-panel.rt-panel-mode-agent #rpg-tracker-prompt-bar,
+.rpg-tracker-panel.rt-panel-mode-agent #rt-main-footer,
+.rpg-tracker-panel.rt-panel-mode-agent .rpg-tracker-delta-panel,
+.rpg-tracker-panel.rt-panel-mode-agent .rpg-tracker-delta-resize-handle {
+    display: none !important;
+}
+
+.rpg-tracker-panel.rt-agent-detached-mode #rt-panel-mode-switch-wrap {
+    display: none !important;
+}
+
+.rpg-tracker-panel.rt-panel-mode-agent:has(.rpg-tracker-agent-panel.is-agent-disabled) #rt-header-face-agent {
+    opacity: 0.6;
+    filter: grayscale(0.4);
+    pointer-events: auto;
+}
+
 .rt-resizer-tr {
     position: absolute;
     top: 0;
@@ -344,11 +511,12 @@
     opacity: 0.93;
 }
 
-/* Header center for pause banner */
 .rpg-tracker-header-center {
     position: absolute;
     left: 50%;
-    transform: translateX(-50%);
+    top: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 0;
     font-size: 9px;
     font-weight: bold;
     letter-spacing: 0.12em;
@@ -357,25 +525,30 @@
     opacity: 0.9;
     pointer-events: none;
     white-space: nowrap;
+    max-width: 40%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: center;
 }
 
 #rt-daynight-badge-slot:empty {
     display: none;
 }
 
-/* Day/night: center the sky badge between the status dot and header icons */
+/* Day/night: sky badge sits inline after the framework title in the header-left row */
 .rpg-tracker-panel.rt-daynight-active #rt-daynight-badge-slot {
-    flex: 1;
+    flex: 0 0 auto;
     display: flex;
-    justify-content: center;
     align-items: center;
-    min-width: 20px;
-    margin: 0 2px;
+    justify-content: flex-start;
+    margin: 0 0 0 4px;
+    overflow: visible;
 }
 
 .rpg-tracker-panel.rt-daynight-active .rt-daynight-badge {
-    width: 22px;
-    height: 22px;
+    width: 28px;
+    height: 28px;
+    overflow: visible;
 }
 
 .rpg-tracker-panel.rt-daynight-active .rt-sky-disc {
@@ -418,6 +591,7 @@
     border-radius: 8px 8px 0 0;
     cursor: move;
     display: flex;
+    flex-wrap: wrap;
     justify-content: space-between;
     align-items: center;
     font-weight: bold;
@@ -425,8 +599,9 @@
     user-select: none;
     flex-shrink: 0;
     position: relative;
-    overflow: hidden;
+    overflow: visible;
 }
+
 
 .rpg-tracker-header > :not(.rt-header-starfield) {
     z-index: 1;
@@ -522,6 +697,8 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    position: relative;
+    z-index: 1;
 }
 
 .rpg-tracker-header-left .rt-header-title-desktop {
@@ -536,6 +713,10 @@
     display: flex;
     align-items: center;
     gap: 6px;
+    flex-wrap: nowrap;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 1;
 }
 
 .rpg-tracker-stop-btn {
@@ -2194,6 +2375,82 @@
     gap: 6px;
     user-select: none;
     flex-wrap: nowrap !important;
+    position: relative;
+    overflow: hidden;
+}
+
+.rpg-tracker-footer > :not(.rt-footer-starfield) {
+    position: relative;
+    z-index: 1;
+}
+
+/* Night footer starfield — related to header stars but offset pattern & timing */
+.rt-footer-starfield {
+    display: none;
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.rpg-tracker-panel.rt-phase-night .rt-footer-starfield,
+.rpg-tracker-panel.rt-phase-lateNight .rt-footer-starfield {
+    display: block;
+}
+
+.rt-footer-starfield::before,
+.rt-footer-starfield::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+}
+
+.rt-footer-starfield::before {
+    animation: rt-footer-star-twinkle 3.1s ease-in-out infinite;
+    background-image:
+        radial-gradient(1px 1px at 4% 52%, rgba(210, 220, 255, 0.75), transparent),
+        radial-gradient(1px 1px at 11% 38%, rgba(255, 255, 255, 0.45), transparent),
+        radial-gradient(1.5px 1.5px at 18% 62%, rgba(220, 230, 255, 0.85), transparent),
+        radial-gradient(1px 1px at 25% 44%, rgba(255, 255, 255, 0.55), transparent),
+        radial-gradient(1px 1px at 32% 70%, rgba(200, 215, 255, 0.65), transparent),
+        radial-gradient(1px 1px at 39% 32%, rgba(255, 255, 255, 0.5), transparent),
+        radial-gradient(1px 1px at 46% 58%, rgba(230, 235, 255, 0.8), transparent),
+        radial-gradient(1.5px 1.5px at 54% 48%, rgba(255, 255, 255, 0.7), transparent),
+        radial-gradient(1px 1px at 61% 36%, rgba(210, 220, 255, 0.55), transparent),
+        radial-gradient(1px 1px at 68% 66%, rgba(255, 255, 255, 0.9), transparent),
+        radial-gradient(1px 1px at 75% 42%, rgba(220, 230, 255, 0.5), transparent),
+        radial-gradient(1px 1px at 82% 54%, rgba(255, 255, 255, 0.6), transparent),
+        radial-gradient(1.5px 1.5px at 89% 34%, rgba(210, 220, 255, 0.8), transparent),
+        radial-gradient(1px 1px at 95% 60%, rgba(255, 255, 255, 0.45), transparent);
+}
+
+.rt-footer-starfield::after {
+    animation: rt-footer-star-twinkle-alt 6.8s ease-in-out infinite;
+    background-image:
+        radial-gradient(1px 1px at 7% 46%, rgba(255, 255, 255, 0.5), transparent),
+        radial-gradient(1px 1px at 14% 68%, rgba(200, 210, 255, 0.7), transparent),
+        radial-gradient(1px 1px at 22% 30%, rgba(255, 255, 255, 0.4), transparent),
+        radial-gradient(1.5px 1.5px at 30% 56%, rgba(230, 240, 255, 0.85), transparent),
+        radial-gradient(1px 1px at 37% 72%, rgba(255, 255, 255, 0.35), transparent),
+        radial-gradient(1px 1px at 44% 40%, rgba(210, 225, 255, 0.65), transparent),
+        radial-gradient(1px 1px at 52% 64%, rgba(255, 255, 255, 0.55), transparent),
+        radial-gradient(1px 1px at 59% 28%, rgba(220, 230, 255, 0.75), transparent),
+        radial-gradient(1.5px 1.5px at 66% 50%, rgba(255, 255, 255, 0.9), transparent),
+        radial-gradient(1px 1px at 73% 74%, rgba(200, 215, 255, 0.45), transparent),
+        radial-gradient(1px 1px at 80% 36%, rgba(255, 255, 255, 0.6), transparent),
+        radial-gradient(1px 1px at 87% 58%, rgba(230, 235, 255, 0.5), transparent),
+        radial-gradient(1px 1px at 93% 44%, rgba(255, 255, 255, 0.7), transparent);
+}
+
+@keyframes rt-footer-star-twinkle {
+    0%, 100% { opacity: 0.75; }
+    45% { opacity: 0.3; }
+}
+
+@keyframes rt-footer-star-twinkle-alt {
+    0%, 100% { opacity: 0.4; }
+    30% { opacity: 0.95; }
+    65% { opacity: 0.25; }
 }
 
 .rt-rng-footer-group {
@@ -2254,6 +2511,83 @@
     background: var(--rt-accent-bg);
     color: var(--rt-accent);
     border-color: var(--rt-accent-dim);
+}
+
+/* Footer location — accent glow tracks day/night cycle via --rt-accent */
+.rt-footer-location-text {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.9em;
+    font-weight: 500;
+    color: var(--rt-accent);
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    opacity: 0.95;
+    cursor: help;
+    text-shadow:
+        0 0 6px var(--rt-accent-dim),
+        0 0 14px color-mix(in srgb, var(--rt-accent) 45%, transparent);
+    transition: color 2s ease, text-shadow 2s ease;
+}
+
+.rpg-tracker-panel.rt-daynight-active .rt-footer-location-text {
+    text-shadow:
+        0 0 4px var(--rt-accent),
+        0 0 10px var(--rt-accent-dim),
+        0 0 22px color-mix(in srgb, var(--rt-accent) 40%, transparent);
+}
+
+/* Footer direct-prompt toggle (bottom-right in both modes) */
+.rt-footer-prompt-btn {
+    flex-shrink: 0;
+    font-size: 1em;
+    line-height: 1;
+    padding: 2px 6px;
+    margin-left: 4px;
+}
+
+/* Lorebook Agent footer — mirror State Tracker: nav left, status + prompt right */
+#rt-agent-footer {
+    justify-content: space-between;
+}
+
+.rt-agent-footer-left {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    min-width: 0;
+}
+
+.rt-agent-footer-center {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 6px;
+}
+
+.rt-agent-footer-right {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+    min-width: 0;
+}
+
+#rt-agent-last-run {
+    font-size: 0.8em;
+    opacity: 0.65;
+    color: var(--rt-text-muted);
+    line-height: 1.3;
+    text-align: right;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 220px;
 }
 
 /* Status dot */
@@ -2446,11 +2780,37 @@
         gap: 6px !important;
     }
 
-    .rpg-tracker-header-left {
+    /* Detached Lorebook Agent keeps the old thin header on mobile */
+    #rpg-tracker-agent.rt-detached-panel #rt-agent-detached-header,
+    #rpg-tracker-agent.rt-detached-panel .rpg-tracker-header {
+        padding: 6px 10px !important;
+        min-height: 0 !important;
+    }
+
+    #rpg-tracker-agent.rt-detached-panel #rt-agent-detached-header > .rt-header-face {
+        padding: 0 !important;
+    }
+
+    .rpg-tracker-panel:not(.rt-agent-detached-mode) #rpg-tracker-header {
+        padding: 0 !important;
+        min-height: 44px;
+    }
+
+    .rpg-tracker-panel:not(.rt-agent-detached-mode) #rpg-tracker-header > .rt-header-face {
+        padding: 10px 8px !important;
+    }
+
+    .rt-header-face .rpg-tracker-header-left {
         min-width: 0 !important;
-        flex: 1 !important;
+        flex: 1 1 auto !important;
         gap: 4px !important;
-        overflow: hidden !important;
+        overflow: visible !important;
+    }
+
+    .rt-header-face .rpg-tracker-header-right {
+        flex: 0 0 auto !important;
+        flex-shrink: 0 !important;
+        margin-left: auto !important;
     }
 
     .rpg-tracker-header-left span {
@@ -2468,7 +2828,7 @@
     }
 
     /* On mobile, collapse action buttons into the ⋯ overflow menu.
-       Lorebook Agent, Direct Prompt, and Raw View stay in the header. */
+       Raw View stays in the header. */
     #rpg-tracker-chat-link-btn,
     #rpg-tracker-enable-btn,
     #rt-agent-router-enable-btn,
@@ -2479,9 +2839,12 @@
     }
 
     /* Dedicated header buttons on mobile */
-    #rpg-tracker-agent-btn,
-    #rpg-tracker-prompt-btn,
     #rpg-tracker-view-btn {
+        display: flex !important;
+        flex-shrink: 0 !important;
+    }
+
+    .rt-footer-prompt-btn {
         display: flex !important;
         flex-shrink: 0 !important;
     }
@@ -2513,8 +2876,14 @@
         font-size: 1.05em !important;
     }
 
+    /* Lorebook Agent: no detach on mobile */
+    #rt-agent-router-detach {
+        display: none !important;
+    }
+
     /* Make collapse button much larger and add separation from close button */
-    #rpg-tracker-collapse-btn {
+    #rpg-tracker-collapse-btn,
+    #rt-agent-router-collapse-btn {
         font-size: 1.4em !important;
         padding: 4px 10px !important;
         margin-right: 10px !important;
@@ -3103,6 +3472,24 @@ textarea.rt-cr-input {
     /* ? button in utility row */
     .rt-utility-footer-group #rt-rng-help-btn {
         margin-left: auto !important;
+    }
+
+    /* Lorebook Agent footer stays one row on mobile (nav left, status + prompt right) */
+    #rt-agent-footer {
+        flex-direction: row !important;
+        align-items: center !important;
+    }
+
+    /* Direct prompt stays bottom-right when utility drawer is collapsed */
+    #rt-main-footer {
+        position: relative;
+    }
+
+    #rt-main-footer > .rt-footer-prompt-btn {
+        position: absolute;
+        right: 6px;
+        bottom: 4px;
+        z-index: 1;
     }
 
     /* Top row: drawer toggle + snapshot nav */
@@ -3919,7 +4306,9 @@ textarea.rt-cr-input {
 
 
 /* Override high-specificity ID-based block rules in `#rpg-tracker-agent` when collapsed */
-#rpg-tracker-agent.rt-panel-collapsed .rpg-tracker-content {
+#rpg-tracker-agent.rt-panel-collapsed .rpg-tracker-content,
+#rpg-tracker-agent.rt-panel-collapsed .rpg-tracker-prompt-bar,
+#rpg-tracker-agent.rt-panel-collapsed .rpg-tracker-footer {
     display: none !important;
 }
 
@@ -5231,6 +5620,7 @@ textarea.rt-cr-input {
     display: flex;
     align-items: center;
     justify-content: center;
+    overflow: visible;
 }
 
 .rt-sky-disc {

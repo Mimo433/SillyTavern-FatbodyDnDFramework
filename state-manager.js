@@ -640,6 +640,8 @@ function buildDefaultSettings() {
         lastDelta: "",
         enabled: true,
         trackerCollapsed: false,
+        /** Integrated panel content: 'tracker' | 'agent' (card-flip mode when docked). */
+        trackerContentMode: 'tracker',
         agentCollapsed: false,
         agentImmersionMode: false,
         agentKeysCollapsed: false,
@@ -706,6 +708,8 @@ function buildDefaultSettings() {
         onboardingCustomInstructions: "",
         /** Last Character Creator form values, saved when Generate Character is pressed. */
         characterCreatorDraft: null,
+        /** True while the Character Creator inline panel is open on the onboarding screen. */
+        characterCreatorPanelOpen: false,
         barColors: {},
         modulePageSizes: {},
         customTheme: null,
@@ -1449,6 +1453,16 @@ function getSettingsInternal(extensionSettings) {
         s.agentWorldOpen = localStorage.getItem('rpg_tracker_agent_world_open') === 'true';
     } else {
         localStorage.setItem('rpg_tracker_agent_world_open', String(s.agentWorldOpen));
+    }
+    if (localStorage.getItem('rpg_tracker_content_mode') !== null) {
+        const mode = localStorage.getItem('rpg_tracker_content_mode');
+        s.trackerContentMode = mode === 'agent' ? 'agent' : 'tracker';
+    } else if (localStorage.getItem('rpg_tracker_agent_visible') === 'true') {
+        s.trackerContentMode = 'agent';
+        localStorage.setItem('rpg_tracker_content_mode', 'agent');
+        localStorage.removeItem('rpg_tracker_agent_visible');
+    } else {
+        localStorage.setItem('rpg_tracker_content_mode', s.trackerContentMode || 'tracker');
     }
     
     // ── MIGRATION: routerModules (v1.8.35+) ───────────────────────────────────

@@ -155,9 +155,9 @@ Current Time: HH:MM AM/PM, Day N
 
 'Last Rest' is ONLY triggered on Long Rest, NOT Short Rest (when Hit Dice, etc, are spent.) If the [TIME] delta between PREVIOUS STATE MEMO and your current update is only an hour, it is a Short Rest.`,
   xp: "Character Level and Experience Points (XP). Format as `Level: X | XP: current/max`. You MUST output this field whenever the narrative mentions gaining experience or leveling up.",
-  quests: `Track quests using the [QUESTS] block. Maintain the complete list of all quests at all times — active, completed, and failed. Only add a quest if {{user}} clearly takes on a task, even self-imposed. A quest/task simply being listed or offered does not mean it is accepted.
+  quests: `Track quests using the [QUESTS] block. Only add a quest if {{user}} clearly takes on a task, even self-imposed. A quest/task simply being listed or offered does not mean it is accepted. The engine archives completed and failed quests automatically — output only active quests in [QUESTS].
 
-Format each quest exactly as shown:
+Format each quest exactly as shown. NEVER deviate from this format, even if the narrative presents quests in a different one:
 
 QUEST: The Missing Sheep
   ID: quest_1746703200000
@@ -179,10 +179,10 @@ QUEST: The Missing Sheep
 - For collection/count objectives, append [current/total] after the text (e.g. [4/6]) and add an OBJ_TOTAL line with the total. Update the count each turn as progress is made.
 - For rewards, use the REWARD marker (e.g. REWARD: 50 Gold). List multiple rewards on separate lines.
 - For difficulty, use the DIFFICULTY marker (Very Easy, Easy, Medium, Hard, Very Hard).
+- Only use DEADLINE if the quest has a time limit.
 - On quest creation, set FRUSTRATION_COEFF from the quest giver's personality: 0.4 = very patient, 1.0 = normal, 3.0 = volatile. Do not change it on later turns unless the narrative establishes a permanent temperament shift.
 - Do not output the MOOD field — the engine calculates and injects it automatically.
-- When a quest completes or fails, set STATUS to completed or failed on that quest — keep the full quest entry in [QUESTS]; do not delete or omit it from your output.
-- Never delete old quests. Keep completed/failed ones with updated STATUS.`,
+- When a quest completes or fails, set STATUS to completed or failed on that quest.`,
   time_24h: `Current time and day grabbed from the status footer. Also track time of the last rest (only on Long Rest, e.g. 'Last Rest: 22:00, Day 0'). Use this to track out-of-combat buff durations by comparing to the PRIOR MEMO's time.
 
 Format (24-hour clock, NO AM/PM):
