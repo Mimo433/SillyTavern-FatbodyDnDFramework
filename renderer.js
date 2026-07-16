@@ -1718,6 +1718,18 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                     <div style="font-size: 16px; font-weight: bold; color: var(--rt-text);">Multihog D&D Framework</div>
                 </div>
 
+                <div class="rt-onboarding-hero">
+                    <button type="button" class="rt-onboarding-hero-btn rt-random-char-btn" data-archetype="char_roll">🎲 Character Creator</button>
+                    <div class="rt-onboarding-hero-sub">Build your character step by step — presets, persona bio, and full stat generation.</div>
+                </div>
+
+                <div class="rt-onboarding-secondary rt-onboarding-drawer">
+                <button type="button" class="rt-onboarding-drawer-toggle" id="rt-onboarding-drawer-toggle" aria-expanded="false" aria-controls="rt-onboarding-drawer-body">
+                    <span class="rt-onboarding-drawer-toggle-label">Other ways to begin</span>
+                    <span class="rt-onboarding-drawer-chevron" aria-hidden="true">&#9656;</span>
+                </button>
+                <div class="rt-onboarding-drawer-body" id="rt-onboarding-drawer-body">
+                <div class="rt-onboarding-drawer-body-inner">
                 <!-- Configuration Grid -->
                 <div style="display: flex; flex-direction: column; gap: 8px; width: 100%; margin: 4px 0; flex-shrink: 0;">
                     <div class="rt-onboarding-config-row">
@@ -1762,26 +1774,25 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                 <div class="rt-onboarding-buttons rt-fantasy-buttons" style="width: 100%; display: ${onboardingGenre === 'fantasy' ? 'flex' : 'none'}; justify-content: center; gap: 4px; margin: 4px 0; flex-shrink: 0; flex-wrap: wrap;">
                     <button class="rt-random-char-btn" data-archetype="persona">🎭 Persona</button>
                     <button class="rt-random-char-btn" data-archetype="custom">⚙️ Custom</button>
-                    <button class="rt-random-char-btn rt-char-roll-trigger" data-archetype="char_roll">🎲 Character Creator</button>
                     <button class="rt-random-char-btn rt-pc-import-trigger" data-archetype="pc_import">📥 Import Card</button>
                 </div>
                 <div class="rt-onboarding-buttons rt-realistic-buttons" style="width: 100%; display: ${onboardingGenre === 'realistic' ? 'flex' : 'none'}; justify-content: center; gap: 4px; margin: 4px 0; flex-shrink: 0; flex-wrap: wrap;">
                     <button class="rt-random-char-btn" data-archetype="persona">🎭 Persona</button>
                     <button class="rt-random-char-btn" data-archetype="custom">⚙️ Custom</button>
-                    <button class="rt-random-char-btn rt-char-roll-trigger" data-archetype="char_roll">🎲 Character Creator</button>
                     <button class="rt-random-char-btn rt-pc-import-trigger" data-archetype="pc_import">📥 Import Card</button>
                 </div>
                 <div class="rt-onboarding-buttons rt-scifi-buttons" style="width: 100%; display: ${onboardingGenre === 'scifi' ? 'flex' : 'none'}; justify-content: center; gap: 4px; margin: 4px 0; flex-shrink: 0; flex-wrap: wrap;">
                     <button class="rt-random-char-btn" data-archetype="persona">🎭 Persona</button>
                     <button class="rt-random-char-btn" data-archetype="custom">⚙️ Custom</button>
-                    <button class="rt-random-char-btn rt-char-roll-trigger" data-archetype="char_roll">🎲 Character Creator</button>
                     <button class="rt-random-char-btn rt-pc-import-trigger" data-archetype="pc_import">📥 Import Card</button>
                 </div>
                 <div class="rt-onboarding-buttons rt-horror-buttons" style="width: 100%; display: ${onboardingGenre === 'horror' ? 'flex' : 'none'}; justify-content: center; gap: 4px; margin: 4px 0; flex-shrink: 0; flex-wrap: wrap;">
                     <button class="rt-random-char-btn" data-archetype="persona">🎭 Persona</button>
                     <button class="rt-random-char-btn" data-archetype="custom">⚙️ Custom</button>
-                    <button class="rt-random-char-btn rt-char-roll-trigger" data-archetype="char_roll">🎲 Character Creator</button>
                     <button class="rt-random-char-btn rt-pc-import-trigger" data-archetype="pc_import">📥 Import Card</button>
+                </div>
+                </div>
+                </div>
                 </div>
 
                 <!-- PC Import Inline Panel (hidden until 📥 is clicked) -->
@@ -1880,6 +1891,22 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                             </select>
                         </div>
                     </div>
+                    <div class="rt-cr-row rt-cr-time-row">
+                        <div class="rt-cr-field" style="width:100%;">
+                            <label class="rt-cr-label">Time &amp; Date <span class="rt-cr-help-icon" title="Calendar and clock format for [TIME] tracking in generated memos. Day 1 = narrative day count; DD/MM/YYYY = real calendar dates.">?</span></label>
+                            <div class="rt-cr-time-controls">
+                                <div class="rt-seg-toggle" id="rt-cr-date-seg" role="group" title="Choose the calendar format used for [TIME] tracking.">
+                                    <button type="button" data-value="day" class="${!useDdMmYy ? 'active' : ''}">Day 1</button>
+                                    <button type="button" data-value="date" class="${useDdMmYy ? 'active' : ''}">DD/MM/YYYY</button>
+                                </div>
+                                <input type="text" id="rt-cr-start-date" class="text_pole rt-cr-input" value="${startDateInputVal}" placeholder="01/01/2026" style="width: 92px; text-align: center; display: ${useDdMmYy ? 'inline-block' : 'none'};" />
+                                <div class="rt-seg-toggle" id="rt-cr-clock-seg" role="group" title="Choose the clock format used for [TIME] tracking.">
+                                    <button type="button" data-value="12" class="${!use24h ? 'active' : ''}">12h</button>
+                                    <button type="button" data-value="24" class="${use24h ? 'active' : ''}">24h</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                     <div class="rt-cr-field" style="width:100%;">
                         <label class="rt-cr-label">Class</label>
                         <select id="rt-cr-class" class="text_pole rt-cr-input" style="width:100%;"></select>
@@ -1912,7 +1939,7 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                     <div style="display:flex; align-items:center; gap:6px; flex-shrink:0; padding:4px 0;">
                         <label style="display:flex; align-items:center; gap:5px; cursor:pointer; font-size:0.88em;">
                             <input type="checkbox" id="rt-cr-persona-cb" />
-                            <span>Create Persona</span>
+                            <span>Create Persona (Recommended)</span>
                         </label>
                         <span class="rt-cr-help-icon" title="When checked, the AI also generates an appearance, personality, habits, and backstory. A preview will appear — you can accept (which auto-creates a new SillyTavern persona locked to this chat) or regenerate just this part without re-rolling the whole character.">?</span>
                         <span style="opacity:0.6; font-size:0.8em; margin-left:4px;">Word count:</span>
@@ -2018,30 +2045,6 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                                 <input type="checkbox" id="rt_onboarding_quests_show_archive" checked />
                                 <span>Show completed/failed quests</span>
                             </label>
-                        </div>
-                    </div>
-
-                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 2px;">
-                        <span style="font-size: 0.85em; font-weight: bold; opacity: 0.8;">Time & Date</span>
-                    </div>
-                    <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; padding-left: 5px;">
-                        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                            <span style="font-size: 0.8em; opacity: 0.75;">Calendar:</span>
-                            <div class="rt-seg-toggle" id="rt_onboarding_time_date_seg" role="group">
-                                <button type="button" data-value="day" class="${!useDdMmYy ? 'active' : ''}">Day 1</button>
-                                <button type="button" data-value="date" class="${useDdMmYy ? 'active' : ''}">DD/MM/YYYY</button>
-                            </div>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                            <span style="font-size: 0.8em; opacity: 0.75;">Clock:</span>
-                            <div class="rt-seg-toggle" id="rt_onboarding_time_clock_seg" role="group">
-                                <button type="button" data-value="12" class="${!use24h ? 'active' : ''}">12h</button>
-                                <button type="button" data-value="24" class="${use24h ? 'active' : ''}">24h</button>
-                            </div>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 8px; margin-top: 2px;">
-                            <span id="rt_onboarding_initial_date_label" style="font-size: 0.8em; opacity: 0.75;">Initial Day:</span>
-                            <input type="text" id="rt_onboarding_initial_date_input" placeholder="Day 1" style="width: 100px; background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.15); color: var(--rt-text, #eee); font-size: 0.85em; padding: 2px 6px; border-radius: 4px;" />
                         </div>
                     </div>
 

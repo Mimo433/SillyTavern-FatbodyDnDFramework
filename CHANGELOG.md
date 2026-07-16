@@ -2,6 +2,13 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [5.5.6] - 2026-07-16
+
+### Changed
+- **Startup screen**: Character Creator is now a prominent hero button at the top; Persona, Custom, Import Card, and campaign settings live in a collapsible **Other ways to begin** drawer below.
+- **Time & Date**: Calendar/clock format controls moved into Character Creator; the same controls also appear in the onboarding drawer so Persona/Custom/Import paths can set them without opening Character Creator. Removed duplicate Time & Date block from Narrator Configuration.
+- **Character Creator UX**: **Create Persona (Recommended)** checkbox label and **Add as Player into Lorebook Agent (Recommended)** on the persona preview screen.
+
 ## [5.5.5b] - 2026-07-16
 
 ### Changed

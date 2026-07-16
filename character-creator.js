@@ -3,7 +3,7 @@ import { sendStateRequest } from './llm-client.js';
 import { buildOnboardingXpHint, buildOnboardingTimeHint } from './constants.js';
 import { escapeHtml } from './memo-processor.js';
 import { getRequestHeaders } from '../../../../script.js';
-import { saveSettings, sendDirectPrompt, refreshAgentManifestNow, refreshRenderedView } from './index.js';
+import { saveSettings, sendDirectPrompt, refreshAgentManifestNow, refreshRenderedView, syncTimeFormatSettingsUi } from './index.js';
 import { triggerBackgroundPortraitGeneration } from './portraits.js';
 import { openPcSectionEditor } from './ui-editors.js';
 
@@ -180,13 +180,14 @@ export function resetCharacterCreatorFields(panel, populateClasses) {
 export function showCharacterRollPanel(el) {
     const panel = /** @type {HTMLElement|null} */ (el.querySelector('#rt-char-roll-panel'));
     if (!panel) return;
-    const configWrap = /** @type {HTMLElement|null} */ (el.querySelector('.rt-onboarding-config-row')?.parentElement);
+    const heroEl = /** @type {HTMLElement|null} */ (el.querySelector('.rt-onboarding-hero'));
+    const secondaryEl = /** @type {HTMLElement|null} */ (el.querySelector('.rt-onboarding-secondary'));
     const allBtnGroups = /** @type {NodeListOf<HTMLElement>} */ (el.querySelectorAll('.rt-onboarding-buttons'));
 
-    // Hide config + button groups, show panel
-    if (configWrap) configWrap.style.display = 'none';
-    allBtnGroups.forEach(g => { g.style.display = 'none'; });
+    if (heroEl) heroEl.style.display = 'none';
+    if (secondaryEl) secondaryEl.style.display = 'none';
     panel.style.display = 'flex';
+    syncTimeFormatSettingsUi(getSettings());
 
     const editBtn = panel.querySelector('.rt-edit-pc-sections-btn');
     if (editBtn && !editBtn._bound) {
@@ -276,7 +277,8 @@ export function showCharacterRollPanel(el) {
         backBtn._crBound = true;
         backBtn.addEventListener('click', () => {
             panel.style.display = 'none';
-            if (configWrap) configWrap.style.display = '';
+            if (heroEl) heroEl.style.display = '';
+            if (secondaryEl) secondaryEl.style.display = '';
             const genre = getSettings().onboardingGenre || 'fantasy';
             allBtnGroups.forEach(g => {
                 g.style.display = g.classList.contains(`rt-${genre}-buttons`) ? 'flex' : 'none';
@@ -657,7 +659,7 @@ export function showPersonaConfirmOverlay(bioText, charName, wordCount, extraHin
         <small style="opacity:0.6;line-height:1.3;">Edit the bio below, then Accept to auto-create in SillyTavern, or copy it to paste manually.</small>
         <textarea id="rt-pco-bio" style="flex:1;min-height:180px;max-height:300px;resize:vertical;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.15);border-radius:4px;padding:8px;color:inherit;font-size:0.88em;line-height:1.6;">${escapeHtml(bioText)}</textarea>
         <div style="display:flex;flex-direction:column;gap:12px;">
-            <button id="rt-pco-add-pc" title="Recommended: Adds this character as the Player entry in the Lorebook Agent for this chat. It will automatically load whenever you open this chat." style="width:100%;padding:12px;background:rgba(0,180,255,0.25);border:2px solid #00b4ff;border-radius:6px;color:inherit;cursor:pointer;font-weight:bold;font-size:1.1em;box-shadow:0 4px 12px rgba(0,180,255,0.15);transition:all 0.2s ease;">👤 Add as Player into Lorebook Agent</button>
+            <button id="rt-pco-add-pc" title="Recommended: Adds this character as the Player entry in the Lorebook Agent for this chat. It will automatically load whenever you open this chat." style="width:100%;padding:12px;background:rgba(0,180,255,0.25);border:2px solid #00b4ff;border-radius:6px;color:inherit;cursor:pointer;font-weight:bold;font-size:1.1em;box-shadow:0 4px 12px rgba(0,180,255,0.15);transition:all 0.2s ease;">👤 Add as Player into Lorebook Agent (Recommended)</button>
             
             <div style="display:flex;gap:8px;">
                 <button id="rt-pco-regen" style="flex:1;padding:8px;background:rgba(120,80,220,0.18);border:1px solid rgba(120,80,220,0.6);border-radius:4px;color:inherit;cursor:pointer;">🔄 Regenerate</button>
@@ -793,16 +795,16 @@ function extractCharNameFromMemo(memo) {
 export function showPcImportPanel(el) {
     const panel = /** @type {HTMLElement|null} */ (el.querySelector('#rt-pc-import-panel'));
     if (!panel) return;
-    const configWrap = /** @type {HTMLElement|null} */ (el.querySelector('.rt-onboarding-config-row')?.parentElement);
+    const heroEl = /** @type {HTMLElement|null} */ (el.querySelector('.rt-onboarding-hero'));
+    const secondaryEl = /** @type {HTMLElement|null} */ (el.querySelector('.rt-onboarding-secondary'));
     const allBtnGroups = /** @type {NodeListOf<HTMLElement>} */ (el.querySelectorAll('.rt-onboarding-buttons'));
 
-    // Save original display states so back restores only the correct genre group
     const savedDisplays = Array.from(allBtnGroups).map(g => g.style.display);
-    const savedConfigDisplay = configWrap ? configWrap.style.display : '';
+    const savedHeroDisplay = heroEl ? heroEl.style.display : '';
+    const savedSecondaryDisplay = secondaryEl ? secondaryEl.style.display : '';
 
-    // Hide config + genre button groups, show the PC import panel
-    if (configWrap) configWrap.style.display = 'none';
-    allBtnGroups.forEach(g => { g.style.display = 'none'; });
+    if (heroEl) heroEl.style.display = 'none';
+    if (secondaryEl) secondaryEl.style.display = 'none';
     panel.style.display = 'flex';
 
     const editBtn = panel.querySelector('.rt-edit-pc-sections-btn');
@@ -816,7 +818,8 @@ export function showPcImportPanel(el) {
     if (backBtn) {
         backBtn.addEventListener('click', () => {
             panel.style.display = 'none';
-            if (configWrap) configWrap.style.display = savedConfigDisplay;
+            if (heroEl) heroEl.style.display = savedHeroDisplay;
+            if (secondaryEl) secondaryEl.style.display = savedSecondaryDisplay;
             allBtnGroups.forEach((g, i) => { g.style.display = savedDisplays[i]; });
         }, { once: true });
     }

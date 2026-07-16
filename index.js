@@ -672,7 +672,7 @@ globalThis._rpgRefreshLorebookAgentViews = refreshLorebookAgentViewsNow;
 
 /**
  * Sync every time/date format control across the whole extension (Modules &
- * Order pills, Extension Settings checkbox, both onboarding widgets) with the
+ * Order pills, Extension Settings checkbox, Character Creator) with the
  * live settings values. This is the single place that pushes state out to the
  * UI, so no surface can ever show a stale or contradicting value.
  * @param {object} s
@@ -746,7 +746,7 @@ function applyChatTimeFormatSettings(saved) {
 /**
  * Single source-of-truth setter for the Day N vs DD/MM/YYYY calendar format.
  * Every control that toggles this setting (Modules & Order, Extension
- * Settings, both onboarding widgets) MUST call this instead of writing
+ * Settings, Character Creator) MUST call this instead of writing
  * `useDdMmYyFormat` directly, so the value and its dependent UI can never
  * drift apart between the different places it's exposed.
  * @param {boolean} isDate
@@ -797,8 +797,8 @@ export function setUse24hTime(is24h) {
 
 /**
  * Single source-of-truth setter for the initial date/day anchor text.
- * Keeps both onboarding text inputs (top widget + Narrator Configuration)
- * in sync without stealing focus from whichever one the user is typing in.
+ * Keeps Character Creator and onboarding drawer start-date inputs in sync
+ * without stealing focus from whichever input the user is typing into.
  * @param {string} val
  * @param {HTMLInputElement|null} [sourceInput] - the input the user is typing into; left untouched.
  */
@@ -806,7 +806,7 @@ function setInitialDateValue(val, sourceInput = null) {
     getSettings().initialDate = val;
     saveSettings();
     persistChatTimeFormatIfLinked();
-    document.querySelectorAll('#rt-onboarding-start-date, #rt_onboarding_initial_date_input').forEach(input => {
+    document.querySelectorAll('#rt-cr-start-date, #rt-onboarding-start-date').forEach(input => {
         if (input !== sourceInput) /** @type {HTMLInputElement} */ (input).value = val;
     });
 }
@@ -869,29 +869,21 @@ function syncOnboardingUI() {
     const customSyspromptCb = /** @type {HTMLInputElement|null} */ (onboarding.querySelector('#rt_onboarding_custom_sysprompt'));
     if (customSyspromptCb) customSyspromptCb.checked = !!s.customSysprompt;
 
-    // Time & Date format + Initial date/day Sync — all segmented toggles across
-    // both onboarding widgets are driven from the same settings values so they
-    // can never show a contradicting state.
-    syncSegToggle(onboarding.querySelector('#rt_onboarding_time_date_seg'), s.useDdMmYyFormat ? 'date' : 'day');
-    syncSegToggle(onboarding.querySelector('#rt_onboarding_time_clock_seg'), s.use24hTime ? '24' : '12');
+    // Time & Date sync — Character Creator + "Other ways to begin" drawer
+    syncSegToggle(onboarding.querySelector('#rt-cr-date-seg'), s.useDdMmYyFormat ? 'date' : 'day');
+    syncSegToggle(onboarding.querySelector('#rt-cr-clock-seg'), s.use24hTime ? '24' : '12');
     syncSegToggle(onboarding.querySelector('#rt-onboarding-date-seg'), s.useDdMmYyFormat ? 'date' : 'day');
     syncSegToggle(onboarding.querySelector('#rt-onboarding-clock-seg'), s.use24hTime ? '24' : '12');
-
-    const initialDateInput = /** @type {HTMLInputElement|null} */ (onboarding.querySelector('#rt_onboarding_initial_date_input'));
-    const initialDateLabel = /** @type {HTMLElement|null} */ (onboarding.querySelector('#rt_onboarding_initial_date_label'));
-    if (initialDateInput) {
-        initialDateInput.value = s.initialDate || (s.useDdMmYyFormat ? '01/01/2026' : 'Day 1');
-        if (initialDateLabel) {
-            initialDateLabel.textContent = s.useDdMmYyFormat ? 'Initial Date:' : 'Initial Day:';
-        }
-        initialDateInput.placeholder = s.useDdMmYyFormat ? '01/01/2026' : 'Day 1';
-    }
-
-    // Character Creator Start Date Sync (segmented toggle synced above)
-    const creatorStartDate = /** @type {HTMLInputElement|null} */ (onboarding.querySelector('#rt-onboarding-start-date'));
+    const creatorStartDate = /** @type {HTMLInputElement|null} */ (onboarding.querySelector('#rt-cr-start-date'));
+    const drawerStartDate = /** @type {HTMLInputElement|null} */ (onboarding.querySelector('#rt-onboarding-start-date'));
+    const startDateVal = s.initialDate && s.initialDate !== 'Day 1' ? s.initialDate : '01/01/2026';
     if (creatorStartDate) {
-        creatorStartDate.value = s.initialDate && s.initialDate !== 'Day 1' ? s.initialDate : '01/01/2026';
+        creatorStartDate.value = startDateVal;
         creatorStartDate.style.display = s.useDdMmYyFormat ? 'inline-block' : 'none';
+    }
+    if (drawerStartDate) {
+        drawerStartDate.value = startDateVal;
+        drawerStartDate.style.display = s.useDdMmYyFormat ? 'inline-block' : 'none';
     }
 }
 
@@ -3181,6 +3173,16 @@ async function showLocationImageSettingsMenu(locationPath, onRefresh, locContent
 export function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRefresh = null) {
     const refresh = onRefresh || refreshRenderedView;
 
+    const onboardingDrawer = el.querySelector('.rt-onboarding-drawer');
+    const onboardingDrawerToggle = el.querySelector('#rt-onboarding-drawer-toggle');
+    if (onboardingDrawer && onboardingDrawerToggle && !onboardingDrawerToggle._bound) {
+        onboardingDrawerToggle._bound = true;
+        onboardingDrawerToggle.addEventListener('click', () => {
+            const isOpen = onboardingDrawer.classList.toggle('is-open');
+            onboardingDrawerToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+        });
+    }
+
     // Genre tab toggle listener & persistent preference save
     const genreSelect = el.querySelector('#rt-onboarding-genre');
     const genreGroups = {
@@ -3218,10 +3220,7 @@ export function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRe
         });
     }
 
-    // Time & Date segmented toggles — wired identically in both onboarding
-    // widgets (top bar + Narrator Configuration) so they can never diverge.
-    // Every click funnels through the shared setUseDdMmYyFormat/setUse24hTime
-    // setters, which push the resulting state back out to both widgets.
+    // Time & Date segmented toggles — Character Creator + onboarding drawer
     const bindDateFormatSeg = (segId) => {
         const segEl = el.querySelector(`#${segId}`);
         if (!segEl) return;
@@ -3236,15 +3235,18 @@ export function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRe
             btn.addEventListener('click', () => setUse24hTime(btn.dataset.value === '24'));
         });
     };
+    bindDateFormatSeg('rt-cr-date-seg');
     bindDateFormatSeg('rt-onboarding-date-seg');
-    bindDateFormatSeg('rt_onboarding_time_date_seg');
+    bindClockFormatSeg('rt-cr-clock-seg');
     bindClockFormatSeg('rt-onboarding-clock-seg');
-    bindClockFormatSeg('rt_onboarding_time_clock_seg');
 
-    const startDateInput = /** @type {HTMLInputElement|null} */ (el.querySelector('#rt-onboarding-start-date'));
-    if (startDateInput) {
-        startDateInput.addEventListener('input', () => setInitialDateValue(startDateInput.value.trim(), startDateInput));
-    }
+    const syncStartDateInput = (input) => {
+        input.addEventListener('input', () => setInitialDateValue(input.value.trim(), input));
+    };
+    const crStartDateInput = /** @type {HTMLInputElement|null} */ (el.querySelector('#rt-cr-start-date'));
+    if (crStartDateInput) syncStartDateInput(crStartDateInput);
+    const drawerStartDateInput = /** @type {HTMLInputElement|null} */ (el.querySelector('#rt-onboarding-start-date'));
+    if (drawerStartDateInput) syncStartDateInput(drawerStartDateInput);
 
     el.querySelectorAll('.rt-random-char-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
@@ -3612,13 +3614,6 @@ Gear:
         onboardingCustomSyspromptCb.addEventListener('change', () => {
             syncSettingsAndUI(s => { s.customSysprompt = !!onboardingCustomSyspromptCb.checked; });
         });
-    }
-
-    // Time & Date format (Narrator Configuration widget) — segmented toggles are
-    // bound above via bindDateFormatSeg/bindClockFormatSeg for both onboarding widgets.
-    const onboardingInitialDateInput = /** @type {HTMLInputElement|null} */ (el.querySelector('#rt_onboarding_initial_date_input'));
-    if (onboardingInitialDateInput) {
-        onboardingInitialDateInput.addEventListener('input', () => setInitialDateValue(onboardingInitialDateInput.value.trim(), onboardingInitialDateInput));
     }
 
     // Apply System Prompt button (onboarding) — same logic as settings panel "Update Main Sysprompt"
