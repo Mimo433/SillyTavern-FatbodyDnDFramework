@@ -1293,31 +1293,36 @@ export async function applyLocationImageData(locationPath, src) {
     await saveSettings(true);
 }
 
-/** Scale/crop an image to a 16:9 landscape JPEG data URL. */
-export function scaleImageToLandscape(dataUrl, width = 768, height = 432) {
+/** Center-crop to 16:9 landscape; output keeps the cropped pixel resolution (no fixed downscale). */
+export function scaleImageToLandscape(dataUrl) {
+    const LANDSCAPE_ASPECT = 16 / 9;
+
     return new Promise((resolve, reject) => {
         const img = new Image();
         img.onload = () => {
-            const canvas = document.createElement('canvas');
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext('2d');
-            const dstAspect = width / height;
             const srcAspect = img.width / img.height;
             let sx = 0;
             let sy = 0;
             let sw = img.width;
             let sh = img.height;
-            if (srcAspect > dstAspect) {
+            if (srcAspect > LANDSCAPE_ASPECT) {
                 sh = img.height;
-                sw = sh * dstAspect;
+                sw = sh * LANDSCAPE_ASPECT;
                 sx = (img.width - sw) / 2;
             } else {
                 sw = img.width;
-                sh = sw / dstAspect;
+                sh = sw / LANDSCAPE_ASPECT;
                 sy = (img.height - sh) / 2;
             }
-            ctx.drawImage(img, sx, sy, sw, sh, 0, 0, width, height);
+
+            const outW = Math.max(1, Math.round(sw));
+            const outH = Math.max(1, Math.round(sh));
+
+            const canvas = document.createElement('canvas');
+            canvas.width = outW;
+            canvas.height = outH;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, sx, sy, sw, sh, 0, 0, outW, outH);
             resolve(canvas.toDataURL('image/jpeg', 0.85));
         };
         img.onerror = reject;
