@@ -1,6 +1,6 @@
 import { getSettings } from './state-manager.js';
 import { sendStateRequest } from './llm-client.js';
-import { saveSettings, refreshRenderedView } from './index.js';
+import { saveSettings, refreshRenderedView, applyTrackerThemeToDom } from './index.js';
 
 let themeUndoStack = [];
 
@@ -137,9 +137,7 @@ Rules:
     saveSettings();
     applyCustomTheme(vars);
 
-    document.querySelectorAll('.rpg-tracker-panel').forEach(p => {
-        p.className = p.className.replace(/rt-theme-\S+/g, '').trim() + ' rt-theme-custom';
-    });
+    applyTrackerThemeToDom('rt-theme-custom');
 
     const sel = /** @type {HTMLSelectElement} */ (document.getElementById('rpg_tracker_theme_select'));
     if (sel) sel.value = 'rt-theme-custom';
@@ -189,9 +187,7 @@ export function refreshSavedThemesList() {
             // Update UI
             const sel = /** @type {HTMLSelectElement} */ (document.getElementById('rpg_tracker_theme_select'));
             if (sel) sel.value = 'rt-theme-custom';
-            document.querySelectorAll('.rpg-tracker-panel').forEach(p => {
-                p.className = p.className.replace(/rt-theme-\S+/g, '').trim() + ' rt-theme-custom';
-            });
+            applyTrackerThemeToDom('rt-theme-custom');
 
             const statusEl = document.getElementById('rpg_tracker_theme_wizard_status');
             if (statusEl) {

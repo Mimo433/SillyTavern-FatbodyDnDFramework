@@ -10188,6 +10188,43 @@ function refreshDayNightCycleFromMemo(memoText) {
     applyDayNightCycleUI(getSettings(), memoText || '');
 }
 
+/** Re-applies day/night cycle from the live memo textarea (or saved memo). */
+function refreshDayNightCycleFromCurrentMemo() {
+    const settings = getSettings();
+    const ta = /** @type {HTMLTextAreaElement|null} */ (document.getElementById('rpg-tracker-memo'));
+    refreshDayNightCycleFromMemo(ta ? ta.value : settings.currentMemo || '');
+}
+
+/**
+ * Swaps rt-theme-* on tracker panels without clearing other state classes, then
+ * re-applies day/night cycle tint/badge when that feature is enabled.
+ * @param {string} [newTheme]
+ */
+export function applyTrackerThemeToDom(newTheme) {
+    const settings = getSettings();
+    const theme = newTheme || settings.trackerTheme || 'rt-theme-native';
+
+    const swapThemeOn = (/** @type {HTMLElement} */ el) => {
+        Array.from(el.classList).filter(c => c.startsWith('rt-theme-')).forEach(c => el.classList.remove(c));
+        el.classList.add(theme);
+    };
+
+    const mainPanel = document.getElementById('rpg-tracker-panel');
+    if (mainPanel) {
+        swapThemeOn(mainPanel);
+        mainPanel.classList.toggle('is-disabled', !settings.enabled);
+    }
+
+    document.querySelectorAll('.rpg-tracker-detached-panel, .rpg-tracker-agent-panel').forEach(dp => {
+        swapThemeOn(dp);
+        if (!dp.classList.contains('rpg-tracker-agent-panel')) {
+            dp.classList.toggle('is-disabled', !settings.enabled);
+        }
+    });
+
+    refreshDayNightCycleFromCurrentMemo();
+}
+
 export function syncMemoView() {
     const s = getSettings();
     const textarea = /** @type {HTMLTextAreaElement|null} */ (document.getElementById('rpg-tracker-memo'));
@@ -12305,23 +12342,7 @@ async function runPortraitMigrationIfNeeded() {
             settings.trackerTheme = newTheme;
             saveSettings();
             showHideWizard(newTheme);
-            const panel = document.getElementById('rpg-tracker-panel');
-            if (panel) {
-                const isCollapsed = panel.classList.contains('rt-panel-collapsed');
-                panel.className = `rpg-tracker-panel ${isCollapsed ? 'rt-panel-collapsed ' : ''}${newTheme}`;
-                if (!settings.enabled) panel.classList.add('is-disabled');
-            }
-            document.querySelectorAll('.rpg-tracker-detached-panel, .rpg-tracker-agent-panel').forEach(dp => {
-                const isCollapsed = dp.classList.contains('rt-panel-collapsed');
-                if (dp.classList.contains('rpg-tracker-agent-panel')) {
-                    const isAgentDisabled = dp.classList.contains('is-agent-disabled');
-                    dp.className = `rpg-tracker-panel rpg-tracker-agent-panel ${isCollapsed ? 'rt-panel-collapsed ' : ''}${newTheme}`;
-                    if (isAgentDisabled) dp.classList.add('is-agent-disabled');
-                } else {
-                    dp.className = `rpg-tracker-panel rpg-tracker-detached-panel ${isCollapsed ? 'rt-panel-collapsed ' : ''}${newTheme}`;
-                    if (!settings.enabled) dp.classList.add('is-disabled');
-                }
-            });
+            applyTrackerThemeToDom(newTheme);
         });
 
         document.getElementById('rpg_tracker_theme_save')?.addEventListener('click', () => {
