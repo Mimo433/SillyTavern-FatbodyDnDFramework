@@ -470,6 +470,7 @@ function applyLocationImageSetting(settings, enabled) {
         settings.portraitAutoGenerateLocations = false;
         settings.portraitAutoGenerateSceneView = false;
         settings.portraitRegenerateVisitedLocations = false;
+        settings.portraitLocationIncludePresentNpcs = false;
         settings.agentImmersionMode = false;
     }
     syncLocationImageDependentUi(settings);
@@ -540,6 +541,9 @@ export function syncLocationImageDependentUi(settings) {
         applyRealTimeModeBundle(settings);
     } else {
         settings.portraitRegenerateVisitedLocations = false;
+        if (!settings.locationImages) {
+            settings.portraitLocationIncludePresentNpcs = false;
+        }
         // Lorebook Locations auto-gen implies Lorebook Locations master toggle (same as Real-Time Mode).
         if (settings.portraitAutoGenerateLocations) {
             settings.locationImages = true;
@@ -568,9 +572,9 @@ export function syncLocationImageDependentUi(settings) {
         $el.prop('checked', !!checked);
     };
 
-    // Clickable whenever Real-Time Mode is off — turning it on also enables Lorebook Locations.
+    // Auto-gen locations requires Show Location Images; RT mode is always toggleable (enables location images when turned on).
     syncCheckbox('rpg_tracker_portrait_auto_locations', lorebookAutoOn, !imagesEnabled || realTimeOn);
-    syncCheckbox('rpg_tracker_portrait_auto_scene_view', realTimeOn, !imagesEnabled);
+    syncCheckbox('rpg_tracker_portrait_auto_scene_view', realTimeOn, false);
     syncCheckbox('rpg_tracker_location_images', imagesEnabled, realTimeOn);
     syncCheckbox('rpg_portrait_location_include_present_npcs', realTimeOn || !!settings.portraitLocationIncludePresentNpcs, !imagesEnabled || realTimeOn);
 

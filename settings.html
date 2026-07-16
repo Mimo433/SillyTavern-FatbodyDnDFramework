@@ -189,18 +189,18 @@
                                                     <i class="fa-solid fa-circle-question interactable"
                                                         title="When enabled (and Real-Time Visualization Mode is off), scene images are auto-generated in the background for new location entries that do not already have an image. Also turns on Show Location Images. Disabled while Real-Time Visualization Mode is on — arrival-based art replaces this path."></i>
                                                 </label>
+                                                <label class="checkbox_label" style="padding-left: 4px;">
+                                                    <input id="rpg_portrait_location_include_present_npcs" type="checkbox" />
+                                                    <span>Include Present NPCs in Location Scene Prompts</span>
+                                                    <i class="fa-solid fa-circle-question interactable"
+                                                        title="When enabled, active Lorebook Agent NPC keys are injected verbatim into location image prompts so the LLM can place those characters in the scene. The linked Player Character is always included in Present Now and in the prompt. The Location Scene Prompt also instructs the model to include minor characters from recent narrator output even when they are not in that block. Active keys are refreshed when the agent runs (including on location changes). Locked on while Real-Time Visualization Mode is active."></i>
+                                                </label>
                                             </div>
-                                            <label class="checkbox_label" style="padding-left: 4px;">
-                                                <input id="rpg_portrait_location_include_present_npcs" type="checkbox" />
-                                                <span>Include Present NPCs in Location Scene Prompts</span>
-                                                <i class="fa-solid fa-circle-question interactable"
-                                                    title="When enabled, active Lorebook Agent NPC keys are injected verbatim into location image prompts so the LLM can place those characters in the scene. The linked Player Character is always included in Present Now and in the prompt. The Location Scene Prompt also instructs the model to include minor characters from recent narrator output even when they are not in that block. Active keys are refreshed when the agent runs (including on location changes). Locked on while Real-Time Visualization Mode is active."></i>
-                                            </label>
                                         </div>
                                         <div id="rpg_loc_images_realtime_group" class="rt-loc-settings-section rt-loc-realtime-section">
                                             <div class="rt-loc-settings-subheader">Real-Time Visualization Mode</div>
                                             <div id="rpg_loc_realtime_active_note" class="rt-loc-realtime-active-note" style="display: none;">
-                                                Arrival-based generation is active — standard auto-generation options above are bypassed.
+                                                Arrival-based generation is active — standard location options above are bypassed.
                                             </div>
                                             <label class="checkbox_label" style="padding-left: 4px;">
                                                 <input id="rpg_tracker_portrait_auto_scene_view" type="checkbox" />
