@@ -29,8 +29,6 @@ export const COLOR_EXAMPLES = `<font color=#ff5555>Red Text</font>
 /** How Combat-line Melee/Ranged totals are derived (used in stock prompts + sysprompt). */
 export const ATTACK_TOTAL_FORMULA_HINT = `ATTACK TOTALS: Melee Total Formula: Melee Total = BAB + STR modifier + Weapon enhancement bonus. Ranged Total Formula: Ranged Total = BAB + DEX modifier + Weapon enhancement bonus. The Melee and Ranged values on the Combat line are these totals (weapon enhancement = +1/+2/+3 from the equipped weapon; 0 if mundane).`;
 
-export const NPC_ATTACK_BONUS_HINT = `NPC Att/def attack bonus (+X): melee = BAB + STR modifier + weapon enhancement bonus; ranged = BAB + DEX modifier + weapon enhancement bonus.`;
-
 export const DEFAULT_STOCK_PROMPTS = {
   character: `Main character's core stats. Use this format:
 [CHARACTER]
@@ -121,7 +119,6 @@ ETA [BENCH] example: Status: Benched (08:08 AM, Day 1, separated to investigate 
 COMBAT ROUND X
 Name: current/max HP
 Att/def: Weapon (+X / damage) | Armor (AC: Z)
-${NPC_ATTACK_BONUS_HINT}
 Saves: Fort +X, Ref +X, Will +X
 Abilities: Ability1 (effect), Ability2 (effect)
 Other: Trait1 (description), Trait2 (description)
