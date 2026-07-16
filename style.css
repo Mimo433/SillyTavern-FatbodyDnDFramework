@@ -2896,6 +2896,35 @@
     display: none;
 }
 
+/* ── Lorebook Agent cleanup dropdown (reparented to panel when open) ── */
+.rt-cleanup-dropdown {
+    position: absolute;
+    z-index: 3100;
+    background: #131320;
+    border: 1px solid rgba(230, 126, 34, 0.35);
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+    min-width: 200px;
+    padding: 4px 0;
+}
+
+.rt-cleanup-dropdown button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 7px 14px;
+    background: none;
+    border: none;
+    color: var(--rt-text, #e0e0e0);
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.rpg-tracker-panel.rt-cleanup-menu-open {
+    overflow: visible !important;
+}
+
 /* ── Overflow dropdown menu ── */
 .rt-overflow-menu {
     position: absolute;

@@ -4249,7 +4249,7 @@ function createPanel() {
                         <button class="rpg-tracker-icon-btn" id="rt-agent-router-full-audit-panel" title="Run Full Audit (Chunked)" style="color: #ff5555;"><i class="fa-solid fa-book-journal-whills"></i></button>
                          <div id="rt-cleanup-menu-wrap" style="position:relative; display:inline-flex;">
                              <button class="rpg-tracker-icon-btn" id="rt-agent-router-cleanup" title="Cleanup Menu" style="color: #e67e22;"><i class="fa-solid fa-broom"></i></button>
-                             <div id="rt-cleanup-dropdown" style="display:none; position:absolute; top:100%; right:0; z-index:9999; background:#131320; border:1px solid rgba(230,126,34,0.35); border-radius:6px; box-shadow:0 4px 16px rgba(0,0,0,0.5); min-width:200px; padding:4px 0; margin-top:2px;">
+                             <div id="rt-cleanup-dropdown" class="rt-cleanup-dropdown" style="display:none;">
                                  <button id="rt-cleanup-run-btn" style="display:block; width:100%; text-align:left; padding:7px 14px; background:none; border:none; color:var(--rt-text,#e0e0e0); font-size:12px; cursor:pointer; white-space:nowrap;">🧹 Run Cleanup</button>
                                  <div style="height:1px; background:rgba(255,255,255,0.06); margin:2px 0;"></div>
                                  <button id="rt-cleanup-settings-toggle" style="display:block; width:100%; text-align:left; padding:7px 14px; background:none; border:none; color:var(--rt-text,#e0e0e0); font-size:12px; cursor:pointer; white-space:nowrap;">⚙ Cleanup Settings</button>
@@ -9355,13 +9355,38 @@ Rules:
         const cleanupEveryInp = /** @type {HTMLInputElement|null} */ (queryAgentUi('#rt-cleanup-every-inp'));
         const cleanupUseThresholdChk = /** @type {HTMLInputElement|null} */ (queryAgentUi('#rt-cleanup-use-threshold-chk'));
         const cleanupThresholdRow = /** @type {HTMLElement|null} */ (queryAgentUi('#rt-cleanup-threshold-row'));
+        const cleanupMenuWrap = queryAgentUi('#rt-cleanup-menu-wrap');
 
         if (cleanupBroomBtn && cleanupDropdown) {
+            const closeCleanupDropdown = () => {
+                cleanupDropdown.style.display = 'none';
+                cleanupDropdown.closest('.rpg-tracker-panel')?.classList.remove('rt-cleanup-menu-open');
+            };
+
+            const positionCleanupDropdown = () => {
+                const hostPanel = cleanupBroomBtn.closest('.rpg-tracker-panel');
+                if (!(hostPanel instanceof HTMLElement)) return;
+                if (cleanupDropdown.parentElement !== hostPanel) {
+                    hostPanel.appendChild(cleanupDropdown);
+                }
+                const rect = cleanupBroomBtn.getBoundingClientRect();
+                const panelRect = hostPanel.getBoundingClientRect();
+                cleanupDropdown.style.top = `${rect.bottom - panelRect.top + 2}px`;
+                cleanupDropdown.style.right = `${panelRect.right - rect.right}px`;
+                cleanupDropdown.style.left = 'auto';
+                cleanupDropdown.style.display = 'block';
+                hostPanel.classList.add('rt-cleanup-menu-open');
+            };
+
             // Toggle dropdown on broom click
             cleanupBroomBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const isOpen = cleanupDropdown.style.display !== 'none';
-                cleanupDropdown.style.display = isOpen ? 'none' : 'block';
+                if (isOpen) {
+                    closeCleanupDropdown();
+                } else {
+                    positionCleanupDropdown();
+                }
             });
 
             // Stop pointer/mouse/click propagation inside the dropdown (prevents header drag and outside-dismiss),
@@ -9374,16 +9399,16 @@ Rules:
 
             // Dismiss dropdown on outside click
             document.addEventListener('click', (e) => {
-                if (!cleanupDropdown.parentElement?.contains(/** @type {Node} */(e.target))) {
-                    cleanupDropdown.style.display = 'none';
-                }
+                const target = /** @type {Node} */ (e.target);
+                if (cleanupMenuWrap?.contains(target) || cleanupDropdown.contains(target)) return;
+                closeCleanupDropdown();
             });
 
             // "Run Cleanup" button — existing popup-then-run flow
             if (cleanupRunBtn) {
                 cleanupRunBtn.addEventListener('click', async (e) => {
                     e.stopPropagation();
-                    cleanupDropdown.style.display = 'none';
+                    closeCleanupDropdown();
 
                     if (isRouterRunning()) {
                         // @ts-ignore
