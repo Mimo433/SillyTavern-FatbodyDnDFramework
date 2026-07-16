@@ -2,10 +2,15 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [5.5.18] - 2026-07-16
+
+### Changed
+- **Settings drawer label**: Renamed **Lorebook Locations ALPHA** to **Location Images & Visualization ALPHA**.
+
 ## [5.5.17] - 2026-07-16
 
 ### Changed
-- **Lorebook Locations ALPHA drawer**: Location image settings (Show Location Images, Lorebook Locations auto-gen, Real-Time Visualization Mode, and related options) are grouped in a collapsible drawer instead of scattered across the portraits section.
+- **Location Images & Visualization ALPHA drawer**: Location image settings (Show Location Images, Lorebook Locations auto-gen, Real-Time Visualization Mode, and related options) are grouped in a collapsible drawer instead of scattered across the portraits section.
 - **Lorebook Locations auto-gen**: Enabling Lorebook Locations auto-generation now also turns on Show Location Images and no longer requires the master toggle first.
 
 ### Fixed
