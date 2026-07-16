@@ -2951,7 +2951,7 @@ textarea.rt-cr-input {
     /* Campaign records should absorb remaining panel height and scroll internally */
     #rt-agent-campaign-section {
         flex: 1 1 auto !important;
-        min-height: 0 !important;
+        min-height: 140px !important;
     }
 
     #rt-agent-manifest-list {
@@ -2965,8 +2965,11 @@ textarea.rt-cr-input {
 }
 
 
-/* ── Lorebook Agent panel: flex column; scroll inside campaign records, not the whole body.
-   .rpg-tracker-content defaults to flex column — as a flex item that breaks wrapped chip layout. */
+/* ── Lorebook Agent panel: flex column.
+   Campaign Records scrolls internally when there is leftover height.
+   When Quick Settings / Console / World Progression / etc. expand past the
+   panel, the content body itself must also scroll — otherwise those drawers
+   are clipped with no scrollbar (only the manifesto list was scrollable). */
 #rpg-tracker-agent {
     display: flex;
     flex-direction: column;
@@ -2979,15 +2982,19 @@ textarea.rt-cr-input {
     flex-direction: column !important;
     flex: 1 1 auto !important;
     min-height: 0 !important;
-    overflow: hidden !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
     padding-bottom: 0 !important;
+    scrollbar-width: thin;
 }
 
 #rt-agent-campaign-section {
     display: flex;
     flex-direction: column;
     flex: 1 1 auto;
-    min-height: 0;
+    /* Keep a usable manifesto area even when upper drawers are fully expanded;
+       outer .rpg-tracker-content scroll then reaches the rest of the drawers. */
+    min-height: 140px;
 }
 
 #rt-agent-manifest-list {

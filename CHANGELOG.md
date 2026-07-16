@@ -2,6 +2,11 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [5.5.15] - 2026-07-16
+
+### Fixed
+- **Lorebook Agent panel scroll**: Expanding Quick Settings, Console, World Progression, and other drawers no longer clips content with no scrollbar; the agent body scrolls, and Campaign Records keeps a usable minimum height.
+
 ## [5.5.1] - 2026-07-16
 
 ### Fixed
