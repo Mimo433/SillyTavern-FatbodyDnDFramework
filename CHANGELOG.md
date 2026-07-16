@@ -2,6 +2,17 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [5.6.1] - 2026-07-17
+
+### Changed
+- **`<quests>` narrator sysprompt**: Reorganized into GENERAL and EMERGENT QUESTS sections; added obtainable-objectives guidance; MOOD and FRUSTRATION_COEFF lines only inject when Frustration is enabled.
+
+### Fixed
+- **Mobile footer nav**: `Live` / `[ LIVE ]` snapshot nav centered (chevron balanced with spacer).
+
+### Docs
+- **Onboarding help**: Lorebook Agent instructions refer to the panel tab instead of the removed robot button.
+
 ## [5.6.0] - 2026-07-17
 
 ### Added
