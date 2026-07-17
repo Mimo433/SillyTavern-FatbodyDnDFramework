@@ -61,13 +61,12 @@ Together they solve the four core problems of LLM tabletop RP: the AI forgetting
 ---
 
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/cdfc169e-a14a-41bc-8fa0-7cf6f61d12ad" width="100%" alt="Combat in progress" />
+  <img src="https://github.com/user-attachments/assets/8e615285-1eed-4312-98c6-6cb47febaed5" width="100%" alt="Combat in progress" />
   <br>
   <em>Some combat in progress</em>
 </p>
 
 ---
-
 
 ## Installation
 
