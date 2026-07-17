@@ -3,6 +3,7 @@ import { escapeHtml } from './memo-processor.js';
 import { normalizeLocationPath, resolveLocationImageWithMeta, triggerBackgroundLocationGeneration, hasLocationImage, getLinkedPlayerCharacter, isLocationImageGenerating, resolvePortraitSrcForPlayerCharacter } from './portraits.js';
 import { resolvePortraitDisplaySrc, lookupCustomPortraitSrc } from './portrait-storage.js';
 import { resolveCurrentLocationPath, formatLocationBreadcrumb } from './location-resolver.js';
+import { scanRecentOutputForPresentNpcs } from './router.js';
 
 /**
  * Parse current location from recent chat status footer, then memo [TIME] block.
@@ -52,60 +53,22 @@ export async function loadAllLocationPaths(ctx, settings) {
 }
 
 /**
+ * Present Now NPCs from a keyword scan of the most recent narrator output only.
+ * Independent of Lorebook Agent activeRouterKeys (avoids stale characters).
  * @param {object} settings
  * @param {object} ctx
- * @returns {Promise<Array<{ id: string, label: string, portraitSrc: string, entryId: string }>>}
+ * @returns {Promise<Array<{ id: string, label: string, portraitSrc: string, entryId: string, content?: string }>>}
  */
 export async function loadActiveSceneNpcs(settings, ctx) {
     const s = settings || getSettings();
-    const activeKeys = s.activeRouterKeys || [];
-    if (!activeKeys.length) return [];
-
-    const books = {};
-    const needed = new Set();
-    for (const k of activeKeys) {
-        const [bookName] = k.split('::');
-        if (!bookName) continue;
-        const lower = bookName.toLowerCase();
-        if (lower.endsWith('_npcs') || lower.endsWith('_npc') || lower === 'npcs' || lower === 'npc') {
-            needed.add(bookName);
-        }
-    }
-
-    const loads = await Promise.all([...needed].map(async (bookName) => {
-        try {
-            return [bookName, await ctx.loadWorldInfo(bookName)];
-        } catch {
-            return [bookName, null];
-        }
+    const matched = await scanRecentOutputForPresentNpcs();
+    return matched.map(m => ({
+        id: m.id,
+        entryId: m.id,
+        label: m.label,
+        content: m.content || '',
+        portraitSrc: lookupCustomPortraitSrc(s, m.label),
     }));
-    for (const [bookName, book] of loads) {
-        if (book) books[bookName] = book;
-    }
-
-    const npcs = [];
-    for (const k of activeKeys) {
-        const [bookName, uid] = k.split('::');
-        const lower = (bookName || '').toLowerCase();
-        if (!lower.endsWith('_npcs') && !lower.endsWith('_npc') && lower !== 'npcs' && lower !== 'npc') continue;
-
-        const entry = books[bookName]?.entries?.[uid];
-        if (!entry) continue;
-
-        const label = (entry.comment || entry.key?.[0] || '').trim();
-        if (!label) continue;
-
-        const portraitSrc = lookupCustomPortraitSrc(s, label);
-
-        npcs.push({
-            id: k,
-            entryId: k,
-            label,
-            portraitSrc,
-            content: entry.content || '',
-        });
-    }
-    return npcs;
 }
 
 /** @param {string} label */
@@ -322,7 +285,7 @@ export function renderImmersionViewHtml(scene) {
                 <div class="rt-immersion-npc-name">${escapeHtml(npc.label)}</div>
             </button>`;
         }).join('')
-        : `<div class="rt-immersion-empty">No player character linked and no active NPCs in lore memory.</div>`;
+        : `<div class="rt-immersion-empty">No player character linked and no NPCs keyword-matched in the latest narrator output.</div>`;
 
     return `<div class="rt-immersion-root">
         ${locationImagesEnabled ? `

@@ -3030,6 +3030,115 @@ export async function scanAssistantOutputForKeywords(narrativeText, opts = {}) {
     return newlyTriggered;
 }
 
+/** @param {string} bookName */
+function isNpcBookName(bookName) {
+    const lower = (bookName || '').toLowerCase();
+    return lower.endsWith('_npcs') || lower.endsWith('_npc') || lower === 'npcs' || lower === 'npc';
+}
+
+/**
+ * Most recent assistant-side narrative only (no lookback window).
+ * Mirrors getNarrativeBlocks(chat, -1) without importing narrative-hooks (circular).
+ * @param {boolean} [includeHidden]
+ * @returns {string}
+ */
+function getMostRecentNarrativeText(includeHidden = false) {
+    const { chat } = SillyTavern.getContext();
+    if (!chat?.length) return '';
+    const parts = [];
+    for (let i = chat.length - 1; i >= 0; i--) {
+        const msg = chat[i];
+        if (msg.is_user) break;
+        if (msg.is_system) continue;
+        if (!includeHidden && /** @type {any} */ (msg).is_hidden) continue;
+        if (msg.extra?.['summary'] || msg.extra?.['is_summary'] || msg.extra?.['summary_data']) continue;
+        const mes = cleanMessageContent(msg);
+        if (!mes) continue;
+        if (mes.startsWith('[Summary') || mes.startsWith('(Summary') || mes.includes('Summary of past events:')) continue;
+        parts.unshift(mes);
+    }
+    return parts.join('\n\n');
+}
+
+/**
+ * Present-Now keyword scanner — separate from the Lorebook Agent scanner.
+ * Scans ONLY the most recent narrator output for NPC entry keywords.
+ * Does NOT mutate activeRouterKeys / keywordActivatedKeys (avoids stale Present Now).
+ *
+ * Call immediately before location scene image generation (and when building Present Now UI).
+ *
+ * @param {string} [narrativeText] Defaults to the latest assistant output.
+ * @returns {Promise<Array<{ id: string, label: string, content: string }>>}
+ */
+export async function scanRecentOutputForPresentNpcs(narrativeText) {
+    const settings = getSettings();
+    const text = (narrativeText != null && narrativeText !== '')
+        ? String(narrativeText)
+        : getMostRecentNarrativeText(!!settings.routerIncludeHidden);
+    if (!text.trim()) return [];
+
+    const ctx = SillyTavern.getContext();
+    const prefix = getLivePrefix();
+    if (!prefix) return [];
+
+    const chatId = typeof globalThis._rpgCurrentChatId === 'function' ? globalThis._rpgCurrentChatId() : null;
+    const knownBooks = chatId ? (settings.chatStates?.[chatId]?.campaignBooks || []) : [];
+
+    let booksToScan;
+    if (knownBooks.length > 0) {
+        booksToScan = knownBooks.filter(n => isNpcBookName(n) && !isSkeletonBookName(n));
+    } else {
+        const allNames = await getWorldInfoNamesSafe({ fullProbe: false });
+        booksToScan = allNames.filter(n =>
+            bookBelongsToPrefix(n, prefix) && isNpcBookName(n) && !isSkeletonBookName(n),
+        );
+    }
+    if (!booksToScan.length) return [];
+
+    const lowerText = text.toLowerCase();
+    /** @type {Array<{ id: string, label: string, content: string }>} */
+    const matched = [];
+    const seenLabels = new Set();
+
+    for (const bookName of booksToScan) {
+        let book;
+        try {
+            book = await ctx.loadWorldInfo(bookName);
+        } catch {
+            continue;
+        }
+        if (!book?.entries) continue;
+
+        for (const [uid, entry] of Object.entries(book.entries)) {
+            const keywords = Array.isArray(entry.key) ? entry.key : [];
+            if (keywords.length === 0) continue;
+
+            const isMatch = keywords.some(kw =>
+                typeof kw === 'string' && kw.length > 0 &&
+                lowerText.includes(kw.toLowerCase()),
+            );
+            if (!isMatch) continue;
+
+            const label = (entry.comment || entry.key?.[0] || '').trim();
+            if (!label) continue;
+            const labelKey = label.replace(/\s*\(.*?\)/g, '').trim().toLowerCase();
+            if (seenLabels.has(labelKey)) continue;
+            seenLabels.add(labelKey);
+
+            matched.push({
+                id: `${bookName}::${uid}`,
+                label,
+                content: (entry.content || '').trim(),
+            });
+        }
+    }
+
+    if (settings.debugMode) {
+        console.log('[RPG Tracker] Present-Now keyword scan (latest output only):', matched.map(m => m.label));
+    }
+    return matched;
+}
+
 
 
 

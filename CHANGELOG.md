@@ -2,6 +2,11 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [5.6.60] - 2026-07-17
+
+### Changed
+- **Visualization Present Now**: Separate keyword scanner on the latest narrator output only (not Lorebook Agent active keys). Present Now tiles and location scene prompts use it; scan runs immediately before image generation.
+
 ## [5.6.55] - 2026-07-17
 
 ### Fixed

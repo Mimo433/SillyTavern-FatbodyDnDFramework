@@ -3,7 +3,7 @@ import { saveSettings } from './index.js';
 import { sendStateRequest } from './llm-client.js';
 import { parseMemoBlocks } from './renderer.js';
 import { escapeHtml, memoForGmContext } from './memo-processor.js';
-import { getLorebookManifest } from './router.js';
+import { getLorebookManifest, scanRecentOutputForPresentNpcs } from './router.js';
 import {
     persistPortraitSrc,
     deletePortraitFile,
@@ -1510,55 +1510,18 @@ function normalizeCharacterLabel(label) {
 }
 
 /**
- * NPCs currently active in Lorebook Agent memory (activeRouterKeys).
+ * NPCs keyword-matched in the most recent narrator output only (Present-Now scanner).
+ * Independent of Lorebook Agent activeRouterKeys.
  * @param {object} [settings]
  * @returns {Promise<Array<{ label: string, content: string }>>}
  */
-async function loadPresentNpcsFromActiveKeys(settings) {
-    const s = settings || getSettings();
-    const ctx = SillyTavern.getContext();
-    const activeKeys = s.activeRouterKeys || [];
-    if (!activeKeys.length) return [];
-
-    const needed = new Set();
-    for (const k of activeKeys) {
-        const [bookName] = k.split('::');
-        if (!bookName) continue;
-        const lower = bookName.toLowerCase();
-        if (lower.endsWith('_npcs') || lower.endsWith('_npc') || lower === 'npcs' || lower === 'npc') {
-            needed.add(bookName);
-        }
-    }
-    if (!needed.size) return [];
-
-    const books = {};
-    const loads = await Promise.all([...needed].map(async (bookName) => {
-        try {
-            return [bookName, await ctx.loadWorldInfo(bookName)];
-        } catch {
-            return [bookName, null];
-        }
-    }));
-    for (const [bookName, book] of loads) {
-        if (book) books[bookName] = book;
-    }
-
-    const npcs = [];
-    for (const k of activeKeys) {
-        const [bookName, uid] = k.split('::');
-        const lower = (bookName || '').toLowerCase();
-        if (!lower.endsWith('_npcs') && !lower.endsWith('_npc') && lower !== 'npcs' && lower !== 'npc') continue;
-        const entry = books[bookName]?.entries?.[uid];
-        if (!entry) continue;
-        const label = (entry.comment || entry.key?.[0] || '').trim();
-        if (!label) continue;
-        npcs.push({ label, content: (entry.content || '').trim() });
-    }
-    return npcs;
+async function loadPresentNpcsFromRecentOutput(settings) {
+    const matched = await scanRecentOutputForPresentNpcs();
+    return matched.map(m => ({ label: m.label, content: m.content || '' }));
 }
 
 /**
- * Player Character (always) plus optional active Lorebook NPCs for location scene prompts.
+ * Player Character (always) plus NPCs present in the latest narrator output for location scene prompts.
  * @param {object} [settings]
  * @param {object} [ctx]
  * @returns {Promise<Array<{ label: string, content: string, isPlayerCharacter?: boolean }>>}
@@ -1579,7 +1542,9 @@ async function loadPresentCharactersForLocationPrompt(settings, ctx) {
     }
 
     if (s.portraitLocationIncludePresentNpcs) {
-        const npcs = await loadPresentNpcsFromActiveKeys(s);
+        // Fresh Present-Now keyword scan of the latest output — must run here so image
+        // generation never uses stale Lorebook Agent active keys.
+        const npcs = await loadPresentNpcsFromRecentOutput(s);
         const pcNorm = pc ? normalizeCharacterLabel(pc.name) : '';
         for (const npc of npcs) {
             if (pcNorm && normalizeCharacterLabel(npc.label) === pcNorm) continue;
@@ -1641,6 +1606,8 @@ export async function generateLocationImagePrompt(locationPath, locContent) {
     } catch { /* ignore */ }
 
     try {
+        // Present-Now scan of the latest narrator output — runs here so Characters Present Now
+        // is fresh immediately before the image-generation prompt is sent (not after).
         const presentCharacters = await loadPresentCharactersForLocationPrompt(s, ctx);
         if (presentCharacters.length > 0) {
             const charBlocks = presentCharacters.map(ch =>
@@ -1715,6 +1682,8 @@ export function triggerBackgroundLocationGeneration(locationPath, refresh, locCo
 
     (async () => {
         try {
+            // generateLocationImagePrompt runs the Present-Now keyword scanner (latest
+            // output only) before building the image prompt — must stay ahead of generatePortraitDirect.
             const prompt = await generateLocationImagePrompt(normPath, locContent);
             if (!prompt) {
                 activeLocationGenerations.delete(normPath);
