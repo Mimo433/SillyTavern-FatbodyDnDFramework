@@ -95,8 +95,6 @@ You can scrap the entire system prompt and all the default fields and track your
 ## What Model to Use?
 Your primary narrator model must support **Tool Calling** for the Hybrid RNG system to work properly, though this is only relevant if you're using tool calls. The extension also works without them (selectable in the settings.)
 
-<img width="920" height="246" alt="image" src="https://github.com/user-attachments/assets/f663cb1e-554a-40a2-a25e-f7af62c1a032" />
-
 For the State Tracker and Lorebook Agent, use Gemini 3.1 Flash. It's good enough and costs peanuts. For the GM/Narrator, MiMo 2.5 Pro in my opinion has the best quality-price ratio. Experiment.
 
 ---
