@@ -87,6 +87,17 @@ export function escapeHtml(str) {
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+/** Reverse basic HTML entities produced by escapeHtml (and dataset / innerHTML text). */
+export function decodeHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&quot;/g, '"')
+        .replace(/&#0?39;/g, "'")
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&amp;/g, '&');
+}
+
 /**
  * Strips bare timestamp-only lines and a leading timestamp immediately before [CORE].
  * Used when saving or displaying lorebook record content.

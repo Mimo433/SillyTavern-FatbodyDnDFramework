@@ -1,5 +1,6 @@
 import { getRequestHeaders } from '../../../../script.js';
 import { getActiveChatId } from './state-manager.js';
+import { decodeHtml } from './memo-processor.js';
 
 /** Subfolder under `user/images/` for all Multihog portrait files. */
 export const PORTRAIT_STORAGE_FOLDER = 'multihogframework_portraits';
@@ -29,7 +30,18 @@ function normalizeStoredPortraitPath(path) {
 
 function normalizeEntityName(name) {
     if (!name) return '';
-    return name.replace(/\s*\(.*?\)/g, '').trim();
+    return decodeHtml(name).replace(/\s*\(.*?\)/g, '').trim();
+}
+
+export { normalizeEntityName };
+
+/** Resolve a stored portrait ref for an entity label (handles HTML entities + class suffix). */
+export function lookupCustomPortraitSrc(settings, entityName, portraitsMap) {
+    const key = normalizeEntityName(entityName);
+    if (!key) return '';
+    const map = portraitsMap ?? settings?.customPortraits;
+    const raw = map?.[key];
+    return raw ? resolvePortraitDisplaySrc(raw) : '';
 }
 
 /** @returns {boolean} */

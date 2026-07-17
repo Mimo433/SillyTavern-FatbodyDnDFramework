@@ -1,6 +1,6 @@
 import { getSettings, getBarBackground, getBarShowAsPercentage } from './state-manager.js';
-import { resolvePortraitDisplaySrc } from './portrait-storage.js';
-import { escapeHtml, highlightParens, highlightNumbers, parseInWorldTime, isRestTimeUnset, formatTimeDiff, isArchivedQuestStatus, questHasEffectiveDeadline } from './memo-processor.js';
+import { lookupCustomPortraitSrc } from './portrait-storage.js';
+import { escapeHtml, decodeHtml, highlightParens, highlightNumbers, parseInWorldTime, isRestTimeUnset, formatTimeDiff, isArchivedQuestStatus, questHasEffectiveDeadline } from './memo-processor.js';
 import { BLOCK_ICONS, BLOCK_ORDER, PAGE_SIZE, NO_PAGINATE } from './constants.js';
 
 // ── Renderer module: pure HTML string producers, localStorage helpers ──
@@ -1064,8 +1064,7 @@ export function renderDayNightBadge(str) {
  */
 function renderPortraitHtml(entityName) {
     const s = getSettings();
-    const normName = entityName.replace(/\s*\(.*?\)/g, '').trim();
-    const src = resolvePortraitDisplaySrc((s.customPortraits || {})[normName]);
+    const src = lookupCustomPortraitSrc(s, entityName);
     if (src) {
         return `<img class="rt-entity-portrait" src="${escapeHtml(src)}" alt="${escapeHtml(entityName)}" />`;
     }
@@ -1374,7 +1373,7 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                     // Extract entity name from the first rt-entity-name span
                     const nameMatch = html.match(/class="rt-entity-name"[^>]*>([^<]+)</);
                     if (!nameMatch) return html;
-                    return wrapEntityHtml(nameMatch[1].trim(), html);
+                    return wrapEntityHtml(decodeHtml(nameMatch[1].trim()), html);
                 });
             }
 
@@ -2350,7 +2349,7 @@ function renderBenchedPartyPanel(benchedContent, isPanelCollapsed, expandedNames
     if (expandedNames.size > 0) {
         blockToItems('BENCHED PARTY', benchedContent).forEach(html => {
             const m = html.match(/class="rt-entity-name"[^>]*>([^<]+)</);
-            if (m) fullCardByName[m[1].trim()] = html;
+            if (m) fullCardByName[decodeHtml(m[1].trim())] = html;
         });
     }
 

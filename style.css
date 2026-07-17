@@ -5894,6 +5894,79 @@ textarea.rt-cr-input {
     --rt-shadow: 0 8px 32px rgba(0, 0, 25, 0.65), inset 0 0 25px rgba(60, 70, 150, 0.07);
 }
 
+/* ── User panel background image + day/night tint overlay ─────────────────
+   Layer order: ::before = art, ::after = phase scrim, children = UI. */
+.rpg-tracker-panel.rt-has-bg-image {
+    --rt-bg-overlay-color: rgba(18, 18, 24, 0.72);
+    --rt-bg-overlay-strength: 0.55;
+    background-color: transparent !important;
+    background-image: none !important;
+    isolation: isolate;
+}
+
+.rpg-tracker-panel.rt-has-bg-image::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    border-radius: inherit;
+    background-image: var(--rt-user-bg-image, none);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    transition: opacity 2s ease, filter 2s ease;
+}
+
+.rpg-tracker-panel.rt-has-bg-image.rt-daynight-active.rt-phase-night::before,
+.rpg-tracker-panel.rt-has-bg-image.rt-daynight-active.rt-phase-lateNight::before {
+    background-image: var(--rt-user-bg-image-night, var(--rt-user-bg-image, none));
+}
+
+.rpg-tracker-panel.rt-has-bg-image::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    border-radius: inherit;
+    background: var(--rt-bg-overlay-color);
+    opacity: var(--rt-bg-overlay-strength);
+    transition: background 2s ease, opacity 2s ease;
+}
+
+.rpg-tracker-panel.rt-has-bg-image > .rpg-tracker-header,
+.rpg-tracker-panel.rt-has-bg-image > .rpg-tracker-content,
+.rpg-tracker-panel.rt-has-bg-image > .rpg-tracker-footer,
+.rpg-tracker-panel.rt-has-bg-image > .rpg-tracker-prompt-bar,
+.rpg-tracker-panel.rt-has-bg-image > .rpg-tracker-delta-panel,
+.rpg-tracker-panel.rt-has-bg-image > .rpg-tracker-delta-resize-handle {
+    position: relative;
+    z-index: 2;
+}
+
+.rpg-tracker-panel.rt-has-bg-image.rt-daynight-active.rt-phase-lateNight {
+    --rt-bg-overlay-color: rgba(6, 8, 26, 0.82);
+}
+.rpg-tracker-panel.rt-has-bg-image.rt-daynight-active.rt-phase-dawn {
+    --rt-bg-overlay-color: rgba(42, 22, 28, 0.72);
+}
+.rpg-tracker-panel.rt-has-bg-image.rt-daynight-active.rt-phase-morning {
+    --rt-bg-overlay-color: rgba(28, 32, 38, 0.62);
+}
+.rpg-tracker-panel.rt-has-bg-image.rt-daynight-active.rt-phase-midday {
+    --rt-bg-overlay-color: rgba(34, 38, 44, 0.52);
+}
+.rpg-tracker-panel.rt-has-bg-image.rt-daynight-active.rt-phase-afternoon {
+    --rt-bg-overlay-color: rgba(36, 32, 28, 0.58);
+}
+.rpg-tracker-panel.rt-has-bg-image.rt-daynight-active.rt-phase-sunset {
+    --rt-bg-overlay-color: rgba(48, 22, 14, 0.7);
+}
+.rpg-tracker-panel.rt-has-bg-image.rt-daynight-active.rt-phase-night {
+    --rt-bg-overlay-color: rgba(10, 14, 32, 0.78);
+}
+
 /* Settings ? help icons — tap/click friendly; hover title tooltips still work on desktop */
 .rpg-tracker-settings .fa-circle-question[title] {
     cursor: pointer;

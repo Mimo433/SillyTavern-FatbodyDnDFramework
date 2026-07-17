@@ -11,7 +11,7 @@ import { runRouterPass, rollbackRouterPass, reapplyRouterPass, getLorebookManife
 import { getRequestHeaders } from '../../../../script.js';
 import { fileToDataUrl, scaleImageTo512Square, scaleImageToLandscape, applyPortraitData, applyLocationImageData, generatePortraitPrompt, generateNpcPortraitPrompt, generateLocationImagePrompt, showPortraitPromptPopup, generatePortraitDirect, autoGeneratePartyPortraits, removeAllPortraits, checkAndTriggerAutoGenerations, autoGenerateEnemyPortraits, forceCheckAutoGenerations, resetAutoGenerationTracking, resolveLocationImageWithMeta, normalizeLocationPath, buildLocationPath, getLinkedPlayerCharacter, resolvePortraitSrcForPlayerCharacter } from './portraits.js';
 import { buildImmersionSceneState, renderImmersionViewHtml, getCurrentLocationText, loadLocationEntryByPath, loadNpcEntryByKey, maybeAutoGenerateImmersionSceneArt, resetImmersionSceneArtTracking, hydrateImmersionSceneArtPath } from './immersion.js';
-import { migrateAllEmbeddedPortraits, countEmbeddedPortraitDataUrls, purgeAllPortraitData, resolvePortraitDisplaySrc, collectAllPortraitRefs, isManagedPortraitPath, isPortraitMigrationLocked, setPortraitMigrationLocked, PORTRAIT_STORAGE_FOLDER } from './portrait-storage.js';
+import { migrateAllEmbeddedPortraits, countEmbeddedPortraitDataUrls, purgeAllPortraitData, resolvePortraitDisplaySrc, lookupCustomPortraitSrc, collectAllPortraitRefs, isManagedPortraitPath, isPortraitMigrationLocked, setPortraitMigrationLocked, PORTRAIT_STORAGE_FOLDER } from './portrait-storage.js';
 import { loadPanelGeometry, loadDeltaHeight, makeDraggable, makeResizableTR, makeResizableBR, makeResizableBL, setupResizeObserver, setupDeltaResize, canResizePanels, jqueryToggleSlide } from './ui-geometry.js';
 import { applyCustomTheme, openThemeWizard, refreshSavedThemesList, handleRecolor, undoThemeChange } from './theme-manager.js';
 import { showCharacterRollPanel, showPcImportPanel, handleCharacterCreatorGenerate } from './character-creator.js';
@@ -2835,8 +2835,7 @@ function refreshPortraitPromptPresetsList() {
 async function showPortraitSettingsMenu(entityName, onRefresh, npcContent = null) {
     const refresh = onRefresh || refreshRenderedView;
     const s = getSettings();
-    const normName = entityName.replace(/\s*\(.*?\)/g, '').trim();
-    const currentSrc = resolvePortraitDisplaySrc((s.customPortraits || {})[normName] || '');
+    const currentSrc = lookupCustomPortraitSrc(s, entityName);
     const previewHtml = currentSrc
         ? `<img src="${currentSrc}" style="max-width:128px;max-height:128px;border-radius:6px;display:block;margin:0 auto 10px;"/>`
         : `<div style="text-align:center;opacity:0.5;margin-bottom:10px;">No portrait set</div>`;
@@ -6656,8 +6655,7 @@ function createPanel() {
                                 ${makeBigBar(rel.affection, 'Affection', '#f472b6', '#a855f7', '💗', 'affection')}
                             `;
 
-                                    const normLabel = item.label.replace(/\s*\(.*?\)/g, '').trim();
-                                    const portraitSrc = resolvePortraitDisplaySrc(s.customPortraits?.[normLabel] || '');
+                                    const portraitSrc = lookupCustomPortraitSrc(s, item.label);
                                     const hidePortrait = s.npcPortraits === false;
 
                                     // Full-size portrait (512px stored, display at native res), with the same
@@ -6792,8 +6790,7 @@ function createPanel() {
                                         popupPortraitWrap.addEventListener('click', async (e) => {
                                             e.stopPropagation();
                                             const refreshPopupPortrait = () => {
-                                                const norm = item.label.replace(/\s*\(.*?\)/g, '').trim();
-                                                const newSrc = resolvePortraitDisplaySrc(getSettings().customPortraits?.[norm] || '');
+                                                const newSrc = lookupCustomPortraitSrc(getSettings(), item.label);
                                                 popupPortraitWrap.innerHTML = renderNpcPopupPortraitInner(newSrc);
                                                 if (typeof refreshManifest === 'function') refreshManifest();
                                                 if (typeof refreshRenderedView === 'function') refreshRenderedView();
@@ -7209,8 +7206,7 @@ function createPanel() {
                                 for (const item of items) {
                                     const rel = parseRelationship ? parseRelationship(item.id) : { friendship: 0, affection: 0 };
                                     const desc = getNpcDescription ? getNpcDescription(item.content) : '';
-                                    const normLabel = item.label.replace(/\s*\(.*?\)/g, '').trim();
-                                    const portraitSrc = resolvePortraitDisplaySrc(s.customPortraits?.[normLabel] || '');
+                                    const portraitSrc = lookupCustomPortraitSrc(s, item.label);
                                     const isDirty = _dirtyEntries.has(item.id);
 
                                     const card = document.createElement('div');
@@ -9637,6 +9633,7 @@ Rules:
 
                     applyPanelContentMode(getSettings().trackerContentMode || 'tracker');
                 }
+                applyPanelBackgroundToDom();
                 updateAgentBtnUI();
             };
 
@@ -10466,6 +10463,92 @@ function refreshDayNightCycleFromCurrentMemo() {
 }
 
 /**
+ * Compresses a panel backdrop for settings storage (max edge 1280px, JPEG).
+ * @param {string} dataUrl
+ * @param {number} [maxDim=1280]
+ * @returns {Promise<string>}
+ */
+function scalePanelBackgroundImage(dataUrl, maxDim = 1280) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+            let { width, height } = img;
+            if (width > maxDim || height > maxDim) {
+                const scale = maxDim / Math.max(width, height);
+                width = Math.max(1, Math.round(width * scale));
+                height = Math.max(1, Math.round(height * scale));
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+                reject(new Error('Canvas unsupported'));
+                return;
+            }
+            ctx.drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL('image/jpeg', 0.78));
+        };
+        img.onerror = () => reject(new Error('Could not load image'));
+        img.src = dataUrl;
+    });
+}
+
+/**
+ * CSS url() value from a stored image src (data URL or http(s)).
+ * @param {string} src
+ * @returns {string}
+ */
+function cssUrlFromImageSrc(src) {
+    if (!src || typeof src !== 'string') return 'none';
+    const trimmed = src.trim();
+    if (!trimmed) return 'none';
+    return `url(${JSON.stringify(trimmed)})`;
+}
+
+/**
+ * Applies optional user panel backdrop + overlay strength to main/detached panels.
+ */
+export function applyPanelBackgroundToDom() {
+    const settings = getSettings();
+    const daySrc = (settings.panelBgImage || '').trim();
+    const nightSrc = (settings.panelBgImageNight || '').trim() || daySrc;
+    const strength = Math.max(0, Math.min(100, parseInt(String(settings.panelBgOverlayStrength ?? 55), 10) || 0)) / 100;
+    const hasImage = !!daySrc;
+
+    /** @type {HTMLElement[]} */
+    const targets = [];
+    const main = document.getElementById('rpg-tracker-panel');
+    if (main instanceof HTMLElement) targets.push(main);
+    const agent = document.getElementById('rpg-tracker-agent');
+    if (agent instanceof HTMLElement && agent.classList.contains('rt-detached-panel')
+        && agent.parentElement === document.body) {
+        targets.push(agent);
+    }
+
+    for (const panel of targets) {
+        panel.classList.toggle('rt-has-bg-image', hasImage);
+        if (hasImage) {
+            panel.style.setProperty('--rt-user-bg-image', cssUrlFromImageSrc(daySrc));
+            panel.style.setProperty('--rt-user-bg-image-night', cssUrlFromImageSrc(nightSrc));
+            panel.style.setProperty('--rt-bg-overlay-strength', String(strength));
+        } else {
+            panel.style.removeProperty('--rt-user-bg-image');
+            panel.style.removeProperty('--rt-user-bg-image-night');
+            panel.style.removeProperty('--rt-bg-overlay-strength');
+        }
+    }
+
+    // Nested integrated agent must not keep a leftover backdrop class
+    if (agent instanceof HTMLElement && !targets.includes(agent)) {
+        agent.classList.remove('rt-has-bg-image');
+        agent.style.removeProperty('--rt-user-bg-image');
+        agent.style.removeProperty('--rt-user-bg-image-night');
+        agent.style.removeProperty('--rt-bg-overlay-strength');
+    }
+}
+
+/**
  * Swaps rt-theme-* on tracker panels without clearing other state classes, then
  * re-applies day/night cycle tint/badge when that feature is enabled.
  * @param {string} [newTheme]
@@ -10492,6 +10575,7 @@ export function applyTrackerThemeToDom(newTheme) {
         }
     });
 
+    applyPanelBackgroundToDom();
     refreshDayNightCycleFromCurrentMemo();
 }
 
@@ -10572,6 +10656,7 @@ export function syncMemoView() {
 
     // Day/Night Cycle — tint all tracker panels + header sky badge from [TIME].
     refreshDayNightCycleFromMemo(textarea.value || '');
+    applyPanelBackgroundToDom();
 
     refreshRenderedView();
 }
@@ -11445,8 +11530,110 @@ async function runPortraitMigrationIfNeeded() {
             saveSettings();
             const ta = document.getElementById('rpg-tracker-memo');
             refreshDayNightCycleFromMemo(ta ? ta.value : settings.currentMemo || '');
+            applyPanelBackgroundToDom();
             refreshRenderedView();
         });
+
+        // Panel background image (scenario art + day/night overlay)
+        const syncPanelBgSettingsUi = () => {
+            const day = (settings.panelBgImage || '').trim();
+            const night = (settings.panelBgImageNight || '').trim();
+            const strength = Math.max(0, Math.min(100, parseInt(String(settings.panelBgOverlayStrength ?? 55), 10) || 0));
+            const dayPreview = /** @type {HTMLElement|null} */ (document.getElementById('rpg_tracker_panel_bg_preview'));
+            const nightPreview = /** @type {HTMLElement|null} */ (document.getElementById('rpg_tracker_panel_bg_night_preview'));
+            const overlayInp = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_tracker_panel_bg_overlay'));
+            const overlayVal = document.getElementById('rpg_tracker_panel_bg_overlay_val');
+            const urlInp = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_tracker_panel_bg_url'));
+            if (dayPreview) dayPreview.style.backgroundImage = day ? `url(${JSON.stringify(day)})` : 'none';
+            if (nightPreview) nightPreview.style.backgroundImage = night ? `url(${JSON.stringify(night)})` : 'none';
+            if (overlayInp) overlayInp.value = String(strength);
+            if (overlayVal) overlayVal.textContent = `${strength}%`;
+            if (urlInp && day.startsWith('http')) urlInp.value = day;
+            else if (urlInp && !day) urlInp.value = '';
+        };
+        syncPanelBgSettingsUi();
+
+        const persistPanelBgImage = async (/** @type {'day'|'night'} */ which, /** @type {string} */ src) => {
+            let stored = (src || '').trim();
+            if (stored.startsWith('data:image/')) {
+                try {
+                    stored = await scalePanelBackgroundImage(stored);
+                } catch (err) {
+                    console.error(err);
+                    toastr['warning']('Could not process that image.', 'RPG Tracker');
+                    return;
+                }
+            } else if (stored && !/^https?:\/\//i.test(stored) && !stored.startsWith('data:')) {
+                toastr['warning']('Use an https image URL or upload a file.', 'RPG Tracker');
+                return;
+            }
+            if (which === 'day') settings.panelBgImage = stored;
+            else settings.panelBgImageNight = stored;
+            saveSettings();
+            syncPanelBgSettingsUi();
+            applyPanelBackgroundToDom();
+        };
+
+        const bindPanelBgFile = (/** @type {string} */ btnId, /** @type {string} */ fileId, /** @type {'day'|'night'} */ which) => {
+            const btn = document.getElementById(btnId);
+            const fileInp = /** @type {HTMLInputElement|null} */ (document.getElementById(fileId));
+            if (!btn || !fileInp) return;
+            btn.addEventListener('click', () => fileInp.click());
+            fileInp.addEventListener('change', async () => {
+                const file = fileInp.files?.[0];
+                fileInp.value = '';
+                if (!file) return;
+                try {
+                    const dataUrl = await fileToDataUrl(file);
+                    await persistPanelBgImage(which, String(dataUrl));
+                    toastr['success'](which === 'day' ? 'Panel background set.' : 'Night background set.', 'RPG Tracker');
+                } catch (err) {
+                    console.error(err);
+                    toastr['warning']('Could not read that file.', 'RPG Tracker');
+                }
+            });
+        };
+        bindPanelBgFile('rpg_tracker_panel_bg_upload', 'rpg_tracker_panel_bg_file', 'day');
+        bindPanelBgFile('rpg_tracker_panel_bg_night_upload', 'rpg_tracker_panel_bg_night_file', 'night');
+
+        document.getElementById('rpg_tracker_panel_bg_clear')?.addEventListener('click', () => {
+            settings.panelBgImage = '';
+            saveSettings();
+            syncPanelBgSettingsUi();
+            applyPanelBackgroundToDom();
+        });
+        document.getElementById('rpg_tracker_panel_bg_night_clear')?.addEventListener('click', () => {
+            settings.panelBgImageNight = '';
+            saveSettings();
+            syncPanelBgSettingsUi();
+            applyPanelBackgroundToDom();
+        });
+
+        const panelBgUrlInp = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_tracker_panel_bg_url'));
+        panelBgUrlInp?.addEventListener('change', async () => {
+            const url = panelBgUrlInp.value.trim();
+            if (!url) {
+                settings.panelBgImage = '';
+                saveSettings();
+                syncPanelBgSettingsUi();
+                applyPanelBackgroundToDom();
+                return;
+            }
+            await persistPanelBgImage('day', url);
+        });
+
+        const panelBgOverlay = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_tracker_panel_bg_overlay'));
+        panelBgOverlay?.addEventListener('input', () => {
+            const val = Math.max(0, Math.min(100, parseInt(panelBgOverlay.value, 10) || 0));
+            settings.panelBgOverlayStrength = val;
+            const overlayVal = document.getElementById('rpg_tracker_panel_bg_overlay_val');
+            if (overlayVal) overlayVal.textContent = `${val}%`;
+            applyPanelBackgroundToDom();
+        });
+        panelBgOverlay?.addEventListener('change', () => {
+            saveSettings();
+        });
+
         $('#rpg_tracker_auto_reset_prompts').prop('checked', !!settings.autoResetPromptsOnUpdate).on('change', function () {
             settings.autoResetPromptsOnUpdate = !!$(this).prop('checked');
             saveSettings();
@@ -14820,6 +15007,18 @@ RULES:
             $('#rpg_tracker_chat_link_enabled').prop('checked', !!s.chatLinkEnabled);
             $('#rpg_tracker_debug').prop('checked', !!s.debugMode);
             $('#rpg_tracker_daynight_cycle').prop('checked', !!s.dayNightCycleEnabled);
+            const strength = Math.max(0, Math.min(100, parseInt(String(s.panelBgOverlayStrength ?? 55), 10) || 0));
+            const dayPreview = /** @type {HTMLElement|null} */ (document.getElementById('rpg_tracker_panel_bg_preview'));
+            const nightPreview = /** @type {HTMLElement|null} */ (document.getElementById('rpg_tracker_panel_bg_night_preview'));
+            const overlayInp = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_tracker_panel_bg_overlay'));
+            const overlayVal = document.getElementById('rpg_tracker_panel_bg_overlay_val');
+            const daySrc = (s.panelBgImage || '').trim();
+            const nightSrc = (s.panelBgImageNight || '').trim();
+            if (dayPreview) dayPreview.style.backgroundImage = daySrc ? `url(${JSON.stringify(daySrc)})` : 'none';
+            if (nightPreview) nightPreview.style.backgroundImage = nightSrc ? `url(${JSON.stringify(nightSrc)})` : 'none';
+            if (overlayInp) overlayInp.value = String(strength);
+            if (overlayVal) overlayVal.textContent = `${strength}%`;
+            applyPanelBackgroundToDom();
             $('#rpg_tracker_auto_reset_prompts').prop('checked', !!s.autoResetPromptsOnUpdate);
             $('#rpg_main_sysprompt_backup_enabled').prop('checked', isMainSyspromptBackupEnabled(s));
             syncMainSyspromptBackupControlsUi();

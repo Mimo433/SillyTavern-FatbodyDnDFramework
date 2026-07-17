@@ -2,6 +2,14 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [5.6.3] - 2026-07-17
+
+### Added
+- **Panel background image**: Upload scenario art (optional night variant) with overlay strength; day/night cycle tints the scrim over the image.
+
+### Fixed
+- **Portrait matching**: Names with quotes (e.g. `Jax "Neon" Vane (Cyber-Drifter)`) now resolve portraits correctly after HTML rendering.
+
 ## [5.6.2] - 2026-07-17
 
 ### Changed

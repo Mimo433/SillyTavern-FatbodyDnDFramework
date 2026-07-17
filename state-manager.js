@@ -650,6 +650,12 @@ function buildDefaultSettings() {
         agentModulesOpen: true,
         agentWorldOpen: false,
         dayNightCycleEnabled: false,
+        /** Optional panel backdrop image (data URL or https URL). */
+        panelBgImage: '',
+        /** Optional night/late-night backdrop; falls back to panelBgImage when empty. */
+        panelBgImageNight: '',
+        /** 0–100: strength of the day/night (or neutral) tint over the backdrop image. */
+        panelBgOverlayStrength: 55,
         debugMode: false,
         connectionSource: "default",
         connectionProfileId: "",

@@ -11,6 +11,8 @@ import {
     purgeAllPortraitData,
     countPortraitPathRefs,
     resolvePortraitDisplaySrc,
+    normalizeEntityName,
+    lookupCustomPortraitSrc,
 } from './portrait-storage.js';
 
 // Read an image File as a full-resolution Base64 data URL
@@ -40,10 +42,8 @@ export function scaleImageTo512Square(dataUrl) {
     });
 }
 
-export function normalizeEntityName(name) {
-    if (!name) return '';
-    return name.replace(/\s*\(.*?\)/g, '').trim();
-}
+// Re-export portrait key helpers (single source of truth in portrait-storage.js)
+export { normalizeEntityName, lookupCustomPortraitSrc } from './portrait-storage.js';
 
 export async function applyPortraitData(entityName, src) {
     const s = getSettings();
@@ -814,9 +814,8 @@ export function resolvePortraitSrcForPlayerCharacter(settings, pcName) {
         }
     }
     for (const name of candidates) {
-        const normName = normalizeEntityName(name);
-        const src = s.customPortraits?.[normName];
-        if (src) return resolvePortraitDisplaySrc(src);
+        const src = lookupCustomPortraitSrc(s, name);
+        if (src) return src;
     }
     return '';
 }
