@@ -292,26 +292,36 @@ When a character's skill level is unknown, use your best judgment based on their
 </rng_system>
 
 <combat>
-On combat start: declare all previously unknown NPC stats (AC, Saves, HP, Combat Line, immunities/resistances/etc), then roll initiative for all participants.
+<ruleset_note>
+This is a custom hybrid ruleset that utilizes 5e flavor (spells, feats, XP table) alongside classic d20 mechanics — BAB (as in Pathfinder / D&D 3.5) plus Fortitude/Reflex/Will saves. It is NOT full 5e — always resolve attacks/saves/NPC stats using THIS document's formulas, never real 5e proficiency-bonus math, even if character sheets reference 5e-style spell lists or XP thresholds.
+</ruleset_note>
 
-GENERAL COMBAT FLOW:
+<combat_start>
+Declare all previously unknown NPC stats (AC, Saves, HP, Combat Line, immunities/resistances/etc), then roll initiative for all participants.
+</combat_start>
+
+<combat_flow>
 - Simulate all actions for every NPC participant each round.
 - State remaining HP after every damage or healing event.
 - Expire buffs/debuffs after appropriate duration. Explicitly state initial duration in turns. Examples: Mage Armor (+3 AC, 8h 0m) or Heroism (+5 Temp HP, 10 turns) or Exhaustion (Disadvantage on Ability Checks, until Long Rest)
+</combat_flow>
 
-DAMAGE LOGIC:
+<damage_logic>
 - Resistance: If a target is naturally resistant (e.g., Fire vs. Fire Elemental), halve the damage.
 - Vulnerability: If a target is weak to a damage type (e.g., Bludgeoning vs. Skeleton), double the damage.
 - Immunity: Damage is 0.
 - Use narrative "common sense" to apply these unless a specific trait is established.
+</damage_logic>
 
+<positioning_and_movement>
 DISTANCE & RANGE: Track positioning and distance, and apply standard D&D 5e rules. Ranged attacks at close range or beyond normal range are made at disadvantage.
 
 OPPORTUNITY ATTACKS: Apply per D&D 5e rules when creatures leave melee reach without Disengaging. If {{user}} moves away from a hostile creature and ends their turn without taking another action that would clearly imply engagement, treat the movement as Disengage.
 
 SPELLCASTING IN MELEE: Casting a spell does not provoke opportunity attacks by itself. If the spell requires a ranged attack and a hostile is within 5 ft., apply disadvantage. Saving-throw spells are unaffected unless another rule says otherwise.
+</positioning_and_movement>
 
-NPC STAT SCALING — CONTEXT-AWARE:
+<npc_stat_scaling>
 Enemy stats MUST be varied and contextual. They should NEVER automatically match the player's HP/level.
 
 QUEST DIFFICULTY CONTEXT:
@@ -332,7 +342,19 @@ Boss — Powerful individual  | HP 60–120 | AC 17–19 | BAB +6 to +8
 Legendary — World-threat    | HP 150–500+ | AC 19–22 | BAB +9 to +12
 
 These are BASE ranges. Scale UP or DOWN based on quest difficulty and narrative context.
+</npc_stat_scaling>
 
+<npc_profile_persistence>
+If a returning NPC's lorebook entry already contains a combat profile, use those exact stats verbatim — do not re-derive or re-roll them. Only deviate if the narrative has explicitly established a change since (leveled up, new gear, injury, etc.), in which case declare the updated profile so it can be re-recorded as the new canonical version. This does not apply to generic, unnamed combatants (a random Skeleton, a nameless Bandit) — those may vary freely between encounters.
+</npc_profile_persistence>
+
+<critical_hits_and_dying>
+- Natural 20 on an attack roll: Critical hit — roll damage dice twice (do not double the flat modifier).
+- Natural 1 on an attack roll: Automatic miss regardless of total.
+- ADVANTAGE/DISADVANTAGE: Roll 2d20, take the higher (advantage) or lower (disadvantage) result before adding modifiers.
+- 0 HP: Character falls unconscious, not dead. Roll a d20 death save at the start of their turn each round (no modifiers): 10+ = success, <10 = failure. 3 successes = stabilized (still unconscious). 3 failures = dead. Nat 20 = regain 1 HP and wake up. Nat 1 = 2 failures. Taking damage while at 0 HP = automatic 1 failure (2 if a critical hit).
+- Damage equal to or exceeding max HP in a single hit while at 0 HP = instant death, no death saves.
+</critical_hits_and_dying>
 </combat>
 
 <end_of_output_footer>
@@ -645,26 +667,36 @@ When a character's skill level is unknown, use your best judgment based on their
 </rng_system>
 
 <combat>
-On combat start: declare all previously unknown NPC stats (AC, Saves, HP, Combat Line, immunities/resistances/etc), then roll initiative for all participants in this order: {{user}}, PARTY, ALLIES, ENEMIES.
+<ruleset_note>
+This is a custom hybrid ruleset that utilizes 5e flavor (spells, feats, XP table) alongside classic d20 mechanics — BAB (as in Pathfinder / D&D 3.5) plus Fortitude/Reflex/Will saves. It is NOT full 5e — always resolve attacks/saves/NPC stats using THIS document's formulas, never real 5e proficiency-bonus math, even if character sheets reference 5e-style spell lists or XP thresholds.
+</ruleset_note>
 
-GENERAL COMBAT FLOW:
+<combat_start>
+Declare all previously unknown NPC stats (AC, Saves, HP, Combat Line, immunities/resistances/etc), then roll initiative for all participants.
+</combat_start>
+
+<combat_flow>
 - Simulate all actions for every NPC participant each round.
 - State remaining HP after every damage or healing event.
 - Expire buffs/debuffs after appropriate duration. Explicitly state initial duration in turns. Examples: Mage Armor (+3 AC, 8h 0m) or Heroism (+5 Temp HP, 10 turns) or Exhaustion (Disadvantage on Ability Checks, until Long Rest)
+</combat_flow>
 
-DAMAGE LOGIC:
+<damage_logic>
 - Resistance: If a target is naturally resistant (e.g., Fire vs. Fire Elemental), halve the damage.
 - Vulnerability: If a target is weak to a damage type (e.g., Bludgeoning vs. Skeleton), double the damage.
 - Immunity: Damage is 0.
 - Use narrative "common sense" to apply these unless a specific trait is established.
+</damage_logic>
 
+<positioning_and_movement>
 DISTANCE & RANGE: Track positioning and distance, and apply standard D&D 5e rules. Ranged attacks at close range or beyond normal range are made at disadvantage.
 
 OPPORTUNITY ATTACKS: Apply per D&D 5e rules when creatures leave melee reach without Disengaging. If {{user}} moves away from a hostile creature and ends their turn without taking another action that would clearly imply engagement, treat the movement as Disengage.
 
 SPELLCASTING IN MELEE: Casting a spell does not provoke opportunity attacks by itself. If the spell requires a ranged attack and a hostile is within 5 ft., apply disadvantage. Saving-throw spells are unaffected unless another rule says otherwise.
+</positioning_and_movement>
 
-NPC STAT SCALING — CONTEXT-AWARE:
+<npc_stat_scaling>
 Enemy stats MUST be varied and contextual. They should NEVER automatically match the player's HP/level.
 
 QUEST DIFFICULTY CONTEXT:
@@ -685,8 +717,19 @@ Boss — Powerful individual  | HP 60–120 | AC 17–19 | BAB +6 to +8
 Legendary — World-threat    | HP 150–500+ | AC 19–22 | BAB +9 to +12
 
 These are BASE ranges. Scale UP or DOWN based on quest difficulty and narrative context.
+</npc_stat_scaling>
 
-COMBAT PROFILE PERSISTENCE: If a returning NPC's lorebook entry already contains a combat profile, use those exact stats verbatim — do not re-derive or re-roll them. Only deviate if the narrative has explicitly established a change since (leveled up, new gear, injury, etc.), in which case declare the updated profile so it can be re-recorded as the new canonical version. This does not apply to generic, unnamed combatants (a random Skeleton, a nameless Bandit) — those may vary freely between encounters.
+<npc_profile_persistence>
+If a returning NPC's lorebook entry already contains a combat profile, use those exact stats verbatim — do not re-derive or re-roll them. Only deviate if the narrative has explicitly established a change since (leveled up, new gear, injury, etc.), in which case declare the updated profile so it can be re-recorded as the new canonical version. This does not apply to generic, unnamed combatants (a random Skeleton, a nameless Bandit) — those may vary freely between encounters.
+</npc_profile_persistence>
+
+<critical_hits_and_dying>
+- Natural 20 on an attack roll: Critical hit — roll damage dice twice (do not double the flat modifier).
+- Natural 1 on an attack roll: Automatic miss regardless of total.
+- ADVANTAGE/DISADVANTAGE: Roll 2d20, take the higher (advantage) or lower (disadvantage) result before adding modifiers.
+- 0 HP: Character falls unconscious, not dead. Roll a d20 death save at the start of their turn each round (no modifiers): 10+ = success, <10 = failure. 3 successes = stabilized (still unconscious). 3 failures = dead. Nat 20 = regain 1 HP and wake up. Nat 1 = 2 failures. Taking damage while at 0 HP = automatic 1 failure (2 if a critical hit).
+- Damage equal to or exceeding max HP in a single hit while at 0 HP = instant death, no death saves.
+</critical_hits_and_dying>
 </combat>
 
 <end_of_output_footer>
@@ -1064,6 +1107,35 @@ export function buildMagicGearLevelHint(level, genre, hasInventory) {
         guidance = '+2 and +3 magical weapons/armor appropriate; rare+ items fit tier-4 heroes.';
     }
     return `\n• MAGIC GEAR (D&D): ${guidance} CRITICAL NAMING: magical weapons/armor use the D&D suffix format — "Weapon Name +1", "Shadow Longsword +2", "Vampire's Blade +1" — NEVER put the bonus before the name (wrong: "+1 Shadow Longsword"). Emoji and [Rarity] tags come first, then the name with +N at the end, then stats in parentheses (e.g. 🗡️ [Rare] [E] Shadow Longsword +1 (1d8+1 Slashing, +1 to hit)). Match rarity tags to bonus tier.`;
+}
+
+/** Prompt fragment for BAB + skill scaling during character creation. */
+export function buildCombatAndSkillScalingHint() {
+    return `
+
+--- COMBAT & SKILL SCALING GUIDE ---
+When generating a character, use classic d20-style BAB scaling as a rough guide for overall competence. This system is NOT strict 3.5/Pathfinder, but should feel similar in progression and numeric restraint.
+
+BAB progression reference:
+- High combat progression ("martial", soldier, fighter, trained operator): about +1 BAB per level
+- Medium combat progression ("skilled hybrid", rogue, bard, ranger, detective): about +3 BAB per 4 levels
+- Low combat progression ("scholar", mage, technician, social specialist): about +1 BAB per 2 levels
+
+Use this as a GUIDE, not a hard law:
+- Level 1-3: low +0 to +1 | medium +0 to +2 | high +1 to +3
+- Level 4-6: low +2 to +3 | medium +3 to +4 | high +4 to +6
+- Level 7-10: low +3 to +5 | medium +5 to +7 | high +7 to +10
+
+Combat line must remain consistent with the chosen archetype. A non-combatant, academic, medic, hacker, or pure caster should NOT receive high-BAB combat values unless a Trait explicitly justifies serious combat training.
+
+Skills should scale more conservatively than combat fantasy suggests:
+- Give most characters only 2-4 notable trained skills at low levels.
+- Reserve very high skill bonuses for 1-2 signature specialties only.
+- Do NOT make every listed skill equally strong.
+- If a character is a broad generalist, lower individual skill bonuses.
+- If a character is an extreme specialist, allow one standout skill, but justify it in Traits/Abilities.
+
+Never generate inflated "heroic" numbers just because the concept sounds cool. Keep bonuses grounded, tier-appropriate, and internally consistent with level, archetype, attributes, and gear.`;
 }
 
 // ── Renderer / block layout constants ─────────────────────────────────────────

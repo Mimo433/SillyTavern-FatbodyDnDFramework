@@ -2,6 +2,15 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [5.7.6] - 2026-07-17
+
+### Added
+- **Combat & skill scaling guide**: Shared `buildCombatAndSkillScalingHint()` now injects BAB progression tiers and conservative skill-bonus rules into every character-creation path (Character Creator, Persona, Custom, archetype presets, and PC Import).
+
+### Changed
+- **Combat sysprompt block**: Restructured `<combat>` into tagged sub-sections (`<ruleset_note>`, `<combat_start>`, `<combat_flow>`, `<damage_logic>`, `<positioning_and_movement>`, `<npc_stat_scaling>`, `<npc_profile_persistence>`, `<critical_hits_and_dying>`) in both sysprompts and embedded fallbacks.
+- **Ruleset note**: Clarifies the system is a 5e-flavor hybrid with BAB from Pathfinder/D&D 3.5 plus Fort/Ref/Will saves — not full 5e proficiency-bonus math.
+
 ## [5.7.5] - 2026-07-17
 
 ### Added

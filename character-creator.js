@@ -1,6 +1,6 @@
 import { getSettings, saveChatState, DEFAULT_PC_SECTIONS } from './state-manager.js';
 import { sendStateRequest } from './llm-client.js';
-import { buildOnboardingXpHint, buildOnboardingTimeHint, buildMagicGearLevelHint, buildOnboardingActiveBlocks } from './constants.js';
+import { buildOnboardingXpHint, buildOnboardingTimeHint, buildMagicGearLevelHint, buildOnboardingActiveBlocks, buildCombatAndSkillScalingHint } from './constants.js';
 import { escapeHtml } from './memo-processor.js';
 import { getRequestHeaders } from '../../../../script.js';
 import { saveSettings, sendDirectPrompt, refreshAgentManifestNow, refreshRenderedView, syncTimeFormatSettingsUi } from './index.js';
@@ -491,6 +491,8 @@ async function handleCharRollGenerate(el, panel) {
     };
     const settingHint = SETTING_HINTS[genre] || '';
 
+    const combatSkillHint = buildCombatAndSkillScalingHint();
+
     const f = (val, fallback) => val || fallback;
     const prompt = `${levelPrefix}
 
@@ -520,6 +522,7 @@ ${cardSnippet ? `\n--- CHARACTER CARD CONTEXT ---${cardSnippet}` : ''}
 • ${isOther || isStoryFitting ? 'Invent the most fitting class for the setting and context.' : `Use the chosen class "${classRaw}" exactly as given — do not rename or substitute it.`}
 • If the setting is non-fantasy and no class was specified, create a class that feels natural to the world — not a fantasy D&D class name.
 • All stats, gear, and saves${hasXp ? ', and XP' : ''} must be consistent with Level ${level}.${magicGearHint}
+${combatSkillHint}
 ${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}${settingHint}`;
 
     const onboardingEl = resolveOnboardingEl(el) || el;
@@ -998,6 +1001,7 @@ async function importPcFromCard(charCard, mode, el) {
     const worldCtx = contextLines.join('\n\n---\n\n');
 
     const importBlockList = buildOnboardingActiveBlocks(s).join(', ');
+    const combatSkillHint = buildCombatAndSkillScalingHint();
 
     // --- Step 1: State Memo ---
     const memoPromptMinimal = `You are a state tracker assistant. Translate this character card into state tracker format for the player character.
@@ -1008,6 +1012,7 @@ RULES:
 - Output every currently active state-memo field (enabled stock modules and custom fields): ${importBlockList}.
 - Do NOT invent stats or equipment not present on the card.
 - Use the existing system prompt's block format.
+${combatSkillHint}
 
 ${worldCtx}`;
 
@@ -1019,6 +1024,7 @@ RULES:
 - Output every currently active state-memo field (enabled stock modules and custom fields): ${importBlockList}.
 - Use the existing system prompt's block format.
 - CRITICAL: Never output template macro strings such as {{char}}, {{user}}, or any other {{...}} placeholders. Always replace them with the actual character's name or a fitting proper name.
+${combatSkillHint}
 
 ${worldCtx}`;
 
