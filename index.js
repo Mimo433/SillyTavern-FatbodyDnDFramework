@@ -1,4 +1,4 @@
-import { EXAMPLES, COLOR_EXAMPLES, DEFAULT_STOCK_PROMPTS, RT_PROMPTS, BLOCK_ICONS, BLOCK_ORDER, PAGE_SIZE, NO_PAGINATE, buildOnboardingXpHint, buildOnboardingTimeHint, buildMagicGearLevelHint, buildOnboardingActiveBlocks, buildCombatAndSkillScalingHint, resolveTimePromptKey, resolveTimePromptDisplayTag } from './constants.js';
+import { EXAMPLES, COLOR_EXAMPLES, DEFAULT_STOCK_PROMPTS, RT_PROMPTS, BLOCK_ICONS, BLOCK_ORDER, PAGE_SIZE, NO_PAGINATE, buildOnboardingXpHint, buildOnboardingTimeHint, buildStartingGearHint, buildOnboardingActiveBlocks, buildCombatAndSkillScalingHint, resolveTimePromptKey, resolveTimePromptDisplayTag } from './constants.js';
 import { MODULE_NAME, DEFAULT_MODULES, getSettings, getBarBackground, migrateCustomFields, saveChatState, writeModuleSchemaBackup, applyModuleSchemaBackup, applyDeletedCustomTagTombstones, recordDeletedCustomTags, clearDeletedCustomTagTombstones, saveProfile, deleteProfile, getEffectiveRouterCampaignPrefix, sanitizeCampaignPrefixString, buildNpcInstruction, loadStockPromptsFromProfile, getNpcRelationshipMax, getNpcRelationshipMaxDefault, clampRelationshipValue, relationshipBarPct, getFriendshipTier, getAffectionTier, getRelTierBadgeStyle, getRelTierDetailedStyle, getRelTierDetailedLabelStyle, applyRelTierBadgeElement, sanitizeRouterState, rebuildAllModuleInstructions, adjustAllStoredTemplatesForTimeFormat, DEFAULT_NPC_SECTIONS, DEFAULT_PC_SECTIONS, computeBundledPromptsFingerprint, getDefaultPortraitLocationSystemPrompt, isShippedPortraitLocationSystemPrompt, applyFactoryReset, clearExtensionLocalStorageUiState } from './state-manager.js';
 import { sendStateRequest, fetchOllamaModels, fetchOpenAIModels, testOpenAIConnection, getConnectionProfiles, getCurrentCompletionPreset, setCompletionPreset, syncCombatProfile, resetCombatProfileOverride } from './llm-client.js';
 import { getDiceToolName, getDiceCommandName, getDiceCommandAliases, doDiceRoll, registerDiceFunctionTool, registerDiceSlashCommand, installInterceptor, getNarrativeBlocks, onGenerationStarted, onGenerationEnded, ensureRelTagRegex, resetRouterTick, getRouterTick, resetRouterAutoTick, getRouterSchedulerInternals, makeRngQueue, buildRngBlock, RNG_QUEUE_LEN, parseAndApplyNarrativeRelTags } from './narrative-hooks.js';
@@ -960,6 +960,10 @@ function syncOnboardingUI() {
         drawerStartDate.value = startDateVal;
         drawerStartDate.style.display = s.useDdMmYyFormat ? 'inline-block' : 'none';
     }
+    const gearTier = s.onboardingGearTier || 'auto';
+    onboarding.querySelectorAll('#rt-onboarding-gear-tier, #rt-cr-gear-tier').forEach(sel => {
+        if (sel instanceof HTMLSelectElement && sel.value !== gearTier) sel.value = gearTier;
+    });
 }
 
 /**
@@ -3306,6 +3310,18 @@ export function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRe
         });
     }
 
+    const bindGearTierSelect = (selectEl) => {
+        if (!selectEl || selectEl._gearTierBound) return;
+        selectEl._gearTierBound = true;
+        selectEl.addEventListener('change', () => {
+            getSettings().onboardingGearTier = selectEl.value || 'auto';
+            saveSettings();
+            syncOnboardingUI();
+        });
+    };
+    bindGearTierSelect(el.querySelector('#rt-onboarding-gear-tier'));
+    bindGearTierSelect(el.querySelector('#rt-cr-gear-tier'));
+
     // Custom Instructions input & persistent preference save
     const customInstructionsInput = el.querySelector('#rt-onboarding-custom-instructions');
     if (customInstructionsInput) {
@@ -3362,6 +3378,10 @@ export function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRe
             const levelSelectEl = el.querySelector('#rt-starting-level');
             const level = parseInt(String(levelSelectEl?.value ?? getSettings().onboardingLevel ?? 1), 10) || 1;
             getSettings().onboardingLevel = level;
+            const gearTierEl = /** @type {HTMLSelectElement|null} */ (el.querySelector('#rt-onboarding-gear-tier'));
+            const gearTier = gearTierEl?.value || getSettings().onboardingGearTier || 'auto';
+            getSettings().onboardingGearTier = gearTier;
+            saveSettings();
 
             // char_roll and pc_import just open UI panels — no need to persist or trigger I/O
             if (archetype === 'char_roll') {
@@ -3373,7 +3393,6 @@ export function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRe
                 return;
             }
 
-            saveSettings();
             // Time/date format and initial date are already the single source of truth
             // (kept in sync by setUseDdMmYyFormat/setUseDate24hTime/setInitialDateValue) —
             // just read them directly instead of re-deriving from a specific widget.
@@ -3396,7 +3415,7 @@ export function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRe
 
             const xpHint = _hasXp ? buildOnboardingXpHint(level) : '';
             const TIME_FORMAT_HINT = _hasTime ? buildOnboardingTimeHint(startDateVal) : '';
-            const magicGearHint = buildMagicGearLevelHint(level, getSettings().onboardingGenre || 'fantasy', _hasInventory);
+            const magicGearHint = buildStartingGearHint(level, getSettings().onboardingGenre || 'fantasy', _hasInventory, gearTier);
             const combatSkillHint = buildCombatAndSkillScalingHint();
 
             const _activeBlocks = buildOnboardingActiveBlocks(getSettings());

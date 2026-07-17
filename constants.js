@@ -1092,21 +1092,84 @@ export function buildOnboardingActiveBlocks(settings) {
 
 /** REQUIREMENTS bullet for D&D magic weapon/armor tier by level (fantasy + inventory only). */
 export function buildMagicGearLevelHint(level, genre, hasInventory) {
-    if (genre !== 'fantasy' || !hasInventory) return '';
-    const lvl = Math.max(1, Math.min(20, parseInt(String(level), 10) || 1));
-    let guidance;
-    if (lvl <= 2) {
-        guidance = 'Default to mundane gear; a single +1 item is exceptional.';
-    } else if (lvl <= 4) {
-        guidance = 'Mostly mundane gear; a single uncommon/+1 weapon or armor piece is possible.';
-    } else if (lvl <= 10) {
-        guidance = 'Include at least one +1 weapon or armor; +2 possible for a standout signature item.';
-    } else if (lvl <= 16) {
-        guidance = 'Mix of +1 and +2 gear; include at least one +2 primary weapon or armor.';
-    } else {
-        guidance = '+2 and +3 magical weapons/armor appropriate; rare+ items fit tier-4 heroes.';
+    return buildStartingGearHint(level, genre, hasInventory, 'auto');
+}
+
+export const STARTING_GEAR_TIER_OPTIONS = [
+    { value: 'auto', label: 'Auto (match level)' },
+    { value: 'mundane', label: 'Mundane only' },
+    { value: 'low', label: 'Low' },
+    { value: 'standard', label: 'Standard' },
+    { value: 'well_equipped', label: 'Well-equipped' },
+    { value: 'heroic', label: 'Heroic' },
+];
+
+/** @param {string} [selected='auto'] */
+export function renderStartingGearTierOptions(selected = 'auto') {
+    const tier = STARTING_GEAR_TIER_OPTIONS.some(t => t.value === selected) ? selected : 'auto';
+    return STARTING_GEAR_TIER_OPTIONS.map(t =>
+        `<option value="${t.value}"${t.value === tier ? ' selected' : ''}>${t.label}</option>`
+    ).join('');
+}
+
+/** @param {number} lvl @param {string} genre */
+function getAutoGearGuidanceByLevel(lvl, genre) {
+    const isFantasy = genre === 'fantasy';
+    if (isFantasy) {
+        if (lvl <= 2) return 'Default to mundane gear; a single +1 item is exceptional.';
+        if (lvl <= 4) return 'Mostly mundane gear; a single uncommon/+1 weapon or armor piece is possible.';
+        if (lvl <= 10) return 'Include at least one +1 weapon or armor; +2 possible for a standout signature item.';
+        if (lvl <= 16) return 'Mix of +1 and +2 gear; include at least one +2 primary weapon or armor.';
+        return '+2 and +3 magical weapons/armor appropriate; rare+ items fit tier-4 heroes.';
     }
-    return `\n• MAGIC GEAR (D&D): ${guidance} CRITICAL NAMING: magical weapons/armor use the D&D suffix format — "Weapon Name +1", "Shadow Longsword +2", "Vampire's Blade +1" — NEVER put the bonus before the name (wrong: "+1 Shadow Longsword"). Emoji and [Rarity] tags come first, then the name with +N at the end, then stats in parentheses (e.g. 🗡️ [Rare] [E] Shadow Longsword +1 (1d8+1 Slashing, +1 to hit)). Match rarity tags to bonus tier.`;
+    if (lvl <= 2) return 'Basic starter kit for their background — practical, worn, nothing elite or exotic.';
+    if (lvl <= 5) return 'Competent everyday kit — one clearly above-average piece is fine.';
+    if (lvl <= 10) return 'Professional-grade gear suited to a seasoned operator at this level.';
+    return 'High-end specialist or elite equipment appropriate to a veteran at this level.';
+}
+
+/**
+ * Prompt fragment for starting gear quality, thematic named items, and (fantasy) magic naming.
+ * @param {number|string} level
+ * @param {string} genre
+ * @param {boolean} hasInventory
+ * @param {string} [gearTier='auto']
+ */
+export function buildStartingGearHint(level, genre, hasInventory, gearTier = 'auto') {
+    const lvl = Math.max(1, Math.min(20, parseInt(String(level), 10) || 1));
+    const tier = STARTING_GEAR_TIER_OPTIONS.some(t => t.value === gearTier) ? gearTier : 'auto';
+    const g = genre || 'fantasy';
+    const isFantasy = g === 'fantasy';
+
+    /** @type {Record<string, string>} */
+    const tierGuidance = {
+        mundane: isFantasy
+            ? 'No magical gear. Practical mundane weapons, armor, and kit only — no +N items.'
+            : 'Basic or street-level gear only — nothing professional-grade, rare, or exotic.',
+        low: isFantasy
+            ? 'Mostly mundane gear; at most ONE minor magical or masterwork item (+1 at most).'
+            : 'Mostly basic gear; one quality or slightly upgraded signature piece at most.',
+        standard: getAutoGearGuidanceByLevel(lvl, g),
+        well_equipped: isFantasy
+            ? 'Above-average kit for this level — multiple useful items and at least one clear +1 signature piece (up to +2 if level 7+).'
+            : 'Above-average kit — quality armor, tools, or weapons suited to a seasoned professional.',
+        heroic: isFantasy
+            ? `Standout heroic kit for Level ${lvl} — include distinctive named magical gear near the top of the level band (+2/+3 where level allows).`
+            : `Elite signature kit for Level ${lvl} — custom, rare, or top-tier named equipment befitting a standout hero.`,
+    };
+
+    let guidance = tier === 'auto' ? getAutoGearGuidanceByLevel(lvl, g) : (tierGuidance[tier] || getAutoGearGuidanceByLevel(lvl, g));
+
+    const thematic = 'THEMATIC NAMED GEAR: When appropriate for the character and tier, include 1–2 evocative proper names (e.g. "Whisperfang", "Bulwark of the Fallen", "Dead Man\'s Revolver") — not only generic labels like "Longsword +1" or "Leather Armor". Names should tie to backstory, class, or setting. Mundane/low tiers may use memorable non-magical signature pieces; higher tiers should favor distinctive named gear.';
+
+    let magicNaming = '';
+    if (isFantasy && tier !== 'mundane') {
+        magicNaming = ' CRITICAL NAMING: magical weapons/armor use the D&D suffix format — "Weapon Name +1", "Shadow Longsword +2", "Vampire\'s Blade +1" — NEVER put the bonus before the name (wrong: "+1 Shadow Longsword"). Emoji and [Rarity] tags come first, then the name with +N at the end, then stats in parentheses (e.g. 🗡️ [Rare] [E] Shadow Longsword +1 (1d8+1 Slashing, +1 to hit)). Match rarity tags to bonus tier.';
+    }
+
+    const invNote = hasInventory ? '' : ' List key equipped items on the CHARACTER Gear: line.';
+
+    return `\n• STARTING GEAR: ${guidance} ${thematic}${magicNaming}${invNote}`;
 }
 
 /** Prompt fragment for BAB + skill scaling during character creation. */

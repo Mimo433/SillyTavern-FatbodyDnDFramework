@@ -728,6 +728,7 @@ function buildDefaultSettings() {
         initialDate: "Day 1",
         onboardingGenre: "fantasy",
         onboardingLevel: 1,
+        onboardingGearTier: "auto",
         onboardingCustomInstructions: "",
         /** Last Character Creator form values, saved when Generate Character is pressed. */
         characterCreatorDraft: null,

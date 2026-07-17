@@ -1,6 +1,6 @@
 import { getSettings, saveChatState, DEFAULT_PC_SECTIONS } from './state-manager.js';
 import { sendStateRequest } from './llm-client.js';
-import { buildOnboardingXpHint, buildOnboardingTimeHint, buildMagicGearLevelHint, buildOnboardingActiveBlocks, buildCombatAndSkillScalingHint } from './constants.js';
+import { buildOnboardingXpHint, buildOnboardingTimeHint, buildStartingGearHint, buildOnboardingActiveBlocks, buildCombatAndSkillScalingHint } from './constants.js';
 import { escapeHtml } from './memo-processor.js';
 import { getRequestHeaders } from '../../../../script.js';
 import { saveSettings, sendDirectPrompt, refreshAgentManifestNow, refreshRenderedView, syncTimeFormatSettingsUi } from './index.js';
@@ -71,6 +71,7 @@ export function collectCharacterCreatorDraft(panel) {
         ethnicity: /** @type {HTMLInputElement} */ (panel.querySelector('#rt-cr-ethnicity'))?.value ?? '',
         genre: /** @type {HTMLSelectElement} */ (panel.querySelector('#rt-cr-genre'))?.value ?? '',
         level: /** @type {HTMLSelectElement} */ (panel.querySelector('#rt-cr-level'))?.value ?? '1',
+        gearTier: /** @type {HTMLSelectElement} */ (panel.querySelector('#rt-cr-gear-tier'))?.value ?? 'auto',
         class: classSelect?.value ?? '__story__',
         classOther: /** @type {HTMLInputElement} */ (panel.querySelector('#rt-cr-class-other'))?.value ?? '',
         traits: /** @type {HTMLTextAreaElement} */ (panel.querySelector('#rt-cr-traits'))?.value ?? '',
@@ -100,6 +101,7 @@ export function applyCharacterCreatorDraft(panel, draft, populateClasses) {
     setVal('#rt-cr-ethnicity', draft.ethnicity);
     setVal('#rt-cr-genre', draft.genre ?? '');
     setVal('#rt-cr-level', String(draft.level ?? 1));
+    setVal('#rt-cr-gear-tier', draft.gearTier ?? 'auto');
     populateClasses(draft.genre ?? '');
     const classSelect = /** @type {HTMLSelectElement|null} */ (panel.querySelector('#rt-cr-class'));
     const classOther = /** @type {HTMLInputElement|null} */ (panel.querySelector('#rt-cr-class-other'));
@@ -153,6 +155,7 @@ export function resetCharacterCreatorFields(panel, populateClasses) {
     setVal('#rt-cr-ethnicity', '');
     setVal('#rt-cr-genre', '');
     setVal('#rt-cr-level', String(s.onboardingLevel || 1));
+    setVal('#rt-cr-gear-tier', s.onboardingGearTier || 'auto');
     populateClasses('');
     const classSelect = /** @type {HTMLSelectElement|null} */ (panel.querySelector('#rt-cr-class'));
     if (classSelect) classSelect.value = '__story__';
@@ -240,6 +243,8 @@ export function showCharacterRollPanel(el) {
         // Default genre to '' (None — AI decides); do NOT carry over onboardingGenre here
         if (genreSelect) genreSelect.value = '';
         if (levelSelect) levelSelect.value = String(s.onboardingLevel || 1);
+        const gearTierSelect = /** @type {HTMLSelectElement|null} */ (panel.querySelector('#rt-cr-gear-tier'));
+        if (gearTierSelect) gearTierSelect.value = s.onboardingGearTier || 'auto';
     }
 
     const nameInput = /** @type {HTMLInputElement|null} */ (panel.querySelector('#rt-cr-name'));
@@ -399,6 +404,11 @@ async function handleCharRollGenerate(el, panel) {
     saveCharacterCreatorDraft(panel);
 
     const s = getSettings();
+    const gearTierEl = /** @type {HTMLSelectElement|null} */ (panel.querySelector('#rt-cr-gear-tier'));
+    if (gearTierEl) {
+        s.onboardingGearTier = gearTierEl.value || 'auto';
+        saveSettings();
+    }
     const nameVal        = /** @type {HTMLInputElement}   */ (panel.querySelector('#rt-cr-name'))?.value.trim()        || '';
     const genderVal      = /** @type {HTMLInputElement}   */ (panel.querySelector('#rt-cr-gender'))?.value.trim()      || '';
     const ageVal         = /** @type {HTMLInputElement}   */ (panel.querySelector('#rt-cr-age'))?.value.trim()         || '';
@@ -407,6 +417,7 @@ async function handleCharRollGenerate(el, panel) {
     const ethnicityVal   = /** @type {HTMLInputElement}   */ (panel.querySelector('#rt-cr-ethnicity'))?.value.trim()   || '';
     const genre          = /** @type {HTMLSelectElement}  */ (panel.querySelector('#rt-cr-genre'))?.value              || s.onboardingGenre || 'fantasy';
     const level          = parseInt(/** @type {HTMLSelectElement} */ (panel.querySelector('#rt-cr-level'))?.value      || String(s.onboardingLevel || 1), 10) || 1;
+    const gearTier       = /** @type {HTMLSelectElement} */ (panel.querySelector('#rt-cr-gear-tier'))?.value || s.onboardingGearTier || 'auto';
     const classSelect    = /** @type {HTMLSelectElement|null} */ (panel.querySelector('#rt-cr-class'));
     let   classRaw       = classSelect?.value || '__story__';
     let   classOtherVal  = /** @type {HTMLInputElement} */ (panel.querySelector('#rt-cr-class-other'))?.value.trim()   || '';
@@ -474,7 +485,7 @@ async function handleCharRollGenerate(el, panel) {
 
     const xpHint = hasXp ? buildOnboardingXpHint(level) : '';
     const TIME_FORMAT_HINT = hasTime ? buildOnboardingTimeHint(startDateVal) : '';
-    const magicGearHint = buildMagicGearLevelHint(level, genre, hasInventory);
+    const magicGearHint = buildStartingGearHint(level, genre, hasInventory, gearTier);
 
     const activeBlocks = buildOnboardingActiveBlocks(s);
     const closingTagExamples = activeBlocks.map(b => `[/${b}]`).join(', ');
@@ -1002,6 +1013,12 @@ async function importPcFromCard(charCard, mode, el) {
 
     const importBlockList = buildOnboardingActiveBlocks(s).join(', ');
     const combatSkillHint = buildCombatAndSkillScalingHint();
+    const gearTierEl = /** @type {HTMLSelectElement|null} */ (el.querySelector('#rt-onboarding-gear-tier') || el.querySelector('#rt-cr-gear-tier'));
+    const gearTier = gearTierEl?.value || s.onboardingGearTier || 'auto';
+    s.onboardingGearTier = gearTier;
+    const importGenre = s.onboardingGenre || 'fantasy';
+    const importHasInventory = !!s.modules?.inventory;
+    const gearHint = buildStartingGearHint(s.onboardingLevel || 1, importGenre, importHasInventory, gearTier);
 
     // --- Step 1: State Memo ---
     const memoPromptMinimal = `You are a state tracker assistant. Translate this character card into state tracker format for the player character.
@@ -1012,7 +1029,6 @@ RULES:
 - Output every currently active state-memo field (enabled stock modules and custom fields): ${importBlockList}.
 - Do NOT invent stats or equipment not present on the card.
 - Use the existing system prompt's block format.
-${combatSkillHint}
 
 ${worldCtx}`;
 
@@ -1024,6 +1040,7 @@ RULES:
 - Output every currently active state-memo field (enabled stock modules and custom fields): ${importBlockList}.
 - Use the existing system prompt's block format.
 - CRITICAL: Never output template macro strings such as {{char}}, {{user}}, or any other {{...}} placeholders. Always replace them with the actual character's name or a fitting proper name.
+${gearHint}
 ${combatSkillHint}
 
 ${worldCtx}`;

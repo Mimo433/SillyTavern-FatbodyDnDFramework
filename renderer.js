@@ -1,7 +1,7 @@
 import { getSettings, getBarBackground, getBarShowAsPercentage } from './state-manager.js';
 import { lookupCustomPortraitSrc } from './portrait-storage.js';
 import { escapeHtml, decodeHtml, highlightParens, highlightNumbers, parseInWorldTime, isRestTimeUnset, formatTimeDiff, isArchivedQuestStatus, questHasEffectiveDeadline } from './memo-processor.js';
-import { BLOCK_ICONS, BLOCK_ORDER, PAGE_SIZE, NO_PAGINATE } from './constants.js';
+import { BLOCK_ICONS, BLOCK_ORDER, PAGE_SIZE, NO_PAGINATE, renderStartingGearTierOptions } from './constants.js';
 
 // ── Renderer module: pure HTML string producers, localStorage helpers ──
 // No live DOM mutations. All functions return strings or void (localStorage).
@@ -1709,6 +1709,8 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
             const useDdMmYy = !!obSettings.useDdMmYyFormat;
             const use24h = !!obSettings.use24hTime;
             const onboardingGenre = obSettings.onboardingGenre || 'fantasy';
+            const onboardingGearTier = obSettings.onboardingGearTier || 'auto';
+            const gearTierOptions = renderStartingGearTierOptions(onboardingGearTier);
             const startDateInputVal = obSettings.initialDate && obSettings.initialDate !== 'Day 1' ? obSettings.initialDate : '01/01/2026';
 
             return `<div class="rt-empty" style="text-align: left; align-items: flex-start; padding: 12px; gap: 10px; overflow-y: auto;">
@@ -1749,6 +1751,12 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                                 <option value="realistic" ${onboardingGenre === 'realistic' ? 'selected' : ''}>🏙️ Modern / Realistic</option>
                                 <option value="scifi" ${onboardingGenre === 'scifi' ? 'selected' : ''}>🚀 Sci-Fi</option>
                                 <option value="horror" ${onboardingGenre === 'horror' ? 'selected' : ''}>👻 Horror</option>
+                            </select>
+                        </div>
+                        <div class="rt-onboarding-field">
+                            <span class="rt-onboarding-field-label">Gear Tier</span>
+                            <select id="rt-onboarding-gear-tier" class="text_pole" title="How well-equipped the generated character should be." style="width: auto; min-width: 110px; padding: 2px 4px; font-size: 11px; height: 22px; border-radius: 4px; background: var(--black70a);">
+                                ${gearTierOptions}
                             </select>
                         </div>
                         <div class="rt-onboarding-field">
@@ -1887,6 +1895,14 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                             <label class="rt-cr-label">Level</label>
                             <select id="rt-cr-level" class="text_pole rt-cr-input">
                                 ${[...Array(20).keys()].map(i => { const l = i + 1; return `<option value="${l}"${l === parseInt(obSettings.onboardingLevel || '1') ? ' selected' : ''}>Level ${l}</option>`; }).join('')}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="rt-cr-row">
+                        <div class="rt-cr-field">
+                            <label class="rt-cr-label">Gear Tier <span class="rt-cr-help-icon" title="How well-equipped the character should be — from mundane starter kit to heroic named gear. Auto scales with level.">?</span></label>
+                            <select id="rt-cr-gear-tier" class="text_pole rt-cr-input">
+                                ${gearTierOptions}
                             </select>
                         </div>
                     </div>

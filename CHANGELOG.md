@@ -2,6 +2,15 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [5.7.7] - 2026-07-17
+
+### Added
+- **Starting Gear Tier dropdown**: New control in Other Ways to Begin and Character Creator (Auto, Mundane, Low, Standard, Well-equipped, Heroic). Both UIs stay synced via `onboardingGearTier`.
+- **Thematic named gear**: Character-creation prompts now encourage evocative proper-name gear (not only generic +N items), with tier-appropriate guidance across all genres.
+
+### Changed
+- **`buildStartingGearHint()`**: Replaces level-only magic gear hints; tier selection shapes starting kit quality on every creation path (including Fit into Story import).
+
 ## [5.7.6] - 2026-07-17
 
 ### Added
