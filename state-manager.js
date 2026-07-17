@@ -2173,6 +2173,8 @@ export function saveChatState(chatId) {
     if (typeof globalThis._rpgPortraitMigrationLocked === 'function' && globalThis._rpgPortraitMigrationLocked()) {
         return;
     }
+    // Flush pending raw-textarea edits into settings.currentMemo before snapshotting.
+    // The flush must NOT call saveChatState/saveSettings (re-entrancy).
     if (typeof globalThis._rpgFlushRawMemoChanges === 'function') {
         globalThis._rpgFlushRawMemoChanges();
     }

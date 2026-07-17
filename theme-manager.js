@@ -245,11 +245,9 @@ export function handleRecolor(barId, currentBg, targetEl) {
         const ss = getSettings();
         if (!ss.barColors) ss.barColors = {};
         ss.barColors[barId] = { ...cfg };
-        // Debounced (not forced) — repeatedly adjusting a color (dragging the
-        // picker, toggling modes) shouldn't force an immediate settings + chat-state
-        // save on every tick. The visual preview below is already instant via
-        // refreshRenderedView(); only the actual persistence is delayed.
-        saveSettings(false, 5000);
+        // Persist immediately; ST's saveSettingsDebounced still coalesces disk I/O.
+        // Visual preview below is instant via refreshRenderedView().
+        saveSettings();
         refreshRenderedView();
     };
 

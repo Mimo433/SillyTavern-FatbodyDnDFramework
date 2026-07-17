@@ -2,6 +2,15 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [5.6.76] - 2026-07-17
+
+### Fixed
+- **Tracker wipe after ST-Copilot chat edits**: Bare `CHAT_CHANGED` emits (no chat id) are no longer treated as switching to an empty chat. That path had cleared `currentMemo`, memo snapshots, and World Progression timers, then a later save persisted the empty state. Same-chat refreshes now keep live tracker state.
+- **F5 hang / syncQuestsFromMemo loop**: Raw-memo flush no longer calls `saveSettings`/`saveChatState` (those callers already persist). Fixes an infinite `saveSettings → saveChatState → flush → saveSettings` recursion introduced when save delays were removed.
+
+### Changed
+- **Immediate tracker saves**: Removed the 2s raw-memo and 5s recolor save delays. Edits persist right away (SillyTavern still coalesces disk writes via `saveSettingsDebounced`).
+
 ## [5.6.70] - 2026-07-17
 
 ### Fixed

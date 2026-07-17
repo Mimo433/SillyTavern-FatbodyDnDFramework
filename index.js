@@ -462,33 +462,42 @@ async function syncCampaignPrefixAndWorldsForChat(newChatId, source) {
  * the Chat-Linked State for the active chat.
  */
 let _saveSettingsTimer = null;
+/** Re-entrancy guard: saveSettings → saveChatState must not call saveSettings again. */
+let _saveSettingsInFlight = false;
 /**
  * @param {boolean} force Skip the debounce and save immediately.
- * @param {number} delay Debounce delay in ms when not forcing (default 2000).
+ * @param {number} delay Debounce delay in ms when not forcing (default 0 = immediate).
  * @returns {Promise<void>|void}
  */
-export function saveSettings(force = false, delay = 2000) {
+export function saveSettings(force = false, delay = 0) {
     // Keep UI synchronization immediate so toggle checkboxes and forms respond instantly
     syncOnboardingUI();
 
     const doSave = async () => {
         _saveSettingsTimer = null;
-        const s = getSettings();
-        const ctx = SillyTavern.getContext();
-        const activeChatId = _currentChatId || ctx.chatId;
-        // Snapshot chat-linked state into extension settings before persisting to disk.
-        if (s.chatLinkEnabled && activeChatId && !isPortraitMigrationLocked()) {
-            saveChatState(activeChatId);
-        }
-        if (force && typeof ctx.saveSettings === 'function') {
-            await ctx.saveSettings();
-        } else {
-            ctx.saveSettingsDebounced();
+        if (_saveSettingsInFlight) return;
+        _saveSettingsInFlight = true;
+        try {
+            const s = getSettings();
+            const ctx = SillyTavern.getContext();
+            const activeChatId = _currentChatId || ctx.chatId;
+            // Snapshot chat-linked state into extension settings before persisting to disk.
+            if (s.chatLinkEnabled && activeChatId && !isPortraitMigrationLocked()) {
+                saveChatState(activeChatId);
+            }
+            if (force && typeof ctx.saveSettings === 'function') {
+                await ctx.saveSettings();
+            } else {
+                ctx.saveSettingsDebounced();
+            }
+        } finally {
+            _saveSettingsInFlight = false;
         }
     };
 
-    if (force) {
+    if (force || delay <= 0) {
         if (_saveSettingsTimer) clearTimeout(_saveSettingsTimer);
+        _saveSettingsTimer = null;
         return doSave();
     }
 
@@ -1665,9 +1674,32 @@ function syncRouterPrefixDisplays(raw) {
  */
 function onChatChanged(newChatId) {
     const s = getSettings();
+    const ctx = SillyTavern.getContext();
+
+    // ST always emits CHAT_CHANGED(getCurrentChatId()). Some extensions (notably ST-Copilot
+    // after applying chat edits) emit bare CHAT_CHANGED() as a DOM-refresh signal.
+    // Treating a missing id as "switched to no chat" used to wipe currentMemo/memoHistory
+    // and World Progression timers, then a later save persisted the empty snapshot.
+    const emitHadId = newChatId != null && String(newChatId).length > 0;
+    const resolvedId = emitHadId
+        ? String(newChatId)
+        : (ctx.chatId || ctx.getCurrentChatId?.() || _currentChatId || null);
+
+    if (!resolvedId) {
+        updateChatLinkUI();
+        return;
+    }
 
     const oldChatId = _currentChatId;
-    _currentChatId = newChatId || null;
+
+    // Same-chat refresh (bare emit, F5, Copilot apply, etc.): keep live tracker state.
+    if (!emitHadId || oldChatId === resolvedId) {
+        _currentChatId = resolvedId;
+        updateChatLinkUI();
+        return;
+    }
+
+    _currentChatId = resolvedId;
 
     // Snapshot the departing chat's state BEFORE resetRouterTick mutates shared pools.
     // resetRouterTick(true) zeroes keywordActivatedKeys in-place; if saveChatState ran
@@ -1678,46 +1710,31 @@ function onChatChanged(newChatId) {
     // Reset the run-every tick so the agent fires promptly on the first generation of each chat.
     // Only clear keyword-activated lore when actually switching to a different chat.
     // Same-chat reloads (swipe, regenerate) must preserve the keyword pool.
-    const isActualChange = oldChatId !== newChatId;
-    if (isActualChange) {
-        void syncActivePersonaDescriptionFromAvatar();
-    }
-    resetRouterTick(isActualChange);
-
-    if (isActualChange) {
-        void resetCombatProfileOverride(s);
-    }
+    void syncActivePersonaDescriptionFromAvatar();
+    resetRouterTick(true);
+    void resetCombatProfileOverride(s);
 
     // Auto-activate and prefix logic run regardless of chatLinkEnabled.
     // Always re-derive the prefix from the chat ID so stale saved data never
     // causes the wrong session's lorebooks to activate.
-    const prefix = getEffectiveRouterCampaignPrefix(newChatId);
+    const prefix = getEffectiveRouterCampaignPrefix(resolvedId);
     s.routerCampaignPrefix = prefix || '';
     syncRouterPrefixDisplays(prefix || '');
-
-    // ── INSTANT UI REFRESH ──
-    if (isActualChange) scheduleAgentManifestRefresh(true);
 
     // ── INSTANT UI REFRESH ──
     // Now that _currentChatId AND routerCampaignPrefix are both correct,
     // fire an immediate manifest refresh. The PC card is already in chatStates
     // memory so it renders in <1ms. force=true bypasses isAgentPanelVisible().
-
-
-    // F5 / same-chat reload: init BOOTSTRAP already activated lorebooks and loadChatState ran.
-    if (!isActualChange) {
-        updateChatLinkUI();
-        return;
-    }
+    scheduleAgentManifestRefresh(true);
 
     // Init BOOTSTRAP may have just finished activation for this chat — skip duplicate /world pass.
-    if (newChatId && newChatId === _sessionBootstrapChatId) {
+    if (resolvedId === _sessionBootstrapChatId) {
         _sessionBootstrapChatId = null;
         updateChatLinkUI();
         return;
     }
 
-    const chatBooks = s.chatStates?.[newChatId]?.campaignBooks;
+    const chatBooks = s.chatStates?.[resolvedId]?.campaignBooks;
 
     if (chatBooks?.length) {
         // Fast Path: This chat has a linked stack already recorded.
@@ -1750,7 +1767,7 @@ function onChatChanged(newChatId) {
                 scheduleAgentManifestRefresh(true);
             })();
         }
-    } else if (s.routerEnabled && newChatId) {
+    } else if (s.routerEnabled && resolvedId) {
         // No linked stack yet for the arriving chat.
         // Capture the departing chat's book list NOW (before any async gap).
         const _oldBooksDeferred = s.chatStates?.[oldChatId]?.campaignBooks || [];
@@ -1774,12 +1791,12 @@ function onChatChanged(newChatId) {
         if (_prefixDeriveTimer) clearTimeout(_prefixDeriveTimer);
         _prefixDeriveTimer = setTimeout(async () => {
             _prefixDeriveTimer = null;
-            if (newChatId !== _currentChatId) return;
+            if (resolvedId !== _currentChatId) return;
 
             // If init BOOTSTRAP is still running the registry scan, wait for it instead of duplicating.
             if (_bootstrapSyncPromise) {
                 try { await _bootstrapSyncPromise; } catch (_) { }
-                if (getSettings().chatStates?.[newChatId]?.campaignBooks?.length) {
+                if (getSettings().chatStates?.[resolvedId]?.campaignBooks?.length) {
                     await _deactivateOldBooks();
                     return;
                 }
@@ -1789,12 +1806,12 @@ function onChatChanged(newChatId) {
             await _deactivateOldBooks();
 
             // Discover if the new chat actually has any linked books (needs registry scan).
-            await syncCampaignPrefixAndWorldsForChat(newChatId, 'CHAT_CHANGED(debounced)');
+            await syncCampaignPrefixAndWorldsForChat(resolvedId, 'CHAT_CHANGED(debounced)');
 
             // Pass 2 (~after scan): ST's deferred world-info state restoration can re-pin
             // globally active books AFTER our first pass. A follow-up sweep catches this
             // without needing another registry scan — just direct /world state=off commands.
-            if (newChatId === _currentChatId) {
+            if (resolvedId === _currentChatId) {
                 await _deactivateOldBooks();
             }
         }, 800);
@@ -1803,21 +1820,19 @@ function onChatChanged(newChatId) {
     if (!s.chatLinkEnabled) {
         // World Progression "last fired" is operational per-chat state and must never bleed
         // between scenarios regardless of chatLinkEnabled. Reset it unconditionally on actual switch.
-        if (isActualChange) {
-            s.worldProgressionLastFiredAtMinutes = -1;
-            s.worldProgressionLastFiredPeriodLabel = '';
-            s.worldProgressionSkeletonAtmosphereSummary = '';
-            s.activeWorldKeys = [];
-            s.quests = [];
-            refreshRenderedView();
-        }
+        s.worldProgressionLastFiredAtMinutes = -1;
+        s.worldProgressionLastFiredPeriodLabel = '';
+        s.worldProgressionSkeletonAtmosphereSummary = '';
+        s.activeWorldKeys = [];
+        s.quests = [];
+        refreshRenderedView();
         updateChatLinkUI();
         return;
     }
 
     // saveChatState(oldChatId) already called above, before resetRouterTick.
 
-    const found = loadChatState(newChatId);
+    const found = loadChatState(resolvedId);
     if (!found) {
         s.currentMemo = '';
         s.memoHistory = [];
@@ -1854,10 +1869,7 @@ function onChatChanged(newChatId) {
 
     scheduleAgentManifestRefresh();
     updateChatLinkUI();
-
-    if (isActualChange) {
-        void syncCombatProfile(s.currentMemo, s);
-    }
+    void syncCombatProfile(s.currentMemo, s);
 }
 
 
@@ -9929,20 +9941,18 @@ Rules:
 
     // Handle manual edits to live memo
     const textarea = panel.querySelector('#rpg-tracker-memo');
-    let _rawEditDebounce = null;
+    /** True when the raw textarea has edits not yet copied into settings.currentMemo. */
+    let _rawMemoDirty = false;
 
+    // Sync textarea → settings only. Never call saveSettings/saveChatState here:
+    // saveChatState invokes this flush, and a nested save would recurse forever.
     const flushRawMemoChanges = () => {
-        if (_rawEditDebounce) {
-            clearTimeout(_rawEditDebounce);
-            _rawEditDebounce = null;
-            if (textarea && _historyViewIndex === -1) {
-                const newText = textarea.value;
-                settings.currentMemo = newText;
-                settings.currentMemo = applyQuestSyncAndStripMemo(settings.currentMemo);
-                saveSettings(true);
-                if (settings.chatLinkEnabled && _currentChatId) saveChatState(_currentChatId);
-                refreshDayNightCycleFromMemo(settings.currentMemo);
-            }
+        if (!_rawMemoDirty) return;
+        _rawMemoDirty = false;
+        if (textarea && _historyViewIndex === -1) {
+            const newText = textarea.value;
+            settings.currentMemo = applyQuestSyncAndStripMemo(newText);
+            refreshDayNightCycleFromMemo(settings.currentMemo);
         }
     };
     globalThis._rpgFlushRawMemoChanges = flushRawMemoChanges;
@@ -9957,16 +9967,12 @@ Rules:
         // Day/night tint + badge update live as the user edits (esp. [TIME] changes in Raw view)
         refreshDayNightCycleFromMemo(newText);
 
-        // Debounce actual sync, save, and rendered view updates by 2000ms
-        clearTimeout(_rawEditDebounce);
-        _rawEditDebounce = setTimeout(() => {
-            _rawEditDebounce = null;
-            settings.currentMemo = newText;
-            settings.currentMemo = applyQuestSyncAndStripMemo(settings.currentMemo);
-            saveSettings();
-            if (settings.chatLinkEnabled && _currentChatId) saveChatState(_currentChatId);
-            refreshRenderedView();
-        }, 2000);
+        // Persist immediately — ST's saveSettingsDebounced still coalesces disk writes.
+        _rawMemoDirty = true;
+        settings.currentMemo = applyQuestSyncAndStripMemo(newText);
+        _rawMemoDirty = false;
+        saveSettings();
+        refreshRenderedView();
     });
 
     // (RNG footer toggles removed; managed via settings.html)
@@ -10124,6 +10130,7 @@ Rules:
         _renderedViewActive = !_renderedViewActive;
         settings.renderedViewActive = _renderedViewActive;
         localStorage.setItem('rpg_tracker_rendered_view_active', String(_renderedViewActive));
+        saveSettings();
         applyViewState();
     });
 
