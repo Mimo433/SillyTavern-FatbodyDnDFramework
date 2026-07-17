@@ -9,7 +9,7 @@ In addition to fantasy, the system works just as well for casual "slice of life"
 ---
 
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/7532df29-363b-4db9-9b79-31c4c9ea43a8" width="60%" alt="A basic character sheet" />
+  <img src="https://github.com/user-attachments/assets/878e437c-e7b4-4140-94b9-f9a14aab1002" width="60%" alt="A basic character sheet" />
   <br>
   <em>A basic character sheet</em>
 </p>
