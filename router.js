@@ -1675,9 +1675,15 @@ async function applyAction(action, allBooks = {}, currentTime = '', breadcrumb =
         const [bookName, uid] = rn.id.split('::');
         const book = await ctx.loadWorldInfo(bookName);
         if (book?.entries?.[uid]) {
+            const oldLabel = book.entries[uid].comment || '';
             if (rn.label !== undefined) book.entries[uid].comment = rn.label;
             if (rn.keys  !== undefined) book.entries[uid].key = cleanKeys(rn.keys);
             await ctx.saveWorldInfo(bookName, book);
+            if (rn.label !== undefined && oldLabel && rn.label !== oldLabel) {
+                // Dynamic import avoids a static cycle (index → router → portraits → index).
+                const { renamePortraitEntity } = await import('./portraits.js');
+                await renamePortraitEntity(oldLabel, rn.label);
+            }
             renameIds.push(rn.id);
             changed = true;
         } else {
@@ -2212,7 +2218,15 @@ async function applyAction(action, allBooks = {}, currentTime = '', breadcrumb =
                 if (!otherHeaders.includes(nm)) otherHeaders.push(nm);
             }
         }
-        const otherHeadersRegexStr = otherHeaders.map(h => h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+        // Escape headers; prevent short aliases from matching inside longer ones
+        // (e.g. "Background" inside "Brief Background", "Behaviors" inside "Habits/Behaviors").
+        const otherHeadersRegexStr = otherHeaders.map(h => {
+            const esc = h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            if (h === 'Background') return '(?<!Brief\\s)Background';
+            if (h === 'Behaviors') return '(?<!Habits\\/)(?<!Habits & )(?<!Habits and )Behaviors';
+            if (h === 'Appearance') return '(?<!/)Appearance(?!\\/Species)';
+            return esc;
+        }).join('|');
 
         // Match from the target field's colon to the next core field header or the end of the string
         const targetFieldRegex = new RegExp(`(?:(${escapedPatterns.join('|')})\\s*:)([\\s\\S]*?)(?=(?:${otherHeadersRegexStr})\\s*:|$)`, 'i');

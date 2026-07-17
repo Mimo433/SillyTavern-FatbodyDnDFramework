@@ -682,6 +682,8 @@ function buildDefaultSettings() {
         portraitsFileStorageVersion: 1,
         portraitGeneratorSource: "native",
         portraitSkipPromptDialog: false,
+        /** When true, suppress info/success toasts from portrait/location AI auto-generation (errors still show). */
+        hideImageGenToasts: false,
         portraitAutoGenerateParty: false,
         portraitAutoGeneratePlayer: false,
         portraitAutoGenerateEnemies: false,
@@ -2417,6 +2419,7 @@ export function saveChatState(chatId, opts = {}) {
 
         portraitGeneratorSource: s.portraitGeneratorSource ?? "native",
         portraitSkipPromptDialog: s.portraitSkipPromptDialog ?? false,
+        hideImageGenToasts: s.hideImageGenToasts ?? false,
         portraitAutoGenerateParty: s.portraitAutoGenerateParty ?? false,
         portraitAutoGeneratePlayer: s.portraitAutoGeneratePlayer ?? false,
         portraitAutoGenerateEnemies: s.portraitAutoGenerateEnemies ?? false,
@@ -2579,6 +2582,7 @@ export function saveProfile(name) {
 
         portraitGeneratorSource: s.portraitGeneratorSource ?? "native",
         portraitSkipPromptDialog: s.portraitSkipPromptDialog ?? false,
+        hideImageGenToasts: s.hideImageGenToasts ?? false,
         portraitAutoGenerateParty: s.portraitAutoGenerateParty ?? false,
         portraitAutoGeneratePlayer: s.portraitAutoGeneratePlayer ?? false,
         portraitAutoGenerateEnemies: s.portraitAutoGenerateEnemies ?? false,

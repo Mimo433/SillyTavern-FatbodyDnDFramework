@@ -9,7 +9,7 @@ import { initializeDebugViewer, toggleDebugViewer } from './debug-viewer.js';
 import { installSwipeSchedulerDebug } from './swipe-scheduler-debug.js';
 import { runRouterPass, rollbackRouterPass, reapplyRouterPass, getLorebookManifest, deleteLorebookEntry, updateLorebookEntry, disableManagedEntries, isRouterRunning, stopRouterPass, purgeWorldHistoryForChat } from './router.js';
 import { getRequestHeaders } from '../../../../script.js';
-import { fileToDataUrl, scaleImageTo512Square, scaleImageToLandscape, applyPortraitData, applyLocationImageData, generatePortraitPrompt, generateNpcPortraitPrompt, generateLocationImagePrompt, showPortraitPromptPopup, generatePortraitDirect, autoGeneratePartyPortraits, removeAllPortraits, checkAndTriggerAutoGenerations, autoGenerateEnemyPortraits, forceCheckAutoGenerations, resetAutoGenerationTracking, resolveLocationImageWithMeta, normalizeLocationPath, buildLocationPath, getLinkedPlayerCharacter, resolvePortraitSrcForPlayerCharacter } from './portraits.js';
+import { fileToDataUrl, scaleImageTo512Square, scaleImageToLandscape, applyPortraitData, applyLocationImageData, renamePortraitEntity, reconcileMemoPortraitRenames, generatePortraitPrompt, generateNpcPortraitPrompt, generateLocationImagePrompt, showPortraitPromptPopup, generatePortraitDirect, autoGeneratePartyPortraits, removeAllPortraits, checkAndTriggerAutoGenerations, autoGenerateEnemyPortraits, forceCheckAutoGenerations, resetAutoGenerationTracking, resolveLocationImageWithMeta, normalizeLocationPath, buildLocationPath, getLinkedPlayerCharacter, resolvePortraitSrcForPlayerCharacter, imageGenToast } from './portraits.js';
 import { buildImmersionSceneState, renderImmersionViewHtml, getCurrentLocationText, loadLocationEntryByPath, loadNpcEntryByKey, maybeAutoGenerateImmersionSceneArt, runRealtimeSceneArtCheck, resetImmersionSceneArtTracking, hydrateImmersionSceneArtPath } from './immersion.js';
 import { migrateAllEmbeddedPortraits, countEmbeddedPortraitDataUrls, purgeAllPortraitData, resolvePortraitDisplaySrc, lookupCustomPortraitSrc, collectAllPortraitRefs, isManagedPortraitPath, isPortraitMigrationLocked, setPortraitMigrationLocked, PORTRAIT_STORAGE_FOLDER } from './portrait-storage.js';
 import { loadPanelGeometry, loadDeltaHeight, makeDraggable, makeResizableTR, makeResizableBR, makeResizableBL, setupResizeObserver, setupDeltaResize, canResizePanels, jqueryToggleSlide } from './ui-geometry.js';
@@ -1356,6 +1356,7 @@ function loadChatState(chatId) {
 
     s.portraitGeneratorSource = saved.portraitGeneratorSource ?? "native";
     s.portraitSkipPromptDialog = saved.portraitSkipPromptDialog ?? false;
+    s.hideImageGenToasts = saved.hideImageGenToasts ?? false;
     s.portraitAutoGenerateParty = saved.portraitAutoGenerateParty ?? false;
     s.portraitAutoGeneratePlayer = saved.portraitAutoGeneratePlayer ?? false;
     s.portraitAutoGenerateEnemies = saved.portraitAutoGenerateEnemies ?? false;
@@ -1422,6 +1423,7 @@ function loadChatState(chatId) {
     $('#rpg_portrait_generator_source').val(s.portraitGeneratorSource || 'native');
     $('#rpg_tracker_pollinations_group').toggle((s.portraitGeneratorSource || 'native') === 'pollinations');
     $('#rpg_tracker_portrait_skip_prompt').prop('checked', !!s.portraitSkipPromptDialog);
+    $('#rpg_tracker_hide_image_gen_toasts').prop('checked', !!s.hideImageGenToasts);
     $('#rpg_tracker_portrait_auto_party').prop('checked', !!s.portraitAutoGenerateParty);
     $('#rpg_tracker_portrait_auto_player').prop('checked', !!s.portraitAutoGeneratePlayer);
     $('#rpg_tracker_portrait_auto_enemies').prop('checked', !!s.portraitAutoGenerateEnemies);
@@ -2488,6 +2490,7 @@ function loadProfile(name) {
 
     s.portraitGeneratorSource = p.portraitGeneratorSource ?? "native";
     s.portraitSkipPromptDialog = p.portraitSkipPromptDialog ?? false;
+    s.hideImageGenToasts = p.hideImageGenToasts ?? false;
     s.portraitAutoGenerateParty = p.portraitAutoGenerateParty ?? false;
     s.portraitAutoGeneratePlayer = p.portraitAutoGeneratePlayer ?? false;
     s.portraitAutoGenerateEnemies = p.portraitAutoGenerateEnemies ?? false;
@@ -2549,6 +2552,7 @@ function loadProfile(name) {
     $('#rpg_portrait_generator_source').val(s.portraitGeneratorSource || 'native');
     $('#rpg_tracker_pollinations_group').toggle((s.portraitGeneratorSource || 'native') === 'pollinations');
     $('#rpg_tracker_portrait_skip_prompt').prop('checked', !!s.portraitSkipPromptDialog);
+    $('#rpg_tracker_hide_image_gen_toasts').prop('checked', !!s.hideImageGenToasts);
     $('#rpg_tracker_portrait_auto_party').prop('checked', !!s.portraitAutoGenerateParty);
     $('#rpg_tracker_portrait_auto_player').prop('checked', !!s.portraitAutoGeneratePlayer);
     $('#rpg_tracker_portrait_auto_enemies').prop('checked', !!s.portraitAutoGenerateEnemies);
@@ -3034,7 +3038,7 @@ async function showPortraitSettingsMenu(entityName, onRefresh, npcContent = null
     } else if (result === 4) {
         try {
             if (s.portraitSkipPromptDialog) {
-                toastr['info'](`Generating portrait for ${entityName} in background…`, 'RPG Tracker');
+                imageGenToast('info', `Generating portrait for ${entityName} in background…`, 'RPG Tracker');
                 const aiPrompt = npcContent !== null
                     ? await generateNpcPortraitPrompt(entityName, npcContent)
                     : await generatePortraitPrompt(entityName);
@@ -3042,13 +3046,13 @@ async function showPortraitSettingsMenu(entityName, onRefresh, npcContent = null
                     toastr['warning']('Could not generate prompt — no context found.', 'RPG Tracker');
                     return;
                 }
-                toastr['info'](`Generating image for ${entityName}…`, 'RPG Tracker');
+                imageGenToast('info', `Generating image for ${entityName}…`, 'RPG Tracker');
                 const dataUrl = await generatePortraitDirect(aiPrompt, entityName);
                 const scaled = await scaleImageTo512Square(dataUrl);
                 await localApply(scaled);
-                toastr['success'](`Portrait auto-generated and applied for ${entityName}!`, 'RPG Tracker');
+                imageGenToast('success', `Portrait auto-generated and applied for ${entityName}!`, 'RPG Tracker');
             } else {
-                toastr['info']('Generating portrait prompt…', 'RPG Tracker');
+                imageGenToast('info', 'Generating portrait prompt…', 'RPG Tracker');
                 const aiPrompt = npcContent !== null
                     ? await generateNpcPortraitPrompt(entityName, npcContent)
                     : await generatePortraitPrompt(entityName);
@@ -3213,7 +3217,7 @@ async function showLocationImageSettingsMenu(locationPath, onRefresh, locContent
     } else if (result === 4) {
         try {
             if (s.portraitSkipPromptDialog) {
-                toastr['info'](`Generating location image for ${normPath} in background…`, 'RPG Tracker');
+                imageGenToast('info', `Generating location image for ${normPath} in background…`, 'RPG Tracker');
                 const aiPrompt = await generateLocationImagePrompt(normPath, locContent || '');
                 if (!aiPrompt) {
                     toastr['warning']('Could not generate prompt — no context found.', 'RPG Tracker');
@@ -3222,9 +3226,9 @@ async function showLocationImageSettingsMenu(locationPath, onRefresh, locContent
                 const dataUrl = await generatePortraitDirect(aiPrompt, normPath);
                 const scaled = await scaleImageToLandscape(dataUrl);
                 await localApply(scaled);
-                toastr['success'](`Location image generated for ${normPath}!`, 'RPG Tracker');
+                imageGenToast('success', `Location image generated for ${normPath}!`, 'RPG Tracker');
             } else {
-                toastr['info']('Generating location image prompt…', 'RPG Tracker');
+                imageGenToast('info', 'Generating location image prompt…', 'RPG Tracker');
                 const aiPrompt = await generateLocationImagePrompt(normPath, locContent || '');
                 if (aiPrompt) {
                     await showPortraitPromptPopup(aiPrompt, normPath, localApply, refresh);
@@ -4026,6 +4030,9 @@ function getDisplayQuests(memoText) {
 
 export function refreshRenderedView() {
     if (!_renderedViewActive) return;
+    // Before rendering cards: if Raw View renamed an entity, move the portrait key first
+    // so the container is not empty and auto-gen does not treat it as a new character.
+    reconcileMemoPortraitRenames();
     const s = getSettings();
     const memo = _historyViewIndex === -1
         ? s.currentMemo
@@ -5628,13 +5635,18 @@ function createPanel() {
                 }
                 saveBtn.disabled = true;
                 saveBtn.textContent = '…';
+                const oldLabel = item.label;
+                const newLabel = titleInp.value;
                 const rawKeys = keysInp.value.split(',').map(k => k.trim()).filter(Boolean);
                 const ok = await updateLorebookEntry(item.id, {
                     content: contentArea.value,
                     key: rawKeys,
-                    comment: titleInp.value,
+                    comment: newLabel,
                 });
                 if (ok) {
+                    if (oldLabel !== newLabel) {
+                        await renamePortraitEntity(oldLabel, newLabel);
+                    }
                     _dirtyEntries.delete(item.id);
                     staleBadge.style.display = 'none';
                     saveBtn.textContent = 'Save';
@@ -5863,7 +5875,9 @@ function createPanel() {
                 const customSecs = isPC ? (getSettings().pcCoreSections || DEFAULT_PC_SECTIONS) : (getSettings().npcCoreSections || DEFAULT_NPC_SECTIONS);
                 const escRgx = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
                 const customNames = customSecs.map(s => escRgx(s.name.trim())).join('|');
-                const legacyNames = 'Appearance\\/Species|Appearance|Personality|Brief Background|Background|Habits(?:\\/|\\s*&\\s*|\\s+and\\s+)Behaviors|Habits|(?<!Habits\\/)(?<!Habits & )(?<!Habits and )Behaviors|Strengths|Flaws|Relationship with\\s*\\{\\{user\\}\\}|(?<!Friendship\\/)(?<!Affection\\/)Relationship';
+                // Background must not match inside "Brief Background:" (zero-width splitter would
+                // insert a newline before "Background", leaving a stray "Brief" under Personality).
+                const legacyNames = 'Appearance\\/Species|Appearance|Personality|Brief Background|(?<!Brief\\s)Background|Habits(?:\\/|\\s*&\\s*|\\s+and\\s+)Behaviors|Habits|(?<!Habits\\/)(?<!Habits & )(?<!Habits and )Behaviors|Strengths|Flaws|Relationship with\\s*\\{\\{user\\}\\}|(?<!Friendship\\/)(?<!Affection\\/)Relationship';
 
                 // Discover any lazily-appended fields (e.g. "Combat Profile:") not in the known sets
                 const knownNamesForScan = new Set(customSecs.map(s => s.name.trim().toLowerCase()));
@@ -5887,7 +5901,7 @@ function createPanel() {
                 const coreLines = normalizedCore.split('\n');
                 let currentSection = 'General';
 
-                const allNamesPatternStart = [customNames, extraNames, 'Appearance\\/Species|Appearance|Personality|Brief Background|Background|Habits(?:\\/|\\s*&\\s*|\\s+and\\s+)Behaviors|Habits|Behaviors|Strengths|Flaws|Relationship with\\s*\\{\\{user\\}\\}|Relationship'].filter(Boolean).join('|');
+                const allNamesPatternStart = [customNames, extraNames, 'Appearance\\/Species|Appearance|Personality|Brief Background|(?<!Brief\\s)Background|Habits(?:\\/|\\s*&\\s*|\\s+and\\s+)Behaviors|Habits|(?<!Habits\\/)(?<!Habits & )(?<!Habits and )Behaviors|Strengths|Flaws|Relationship with\\s*\\{\\{user\\}\\}|Relationship'].filter(Boolean).join('|');
                 const sectionPattern = new RegExp(`^(${allNamesPatternStart})\\s*:`, 'i');
 
                 for (const line of coreLines) {
@@ -6204,6 +6218,14 @@ function createPanel() {
 
                         const popupOpts = { okButton: 'Close', cancelButton: false, wide: true, large: true };
                         await ctx.callGenericPopup(popupDom, ctx.POPUP_TYPE?.TEXT ?? 1, '', popupOpts);
+                        // Close while Edit Text is open should persist (Cancel discards; Close keeps).
+                        if (editPane.style.display !== 'none' && textarea.value !== (pc.bio || '')) {
+                            pc.bio = textarea.value;
+                            if (typeof saveChatState === 'function') saveChatState(_currentChatId);
+                            if (typeof refreshAgentManifestNow === 'function') refreshAgentManifestNow();
+                            // @ts-ignore
+                            if (typeof toastr !== 'undefined') toastr.success('Player Character saved.', 'Campaign Records');
+                        }
                     };
                     globalThis._rpgAgentOpenPcDetail = openPcPopup;
 
@@ -7125,6 +7147,24 @@ function createPanel() {
 
                                     const popupOpts = { okButton: 'Close', cancelButton: false, wide: true, large: true };
                                     await ctx.callGenericPopup(popupDom, ctx.POPUP_TYPE?.TEXT ?? 1, '', popupOpts);
+                                    // Close while Edit Text is open should persist (Cancel discards; Close keeps).
+                                    if (editPane.style.display !== 'none' && textarea.value !== (item.content || '')) {
+                                        if (!isRouterRunning()) {
+                                            const ok = await updateLorebookEntry(item.id, {
+                                                content: textarea.value,
+                                                key: item.keys,
+                                                comment: item.label,
+                                            });
+                                            if (ok) {
+                                                item.content = textarea.value;
+                                                _dirtyEntries.delete(item.id);
+                                                document.dispatchEvent(new CustomEvent('rt_lore_agent_updated'));
+                                                await refreshManifest();
+                                                // @ts-ignore
+                                                toastr.success('Entry saved.', 'Lorebook Agent');
+                                            }
+                                        }
+                                    }
                                 };
                                 globalThis._rpgAgentOpenNpcDetail = openNpcDetailPopup;
                                 globalThis._rpgAgentParseRelationship = parseRelationship;
@@ -11786,6 +11826,11 @@ async function runPortraitMigrationIfNeeded() {
             saveSettings();
         });
 
+        $('#rpg_tracker_hide_image_gen_toasts').prop('checked', !!settings.hideImageGenToasts).on('change', function () {
+            settings.hideImageGenToasts = !!$(this).prop('checked');
+            saveSettings();
+        });
+
         $('#rpg_tracker_portrait_auto_player').prop('checked', !!settings.portraitAutoGeneratePlayer).on('change', function () {
             settings.portraitAutoGeneratePlayer = !!$(this).prop('checked');
             saveSettings();
@@ -15208,6 +15253,7 @@ RULES:
             $('#rpg_portrait_generator_source').val(s.portraitGeneratorSource || 'native');
             $('#rpg_tracker_pollinations_group').toggle((s.portraitGeneratorSource || 'native') === 'pollinations');
             $('#rpg_tracker_portrait_skip_prompt').prop('checked', !!s.portraitSkipPromptDialog);
+    $('#rpg_tracker_hide_image_gen_toasts').prop('checked', !!s.hideImageGenToasts);
             $('#rpg_tracker_portrait_auto_party').prop('checked', !!s.portraitAutoGenerateParty);
             $('#rpg_tracker_portrait_auto_player').prop('checked', !!s.portraitAutoGeneratePlayer);
             $('#rpg_tracker_portrait_auto_enemies').prop('checked', !!s.portraitAutoGenerateEnemies);

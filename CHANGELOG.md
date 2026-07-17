@@ -2,7 +2,17 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
-## [5.6.91] - 2026-07-17
+## [5.7.5] - 2026-07-17
+
+### Added
+- **Hide Image Generation Toasts**: Optional setting under portrait options suppresses progress/success notifications from portrait and location AI auto-generation (errors and warnings still show).
+
+### Fixed
+- **Stray "Brief" on NPC cards**: Section parser no longer splits `Brief Background` at `Background`, which had left a lone "Brief" line under Personality.
+- **Portraits lost on rename**: Lorebook entry renames (manual Title edit or agent `rename`) now migrate `customPortraits` keys to the new name.
+- **Full NPC / PC card Close saves**: Closing the detail popup while **Edit Text** is open now persists changes (Cancel still discards).
+- **State Tracker Raw View rename**: Changing a party/enemy/character name in the memo (e.g. one-letter fix) no longer clears the portrait or triggers auto-generation — portrait keys follow the rename.
+
 
 ### Fixed
 - **NEW_FIELD still resurrecting after delete**: Deleting a custom module now writes a sync tombstone in localStorage. Boot strips tombstoned tags from live settings and every `chatStates` partition (before and after `loadChatState`). Also fixed `saveSettings` dropping a second save while one was in flight (so deletes no longer lost the WAL write).
