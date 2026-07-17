@@ -2164,11 +2164,96 @@ export function persistRouterLastRunTimestamp(epochMs = Date.now()) {
 }
 
 /**
+ * Sync localStorage write-ahead log for module schema (customFields / blockOrder / modules).
+ * Survives F5 when the async /api/settings/save fetch is cancelled mid-reload (common when
+ * editing extension code then refreshing before ST's save completes).
+ */
+const MODULE_SCHEMA_BACKUP_KEY = 'rpg_tracker_module_schema_backup';
+
+/**
+ * @param {string|null|undefined} chatId
+ */
+export function writeModuleSchemaBackup(chatId) {
+    try {
+        const s = getSettings();
+        const payload = {
+            ts: Date.now(),
+            chatId: chatId || null,
+            customFields: JSON.parse(JSON.stringify(s.customFields || [])),
+            blockOrder: JSON.parse(JSON.stringify(s.blockOrder || BLOCK_ORDER)),
+            modules: JSON.parse(JSON.stringify(s.modules || {})),
+        };
+        localStorage.setItem(MODULE_SCHEMA_BACKUP_KEY, JSON.stringify(payload));
+    } catch (err) {
+        console.warn('[RPG Tracker] Module schema backup write failed:', err);
+    }
+}
+
+/**
+ * Re-apply the sync module-schema backup over disk-loaded settings / chatStates.
+ * Call on boot before loadChatState so a cancelled settings save cannot resurrect
+ * deleted custom modules (e.g. NEW_FIELD) after a code-edit refresh.
+ * @param {string|null|undefined} preferredChatId
+ * @returns {boolean} true if a backup was applied
+ */
+export function applyModuleSchemaBackup(preferredChatId) {
+    try {
+        const raw = localStorage.getItem(MODULE_SCHEMA_BACKUP_KEY);
+        if (!raw) return false;
+        const backup = JSON.parse(raw);
+        if (!backup || !Array.isArray(backup.customFields) || !Array.isArray(backup.blockOrder)) return false;
+
+        const s = getSettings();
+        const liveTags = JSON.stringify((s.customFields || []).map(f => f.tag));
+        const backupTags = JSON.stringify(backup.customFields.map(f => f.tag));
+        const liveOrder = JSON.stringify(s.blockOrder || []);
+        const backupOrder = JSON.stringify(backup.blockOrder);
+        const partition = backup.chatId ? s.chatStates?.[backup.chatId] : null;
+        const partTags = JSON.stringify((partition?.customFields || []).map(f => f.tag));
+        const alreadyMatched = liveTags === backupTags && liveOrder === backupOrder
+            && (!backup.chatId || partTags === backupTags);
+        if (alreadyMatched) return false;
+
+        // Always restore live schema from the last known-good in-memory snapshot.
+        // If the async disk write completed, this matches disk. If it was cancelled on
+        // F5, this heals the resurrection of deleted modules from a stale settings.js.
+        s.customFields = JSON.parse(JSON.stringify(backup.customFields));
+        s.blockOrder = JSON.parse(JSON.stringify(backup.blockOrder));
+        if (backup.modules && typeof backup.modules === 'object') {
+            s.modules = { ...s.modules, ...JSON.parse(JSON.stringify(backup.modules)) };
+        }
+
+        if (backup.chatId) {
+            if (!s.chatStates) s.chatStates = {};
+            const existing = s.chatStates[backup.chatId] || {};
+            s.chatStates[backup.chatId] = {
+                ...existing,
+                customFields: JSON.parse(JSON.stringify(backup.customFields)),
+                blockOrder: JSON.parse(JSON.stringify(backup.blockOrder)),
+                modules: backup.modules
+                    ? { ...(existing.modules || {}), ...JSON.parse(JSON.stringify(backup.modules)) }
+                    : existing.modules,
+            };
+        }
+
+        // preferredChatId is reserved for callers that only want to heal the active chat;
+        // we still repair backup.chatId's partition above so loadChatState sees good data.
+        void preferredChatId;
+
+        return true;
+    } catch (err) {
+        console.warn('[RPG Tracker] Module schema backup apply failed:', err);
+        return false;
+    }
+}
+
+/**
  * Snapshots the current live settings into chatStates[chatId].
  * Pure write — no shared mutable state, no DOM.
  * @param {string} chatId
+ * @param {{ skipDiskWrite?: boolean }} [opts]
  */
-export function saveChatState(chatId) {
+export function saveChatState(chatId, opts = {}) {
     if (!chatId) return;
     if (typeof globalThis._rpgPortraitMigrationLocked === 'function' && globalThis._rpgPortraitMigrationLocked()) {
         return;
@@ -2290,11 +2375,16 @@ export function saveChatState(chatId) {
         // Preserve Player Character pseudo-persona which is injected into the chat state
         playerCharacter: existing.playerCharacter,
     };
+
+    // Sync WAL before the async disk write — survives F5 if /api/settings/save is cancelled.
+    writeModuleSchemaBackup(chatId);
     
     // Use a synchronous save so data is not lost if the page is closed before
     // a debounced timer fires (the root cause of the PC/state/relationship loss bug).
     // saveChatState is always called with an explicit chatId so there is no
     // cross-chat leakage risk from this call itself.
+    // When called from our saveSettings(), skipDiskWrite avoids a duplicate in-flight save.
+    if (opts.skipDiskWrite) return;
     const ctx = SillyTavern.getContext();
     if (typeof ctx.saveSettings === 'function') {
         ctx.saveSettings();

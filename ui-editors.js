@@ -639,7 +639,7 @@ export function openCustomFieldEditor(index) {
             if (s.blockOrder) {
                 s.blockOrder = s.blockOrder.filter(t => t.toUpperCase() !== field.tag.toUpperCase());
             }
-            saveSettings();
+            saveSettings(true);
             refreshOrderList();
             refreshRenderedView();
             toastr['info'](`Module "${field.label}" deleted.`);

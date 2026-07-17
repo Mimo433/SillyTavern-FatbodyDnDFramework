@@ -1,5 +1,5 @@
 import { EXAMPLES, COLOR_EXAMPLES, DEFAULT_STOCK_PROMPTS, RT_PROMPTS, BLOCK_ICONS, BLOCK_ORDER, PAGE_SIZE, NO_PAGINATE, buildOnboardingXpHint, buildOnboardingTimeHint, buildMagicGearLevelHint, buildOnboardingActiveBlocks, resolveTimePromptKey, resolveTimePromptDisplayTag } from './constants.js';
-import { MODULE_NAME, DEFAULT_MODULES, getSettings, getBarBackground, migrateCustomFields, saveChatState, saveProfile, deleteProfile, getEffectiveRouterCampaignPrefix, sanitizeCampaignPrefixString, buildNpcInstruction, loadStockPromptsFromProfile, getNpcRelationshipMax, getNpcRelationshipMaxDefault, clampRelationshipValue, relationshipBarPct, getFriendshipTier, getAffectionTier, getRelTierBadgeStyle, getRelTierDetailedStyle, getRelTierDetailedLabelStyle, applyRelTierBadgeElement, sanitizeRouterState, rebuildAllModuleInstructions, adjustAllStoredTemplatesForTimeFormat, DEFAULT_NPC_SECTIONS, DEFAULT_PC_SECTIONS, computeBundledPromptsFingerprint, getDefaultPortraitLocationSystemPrompt, isShippedPortraitLocationSystemPrompt, applyFactoryReset, clearExtensionLocalStorageUiState } from './state-manager.js';
+import { MODULE_NAME, DEFAULT_MODULES, getSettings, getBarBackground, migrateCustomFields, saveChatState, writeModuleSchemaBackup, applyModuleSchemaBackup, saveProfile, deleteProfile, getEffectiveRouterCampaignPrefix, sanitizeCampaignPrefixString, buildNpcInstruction, loadStockPromptsFromProfile, getNpcRelationshipMax, getNpcRelationshipMaxDefault, clampRelationshipValue, relationshipBarPct, getFriendshipTier, getAffectionTier, getRelTierBadgeStyle, getRelTierDetailedStyle, getRelTierDetailedLabelStyle, applyRelTierBadgeElement, sanitizeRouterState, rebuildAllModuleInstructions, adjustAllStoredTemplatesForTimeFormat, DEFAULT_NPC_SECTIONS, DEFAULT_PC_SECTIONS, computeBundledPromptsFingerprint, getDefaultPortraitLocationSystemPrompt, isShippedPortraitLocationSystemPrompt, applyFactoryReset, clearExtensionLocalStorageUiState } from './state-manager.js';
 import { sendStateRequest, fetchOllamaModels, fetchOpenAIModels, testOpenAIConnection, getConnectionProfiles, getCurrentCompletionPreset, setCompletionPreset, syncCombatProfile, resetCombatProfileOverride } from './llm-client.js';
 import { getDiceToolName, getDiceCommandName, getDiceCommandAliases, doDiceRoll, registerDiceFunctionTool, registerDiceSlashCommand, installInterceptor, getNarrativeBlocks, onGenerationStarted, onGenerationEnded, ensureRelTagRegex, resetRouterTick, getRouterTick, resetRouterAutoTick, getRouterSchedulerInternals, makeRngQueue, buildRngBlock, RNG_QUEUE_LEN, parseAndApplyNarrativeRelTags } from './narrative-hooks.js';
 import { deduplicateMemo, mergeMemo, computeDelta, escapeHtml, escapeRegex, highlightParens, cleanToolCallMessage, cleanMessageContent, getLastUserAction, buildLorebookContext, buildModulesInstructionText, buildModuleFormatInstruction, parseQuestsFromMemo, syncQuestsFromMemo, syncQuestsToMemo, writeQuestsToMemo, getQuestMood, extractCurrentTimeStr, stripArchivedQuestsFromMemo, stripCompletedQuestsFromMemo, applyQuestSyncAndStripMemo, isArchivedQuestStatus, removeArchivedQuest, parseInWorldTime, formatInWorldTime, sanitizeLorebookRecordContent, memoForTrackerContext, memoForGmContext } from './memo-processor.js';
@@ -483,7 +483,9 @@ export function saveSettings(force = false, delay = 0) {
             const activeChatId = _currentChatId || ctx.chatId;
             // Snapshot chat-linked state into extension settings before persisting to disk.
             if (s.chatLinkEnabled && activeChatId && !isPortraitMigrationLocked()) {
-                saveChatState(activeChatId);
+                saveChatState(activeChatId, { skipDiskWrite: true });
+            } else {
+                writeModuleSchemaBackup(activeChatId);
             }
             if (force && typeof ctx.saveSettings === 'function') {
                 await ctx.saveSettings();
@@ -12034,9 +12036,22 @@ async function runPortraitMigrationIfNeeded() {
         sanitizeRouterState(settings);
         const bootChatId = ctx.chatId || ctx.getCurrentChatId?.() || null;
         _currentChatId = bootChatId;
+        // Heal module schema (customFields/blockOrder) from sync localStorage WAL before
+        // loadChatState — otherwise a cancelled settings save after deleting NEW_FIELD
+        // resurrects the stale partition on code-edit F5.
+        const healedFromBackup = applyModuleSchemaBackup(bootChatId);
+        if (healedFromBackup && settings.debugMode) {
+            console.log('[RPG Tracker] Applied module schema backup before chat-state load.');
+        }
         eventSource.on(event_types.CHAT_CHANGED, onChatChanged);
         if (bootChatId && settings.chatLinkEnabled) {
             loadChatState(bootChatId);
+        }
+        // Baseline WAL after boot so the next cancelled save still has a sync snapshot.
+        writeModuleSchemaBackup(bootChatId);
+        // If we healed from WAL, push the repaired schema to disk so settings.js catches up.
+        if (healedFromBackup) {
+            void saveSettings(true);
         }
 
         // Migrate legacy base64 portraits after chat state is loaded so loadChatState
@@ -13060,7 +13075,7 @@ async function runPortraitMigrationIfNeeded() {
                 enabled: true
             });
             refreshOrderList();
-            saveSettings();
+            saveSettings(true);
         });
 
         // ── AI Custom Field Creator ──

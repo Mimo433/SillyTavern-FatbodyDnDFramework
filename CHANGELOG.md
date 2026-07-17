@@ -2,6 +2,14 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [5.6.81] - 2026-07-17
+
+### Fixed
+- **NEW_FIELD / custom modules resurrect on code-edit F5**: Module schema (`customFields`, `blockOrder`, `modules`) is mirrored to a sync localStorage write-ahead log before the async settings save. Boot reapplies that backup before `loadChatState`, so a cancelled `/api/settings/save` during a quick reload can no longer resurrect deleted custom modules from a stale `settings.js`.
+
+### Changed
+- **Custom module add/delete**: Forces an immediate disk save (`saveSettings(true)`) so structural module edits are less likely to be lost on refresh.
+
 ## [5.6.76] - 2026-07-17
 
 ### Fixed
