@@ -27,7 +27,7 @@ export const COLOR_EXAMPLES = `<font color=#ff5555>Red Text</font>
 // ── Default module prompts ─────────────────────────────────────────────────────
 
 /** How Combat-line Melee/Ranged totals are derived (used in stock prompts + sysprompt). */
-export const ATTACK_TOTAL_FORMULA_HINT = `ATTACK TOTALS: Melee Total Formula: Melee Total = BAB + STR modifier + Weapon enhancement bonus. Ranged Total Formula: Ranged Total = BAB + DEX modifier + Weapon enhancement bonus. The Melee and Ranged values on the Combat line are these totals (weapon enhancement = +1/+2/+3 from the equipped weapon; 0 if mundane).`;
+export const ATTACK_TOTAL_FORMULA_HINT = `ATTACK TOTALS: Melee Total Formula: Melee Total = BAB + STR modifier + Weapon enhancement bonus. Ranged Total Formula: Ranged Total = BAB + DEX modifier + Weapon enhancement bonus. The Melee and Ranged values on the Combat line are these totals (weapon enhancement = +1/+2/+3 from the equipped weapon; 0 if mundane). Finesse: melee attacks with finesse weapons (rapier, dagger, scimitar, etc.) use DEX modifier instead of STR when the wielder benefits — standard D&D finesse rule.`;
 
 export const DEFAULT_STOCK_PROMPTS = {
   character: `Main character's core stats. Use this format:
@@ -123,6 +123,8 @@ Saves: Fort +X, Ref +X, Will +X
 Abilities: Ability1 (effect), Ability2 (effect)
 Other: Trait1 (description), Trait2 (description)
 Status: Effect (duration)
+
+Finesse weapons: use DEX modifier (not STR) for melee attack totals when applicable.
 
 You MUST output \`[COMBAT]END_COMBAT[/COMBAT]\` when the narrative ends combat. Do not put members of [PARTY] into [COMBAT].`,
   inventory: `Items, loot, equipment, and wealth. You MAY create this section if loot is found and it doesn't currently exist.
@@ -376,6 +378,7 @@ If a character attacks with a weapon not covered by their listed "Proficiencies:
 If a character lacks a "Proficiencies:" line entirely, infer proficiency from their class archetype.
 Melee Total Formula: Melee Total = BAB + STR modifier + Weapon enhancement bonus
 Ranged Total Formula: Ranged Total = BAB + DEX modifier + Weapon enhancement bonus
+Finesse: melee attacks with finesse weapons (rapier, dagger, scimitar, etc.) use DEX modifier instead of STR when the wielder benefits.
 The Melee and Ranged values on the Combat line must equal these totals.
 Note: High-quality or magical weapons may have an inherent accuracy/damage modifier (e.g., a "Longsword +1" or "Vampire's Blade +2"). This bonus applies to both the attack roll and damage roll.
 </weapon_proficiencies>
@@ -751,6 +754,7 @@ If a character attacks with a weapon not covered by their listed "Proficiencies:
 If a character lacks a "Proficiencies:" line entirely, infer proficiency from their class archetype.
 Melee Total Formula: Melee Total = BAB + STR modifier + Weapon enhancement bonus
 Ranged Total Formula: Ranged Total = BAB + DEX modifier + Weapon enhancement bonus
+Finesse: melee attacks with finesse weapons (rapier, dagger, scimitar, etc.) use DEX modifier instead of STR when the wielder benefits.
 The Melee and Ranged values on the Combat line must equal these totals.
 Note: High-quality or magical weapons may have an inherent accuracy/damage modifier (e.g., a "Longsword +1" or "Vampire's Blade +2"). This bonus applies to both the attack roll and damage roll.
 </weapon_proficiencies>

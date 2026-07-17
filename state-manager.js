@@ -1861,6 +1861,25 @@ function getSettingsInternal(extensionSettings) {
             );
     }
 
+    // ── MIGRATION: CHARACTER/PARTY/COMBAT — finesse melee uses DEX ───────────────
+    const PRE_FINESSE_ATTACK_SNIPPET = 'weapon enhancement = +1/+2/+3 from the equipped weapon; 0 if mundane).';
+    if (s.stockPrompts?.character &&
+        s.stockPrompts.character.includes(PRE_FINESSE_ATTACK_SNIPPET) &&
+        !s.stockPrompts.character.includes('Finesse:')) {
+        s.stockPrompts.character = DEFAULT_STOCK_PROMPTS.character;
+    }
+    if (s.stockPrompts?.party &&
+        s.stockPrompts.party.includes(PRE_FINESSE_ATTACK_SNIPPET) &&
+        !s.stockPrompts.party.includes('Finesse:')) {
+        s.stockPrompts.party = DEFAULT_STOCK_PROMPTS.party;
+    }
+    const PRE_FINESSE_COMBAT_SNIPPET = 'You MUST output `[COMBAT]END_COMBAT[/COMBAT]`';
+    if (s.stockPrompts?.combat &&
+        s.stockPrompts.combat.includes(PRE_FINESSE_COMBAT_SNIPPET) &&
+        !s.stockPrompts.combat.includes('Finesse weapons:')) {
+        s.stockPrompts.combat = DEFAULT_STOCK_PROMPTS.combat;
+    }
+
     // ── MIGRATION: CHARACTER/PARTY prompts — Att/def → Combat + Gear (BAB) ───────
     const OLD_CHAR_SNIPPET = 'Att/def: Weapon (stats) | Armor (AC: Z)';
     if (s.stockPrompts?.character && s.stockPrompts.character.includes(OLD_CHAR_SNIPPET)) {

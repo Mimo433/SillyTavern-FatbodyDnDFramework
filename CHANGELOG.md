@@ -2,6 +2,14 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [5.7.75] - 2026-07-17
+
+### Added
+- **Finesse melee guidance**: Documented DEX-based melee attack totals for finesse weapons in `[CHARACTER]`, `[PARTY]`, `[COMBAT]`, and sysprompt `<weapon_proficiencies>`.
+
+### Changed
+- **Stock prompt migration**: Existing profiles auto-update character/party/combat prompts when the pre-finesse attack-totals text is still in use.
+
 ## [5.7.7] - 2026-07-17
 
 ### Added

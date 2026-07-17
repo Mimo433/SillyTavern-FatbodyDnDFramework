@@ -118,6 +118,7 @@ If a character attacks with a weapon not covered by their listed "Proficiencies:
 If a character lacks a "Proficiencies:" line entirely, infer proficiency from their class archetype.
 Melee Total Formula: Melee Total = BAB + STR modifier + Weapon enhancement bonus
 Ranged Total Formula: Ranged Total = BAB + DEX modifier + Weapon enhancement bonus
+Finesse: melee attacks with finesse weapons (rapier, dagger, scimitar, etc.) use DEX modifier instead of STR when the wielder benefits.
 The Melee and Ranged values on the Combat line must equal these totals.
 Note: High-quality or magical weapons may have an inherent accuracy/damage modifier (e.g., a "Longsword +1" or "Vampire's Blade +2"). This bonus applies to both the attack roll and damage roll.
 </weapon_proficiencies>
