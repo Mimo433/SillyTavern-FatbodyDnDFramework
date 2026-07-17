@@ -2,6 +2,11 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [5.6.55] - 2026-07-17
+
+### Fixed
+- **Settings revert on reload**: Flush chat-linked snapshots before disk write on tab hide/unload so code reloads no longer resurrect stale `chatStates` over live custom fields, modules, and memo.
+
 ## [5.6.45] - 2026-07-17
 
 ### Fixed

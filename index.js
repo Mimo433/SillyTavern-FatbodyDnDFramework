@@ -11980,30 +11980,53 @@ async function runPortraitMigrationIfNeeded() {
         // cannot overwrite freshly migrated paths before the synchronous disk flush.
         await runPortraitMigrationIfNeeded();
 
-        // ─── Flush-on-unload safety net ───
-        // saveSettings() normally debounces its disk write by ~2s. If the page reloads or
-        // closes before that timer fires (e.g. reloading right after an action to pick up
-        // a code change), the newest currentMemo/chatStates never reach disk and the next
-        // load resurrects the last flushed (older) snapshot — looks like a "revert."
-        // Force a synchronous flush on unload so nothing in flight is ever lost this way.
-        const flushOnUnload = () => {
+        // ─── Flush-on-unload / tab-hide safety net ───
+        // saveSettings() debounces disk writes by ~2s, and ST's saveSettings() is async
+        // (fetch). Reloading for a code update before the write lands resurrects the last
+        // flushed snapshot — looks like settings "reset to a particular point."
+        // Chat Link makes this worse: boot always runs loadChatState(), which overwrites
+        // live customFields/modules/stockPrompts/memo from chatStates[chatId]. If that
+        // snapshot is stale relative to live settings, those fields revert.
+        //
+        // Order matters: snapshot chatStates FIRST, then write. (The old unload handler
+        // wrote disk then called saveChatState — so the updated snapshot never made it.)
+        // Also flush on visibility hidden so the async save usually finishes before reload.
+        let _flushInFlight = false;
+        const flushPendingSettingsToDisk = (reason = 'flush') => {
+            if (_flushInFlight) return;
+            _flushInFlight = true;
             try {
                 if (typeof globalThis._rpgFlushRawMemoChanges === 'function') {
                     globalThis._rpgFlushRawMemoChanges();
                 }
-                const s = getSettings();
                 if (_saveSettingsTimer) {
                     clearTimeout(_saveSettingsTimer);
                     _saveSettingsTimer = null;
                 }
+                const s = getSettings();
+                // Snapshot chat-linked fields first so loadChatState() on next boot
+                // cannot overwrite live settings with a stale per-chat copy.
+                if (s.chatLinkEnabled && _currentChatId) {
+                    saveChatState(_currentChatId);
+                }
+                // Always force a disk write. saveChatState already calls saveSettings when
+                // it runs, but it can no-op (portrait migration lock) — so flush anyway.
                 const flushCtx = SillyTavern.getContext();
-                if (typeof flushCtx.saveSettings === 'function') flushCtx.saveSettings();
+                if (typeof flushCtx.saveSettings === 'function') void flushCtx.saveSettings();
                 else flushCtx.saveSettingsDebounced?.();
-                if (s.chatLinkEnabled && _currentChatId) saveChatState(_currentChatId);
-            } catch (_) { /* best-effort — never block unload */ }
+                if (s.debugMode) console.log(`[RPG Tracker] Settings flushed (${reason}).`);
+            } catch (err) {
+                console.warn('[RPG Tracker] Settings flush failed:', err);
+            } finally {
+                // Allow another flush after this tick (e.g. hide then unload).
+                setTimeout(() => { _flushInFlight = false; }, 0);
+            }
         };
-        window.addEventListener('beforeunload', flushOnUnload);
-        window.addEventListener('pagehide', flushOnUnload);
+        window.addEventListener('beforeunload', () => flushPendingSettingsToDisk('beforeunload'));
+        window.addEventListener('pagehide', () => flushPendingSettingsToDisk('pagehide'));
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden') flushPendingSettingsToDisk('visibilityhidden');
+        });
         // Always run activation when routerEnabled — regardless of chatLinkEnabled —
         // so the correct lorebook stack is live from the very first message.
         if (settings.routerEnabled && bootChatId) {
