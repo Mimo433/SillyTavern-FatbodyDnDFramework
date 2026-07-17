@@ -650,12 +650,18 @@ function buildDefaultSettings() {
         agentModulesOpen: true,
         agentWorldOpen: false,
         dayNightCycleEnabled: false,
-        /** Optional panel backdrop image (data URL or https URL). */
+        /** Optional State Tracker panel backdrop (data URL or https URL). */
         panelBgImage: '',
-        /** Optional night/late-night backdrop; falls back to panelBgImage when empty. */
+        /** Optional night/late-night backdrop for State Tracker; falls back to panelBgImage when empty. */
         panelBgImageNight: '',
-        /** 0–100: strength of the day/night (or neutral) tint over the backdrop image. */
+        /** 0–100: day/night tint strength over the State Tracker backdrop. */
         panelBgOverlayStrength: 55,
+        /** Optional detached Lorebook Agent panel backdrop. */
+        agentPanelBgImage: '',
+        /** Optional night/late-night backdrop for detached Lorebook Agent. */
+        agentPanelBgImageNight: '',
+        /** 0–100: overlay strength for detached Lorebook Agent backdrop. */
+        agentPanelBgOverlayStrength: 55,
         debugMode: false,
         connectionSource: "default",
         connectionProfileId: "",

@@ -70,8 +70,8 @@
                         </label>
                         <div id="rpg_tracker_panel_bg_block" style="margin-top: 6px; border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 8px; background: rgba(255,255,255,0.03);">
                             <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
-                                <b style="font-size: 0.85em;">Panel Background Image</b>
-                                <i class="fa-solid fa-circle-question interactable" title="Optional scenario art behind the tracker. A tint overlay keeps text readable and shifts with Day/Night Cycle when that feature is on. Images are resized for storage. Optional night image swaps in during night / late night phases."></i>
+                                <b style="font-size: 0.85em;">State Tracker Background</b>
+                                <i class="fa-solid fa-circle-question interactable" title="Optional scenario art behind the State Tracker panel. A tint overlay keeps text readable; with Day/Night Cycle enabled it also shifts with in-world time. Optional night image swaps in during night / late night phases from [TIME], even when Day/Night Cycle is off."></i>
                             </div>
                             <div style="display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap;">
                                 <div id="rpg_tracker_panel_bg_preview" title="Day / default background" style="width: 72px; height: 48px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.15); background: rgba(0,0,0,0.35) center/cover no-repeat; flex-shrink: 0;"></div>
@@ -100,6 +100,39 @@
                                 <span id="rpg_tracker_panel_bg_overlay_val" style="margin-left: auto; font-weight: bold; opacity: 0.8;">55%</span>
                             </div>
                             <input id="rpg_tracker_panel_bg_overlay" type="range" class="text_pole" style="width: 100%; cursor: pointer;" min="0" max="100" value="55" title="Higher = stronger day/night (or neutral) tint over the image" />
+                        </div>
+                        <div id="rpg_agent_panel_bg_block" style="margin-top: 6px; border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 8px; background: rgba(255,255,255,0.03);">
+                            <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+                                <b style="font-size: 0.85em;">Lorebook Agent Background <span style="font-weight: normal; opacity: 0.55;">(detached)</span></b>
+                                <i class="fa-solid fa-circle-question interactable" title="Separate backdrop for the detached Lorebook Agent window. When integrated in the State Tracker panel, only the tracker background above is used. Night image swaps from [TIME] during night / late night, even without Day/Night Cycle."></i>
+                            </div>
+                            <div style="display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap;">
+                                <div id="rpg_agent_panel_bg_preview" title="Day / default background" style="width: 72px; height: 48px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.15); background: rgba(0,0,0,0.35) center/cover no-repeat; flex-shrink: 0;"></div>
+                                <div style="display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 140px;">
+                                    <div class="flex-container gap-1">
+                                        <button type="button" id="rpg_agent_panel_bg_upload" class="menu_button interactable" style="font-size: 11px;"><i class="fa-solid fa-upload"></i> Upload</button>
+                                        <button type="button" id="rpg_agent_panel_bg_clear" class="menu_button interactable" style="font-size: 11px;">Clear</button>
+                                    </div>
+                                    <input id="rpg_agent_panel_bg_file" type="file" accept="image/*" style="display: none;" />
+                                    <input id="rpg_agent_panel_bg_url" type="text" class="text_pole" placeholder="Or paste image URL…" style="font-size: 11px; width: 100%; box-sizing: border-box;" />
+                                </div>
+                            </div>
+                            <div style="display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; margin-top: 8px;">
+                                <div id="rpg_agent_panel_bg_night_preview" title="Night / late night background (optional)" style="width: 72px; height: 48px; border-radius: 6px; border: 1px dashed rgba(136,153,255,0.35); background: rgba(8,10,28,0.5) center/cover no-repeat; flex-shrink: 0;"></div>
+                                <div style="display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 140px;">
+                                    <span style="font-size: 0.78em; opacity: 0.7;">Night image <span style="opacity: 0.55;">(optional)</span></span>
+                                    <div class="flex-container gap-1">
+                                        <button type="button" id="rpg_agent_panel_bg_night_upload" class="menu_button interactable" style="font-size: 11px;"><i class="fa-solid fa-moon"></i> Upload</button>
+                                        <button type="button" id="rpg_agent_panel_bg_night_clear" class="menu_button interactable" style="font-size: 11px;">Clear</button>
+                                    </div>
+                                    <input id="rpg_agent_panel_bg_night_file" type="file" accept="image/*" style="display: none;" />
+                                </div>
+                            </div>
+                            <div class="flex-container alignitemscenter" style="width: 100%; margin-top: 8px;">
+                                <span style="font-size: 0.85em;">Overlay Strength</span>
+                                <span id="rpg_agent_panel_bg_overlay_val" style="margin-left: auto; font-weight: bold; opacity: 0.8;">55%</span>
+                            </div>
+                            <input id="rpg_agent_panel_bg_overlay" type="range" class="text_pole" style="width: 100%; cursor: pointer;" min="0" max="100" value="55" title="Higher = stronger day/night (or neutral) tint over the image" />
                         </div>
                         <div class="flex-container flexFlowColumn gap-1" style="margin-top: 4px;">
                             <div class="flex-container alignitemscenter" style="width: 100%;">

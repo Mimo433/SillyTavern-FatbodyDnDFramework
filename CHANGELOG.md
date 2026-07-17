@@ -2,6 +2,14 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [5.6.35] - 2026-07-17
+
+### Added
+- **Detached Lorebook Agent background**: Separate day/night panel images and overlay strength for the detached agent window (Settings → Appearance).
+
+### Changed
+- **Night panel backgrounds**: Night image swaps from `[TIME]` during night / late night even when Day/Night Cycle is off; night-only uploads are supported.
+
 ## [5.6.3] - 2026-07-17
 
 ### Added

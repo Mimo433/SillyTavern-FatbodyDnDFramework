@@ -5918,8 +5918,7 @@ textarea.rt-cr-input {
     transition: opacity 2s ease, filter 2s ease;
 }
 
-.rpg-tracker-panel.rt-has-bg-image.rt-daynight-active.rt-phase-night::before,
-.rpg-tracker-panel.rt-has-bg-image.rt-daynight-active.rt-phase-lateNight::before {
+.rpg-tracker-panel.rt-has-bg-image.rt-bg-night-phase::before {
     background-image: var(--rt-user-bg-image-night, var(--rt-user-bg-image, none));
 }
 

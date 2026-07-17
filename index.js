@@ -10425,24 +10425,22 @@ const DAYNIGHT_PHASE_CLASSES = [
  * @param {string} memoText
  */
 function applyDayNightCycleUI(settings, memoText) {
-    let phase = '';
-    if (settings.dayNightCycleEnabled) {
-        const timeMatch = (memoText || '').match(/\[TIME\]([\s\S]*?)\[\/TIME\]/i);
-        const currentTimeStr = timeMatch ? extractCurrentTimeStr(timeMatch[1]) : '';
-        phase = currentTimeStr ? getTimeOfDayInfo(currentTimeStr).phase : '';
-    }
+    const timeMatch = (memoText || '').match(/\[TIME\]([\s\S]*?)\[\/TIME\]/i);
+    const currentTimeStr = timeMatch ? extractCurrentTimeStr(timeMatch[1]) : '';
+    const phase = currentTimeStr ? getTimeOfDayInfo(currentTimeStr).phase : '';
+    const cycleActive = !!(settings.dayNightCycleEnabled && phase);
+    const bgNightPhase = phase === 'night' || phase === 'lateNight';
 
     for (const panel of document.querySelectorAll('.rpg-tracker-panel')) {
-        panel.classList.toggle('rt-daynight-active', !!phase);
+        panel.classList.toggle('rt-daynight-active', cycleActive);
+        panel.classList.toggle('rt-bg-night-phase', bgNightPhase);
         for (const cls of DAYNIGHT_PHASE_CLASSES) panel.classList.remove(cls);
-        if (phase) panel.classList.add(`rt-phase-${phase}`);
+        if (cycleActive) panel.classList.add(`rt-phase-${phase}`);
     }
 
     const daynightSlot = document.getElementById('rt-daynight-badge-slot');
     if (daynightSlot) {
-        if (phase) {
-            const timeMatch = (memoText || '').match(/\[TIME\]([\s\S]*?)\[\/TIME\]/i);
-            const currentTimeStr = timeMatch ? extractCurrentTimeStr(timeMatch[1]) : '';
+        if (cycleActive) {
             daynightSlot.innerHTML = currentTimeStr ? renderDayNightBadge(currentTimeStr) : '';
         } else {
             daynightSlot.innerHTML = '';
@@ -10507,44 +10505,60 @@ function cssUrlFromImageSrc(src) {
 }
 
 /**
- * Applies optional user panel backdrop + overlay strength to main/detached panels.
+ * @param {object} settings
+ * @param {{ dayKey: string, nightKey: string, strengthKey: string }} keys
+ */
+function getPanelBgConfig(settings, keys) {
+    const dayRaw = String(settings[keys.dayKey] || '').trim();
+    const nightRaw = String(settings[keys.nightKey] || '').trim();
+    const daySrc = dayRaw || nightRaw;
+    const nightSrc = nightRaw || dayRaw;
+    const strength = Math.max(0, Math.min(100, parseInt(String(settings[keys.strengthKey] ?? 55), 10) || 0)) / 100;
+    return { daySrc, nightSrc, strength, hasImage: !!(dayRaw || nightRaw) };
+}
+
+/** @param {HTMLElement} panel */
+function applyPanelBackgroundToElement(panel, config) {
+    panel.classList.toggle('rt-has-bg-image', config.hasImage);
+    if (config.hasImage) {
+        panel.style.setProperty('--rt-user-bg-image', cssUrlFromImageSrc(config.daySrc));
+        panel.style.setProperty('--rt-user-bg-image-night', cssUrlFromImageSrc(config.nightSrc));
+        panel.style.setProperty('--rt-bg-overlay-strength', String(config.strength));
+    } else {
+        panel.style.removeProperty('--rt-user-bg-image');
+        panel.style.removeProperty('--rt-user-bg-image-night');
+        panel.style.removeProperty('--rt-bg-overlay-strength');
+    }
+}
+
+/** @param {HTMLElement} panel */
+function clearPanelBackgroundOnElement(panel) {
+    panel.classList.remove('rt-has-bg-image');
+    panel.style.removeProperty('--rt-user-bg-image');
+    panel.style.removeProperty('--rt-user-bg-image-night');
+    panel.style.removeProperty('--rt-bg-overlay-strength');
+}
+
+const PANEL_BG_TRACKER_KEYS = { dayKey: 'panelBgImage', nightKey: 'panelBgImageNight', strengthKey: 'panelBgOverlayStrength' };
+const PANEL_BG_AGENT_KEYS = { dayKey: 'agentPanelBgImage', nightKey: 'agentPanelBgImageNight', strengthKey: 'agentPanelBgOverlayStrength' };
+
+/**
+ * Applies optional user panel backdrops: State Tracker and detached Lorebook Agent use separate images.
  */
 export function applyPanelBackgroundToDom() {
     const settings = getSettings();
-    const daySrc = (settings.panelBgImage || '').trim();
-    const nightSrc = (settings.panelBgImageNight || '').trim() || daySrc;
-    const strength = Math.max(0, Math.min(100, parseInt(String(settings.panelBgOverlayStrength ?? 55), 10) || 0)) / 100;
-    const hasImage = !!daySrc;
-
-    /** @type {HTMLElement[]} */
-    const targets = [];
     const main = document.getElementById('rpg-tracker-panel');
-    if (main instanceof HTMLElement) targets.push(main);
+    if (main instanceof HTMLElement) {
+        applyPanelBackgroundToElement(main, getPanelBgConfig(settings, PANEL_BG_TRACKER_KEYS));
+    }
+
     const agent = document.getElementById('rpg-tracker-agent');
-    if (agent instanceof HTMLElement && agent.classList.contains('rt-detached-panel')
-        && agent.parentElement === document.body) {
-        targets.push(agent);
-    }
-
-    for (const panel of targets) {
-        panel.classList.toggle('rt-has-bg-image', hasImage);
-        if (hasImage) {
-            panel.style.setProperty('--rt-user-bg-image', cssUrlFromImageSrc(daySrc));
-            panel.style.setProperty('--rt-user-bg-image-night', cssUrlFromImageSrc(nightSrc));
-            panel.style.setProperty('--rt-bg-overlay-strength', String(strength));
+    if (agent instanceof HTMLElement) {
+        if (agent.classList.contains('rt-detached-panel') && agent.parentElement === document.body) {
+            applyPanelBackgroundToElement(agent, getPanelBgConfig(settings, PANEL_BG_AGENT_KEYS));
         } else {
-            panel.style.removeProperty('--rt-user-bg-image');
-            panel.style.removeProperty('--rt-user-bg-image-night');
-            panel.style.removeProperty('--rt-bg-overlay-strength');
+            clearPanelBackgroundOnElement(agent);
         }
-    }
-
-    // Nested integrated agent must not keep a leftover backdrop class
-    if (agent instanceof HTMLElement && !targets.includes(agent)) {
-        agent.classList.remove('rt-has-bg-image');
-        agent.style.removeProperty('--rt-user-bg-image');
-        agent.style.removeProperty('--rt-user-bg-image-night');
-        agent.style.removeProperty('--rt-bg-overlay-strength');
     }
 }
 
@@ -11534,105 +11548,136 @@ async function runPortraitMigrationIfNeeded() {
             refreshRenderedView();
         });
 
-        // Panel background image (scenario art + day/night overlay)
-        const syncPanelBgSettingsUi = () => {
-            const day = (settings.panelBgImage || '').trim();
-            const night = (settings.panelBgImageNight || '').trim();
-            const strength = Math.max(0, Math.min(100, parseInt(String(settings.panelBgOverlayStrength ?? 55), 10) || 0));
-            const dayPreview = /** @type {HTMLElement|null} */ (document.getElementById('rpg_tracker_panel_bg_preview'));
-            const nightPreview = /** @type {HTMLElement|null} */ (document.getElementById('rpg_tracker_panel_bg_night_preview'));
-            const overlayInp = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_tracker_panel_bg_overlay'));
-            const overlayVal = document.getElementById('rpg_tracker_panel_bg_overlay_val');
-            const urlInp = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_tracker_panel_bg_url'));
-            if (dayPreview) dayPreview.style.backgroundImage = day ? `url(${JSON.stringify(day)})` : 'none';
-            if (nightPreview) nightPreview.style.backgroundImage = night ? `url(${JSON.stringify(night)})` : 'none';
-            if (overlayInp) overlayInp.value = String(strength);
-            if (overlayVal) overlayVal.textContent = `${strength}%`;
-            if (urlInp && day.startsWith('http')) urlInp.value = day;
-            else if (urlInp && !day) urlInp.value = '';
-        };
-        syncPanelBgSettingsUi();
+        // Panel background images (State Tracker + detached Lorebook Agent)
+        /** @param {string} idPrefix @param {{ dayKey: string, nightKey: string, strengthKey: string }} keys */
+        const wirePanelBgControls = (idPrefix, keys, dayToast, nightToast) => {
+            const syncUi = () => {
+                const cfg = getPanelBgConfig(settings, keys);
+                const dayPreview = /** @type {HTMLElement|null} */ (document.getElementById(`${idPrefix}_preview`));
+                const nightPreview = /** @type {HTMLElement|null} */ (document.getElementById(`${idPrefix}_night_preview`));
+                const overlayInp = /** @type {HTMLInputElement|null} */ (document.getElementById(`${idPrefix}_overlay`));
+                const overlayVal = document.getElementById(`${idPrefix}_overlay_val`);
+                const urlInp = /** @type {HTMLInputElement|null} */ (document.getElementById(`${idPrefix}_url`));
+                if (dayPreview) dayPreview.style.backgroundImage = cfg.daySrc ? `url(${JSON.stringify(cfg.daySrc)})` : 'none';
+                if (nightPreview) nightPreview.style.backgroundImage = cfg.nightSrc ? `url(${JSON.stringify(cfg.nightSrc)})` : 'none';
+                if (overlayInp) overlayInp.value = String(Math.round(cfg.strength * 100));
+                if (overlayVal) overlayVal.textContent = `${Math.round(cfg.strength * 100)}%`;
+                if (urlInp && cfg.daySrc.startsWith('http')) urlInp.value = cfg.daySrc;
+                else if (urlInp && !cfg.daySrc) urlInp.value = '';
+            };
+            syncUi();
 
-        const persistPanelBgImage = async (/** @type {'day'|'night'} */ which, /** @type {string} */ src) => {
-            let stored = (src || '').trim();
-            if (stored.startsWith('data:image/')) {
-                try {
-                    stored = await scalePanelBackgroundImage(stored);
-                } catch (err) {
-                    console.error(err);
-                    toastr['warning']('Could not process that image.', 'RPG Tracker');
+            const persist = async (/** @type {'day'|'night'} */ which, /** @type {string} */ src) => {
+                let stored = (src || '').trim();
+                if (stored.startsWith('data:image/')) {
+                    try {
+                        stored = await scalePanelBackgroundImage(stored);
+                    } catch (err) {
+                        console.error(err);
+                        toastr['warning']('Could not process that image.', 'RPG Tracker');
+                        return;
+                    }
+                } else if (stored && !/^https?:\/\//i.test(stored) && !stored.startsWith('data:')) {
+                    toastr['warning']('Use an https image URL or upload a file.', 'RPG Tracker');
                     return;
                 }
-            } else if (stored && !/^https?:\/\//i.test(stored) && !stored.startsWith('data:')) {
-                toastr['warning']('Use an https image URL or upload a file.', 'RPG Tracker');
-                return;
-            }
-            if (which === 'day') settings.panelBgImage = stored;
-            else settings.panelBgImageNight = stored;
-            saveSettings();
-            syncPanelBgSettingsUi();
-            applyPanelBackgroundToDom();
-        };
-
-        const bindPanelBgFile = (/** @type {string} */ btnId, /** @type {string} */ fileId, /** @type {'day'|'night'} */ which) => {
-            const btn = document.getElementById(btnId);
-            const fileInp = /** @type {HTMLInputElement|null} */ (document.getElementById(fileId));
-            if (!btn || !fileInp) return;
-            btn.addEventListener('click', () => fileInp.click());
-            fileInp.addEventListener('change', async () => {
-                const file = fileInp.files?.[0];
-                fileInp.value = '';
-                if (!file) return;
-                try {
-                    const dataUrl = await fileToDataUrl(file);
-                    await persistPanelBgImage(which, String(dataUrl));
-                    toastr['success'](which === 'day' ? 'Panel background set.' : 'Night background set.', 'RPG Tracker');
-                } catch (err) {
-                    console.error(err);
-                    toastr['warning']('Could not read that file.', 'RPG Tracker');
-                }
-            });
-        };
-        bindPanelBgFile('rpg_tracker_panel_bg_upload', 'rpg_tracker_panel_bg_file', 'day');
-        bindPanelBgFile('rpg_tracker_panel_bg_night_upload', 'rpg_tracker_panel_bg_night_file', 'night');
-
-        document.getElementById('rpg_tracker_panel_bg_clear')?.addEventListener('click', () => {
-            settings.panelBgImage = '';
-            saveSettings();
-            syncPanelBgSettingsUi();
-            applyPanelBackgroundToDom();
-        });
-        document.getElementById('rpg_tracker_panel_bg_night_clear')?.addEventListener('click', () => {
-            settings.panelBgImageNight = '';
-            saveSettings();
-            syncPanelBgSettingsUi();
-            applyPanelBackgroundToDom();
-        });
-
-        const panelBgUrlInp = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_tracker_panel_bg_url'));
-        panelBgUrlInp?.addEventListener('change', async () => {
-            const url = panelBgUrlInp.value.trim();
-            if (!url) {
-                settings.panelBgImage = '';
+                settings[which === 'day' ? keys.dayKey : keys.nightKey] = stored;
                 saveSettings();
-                syncPanelBgSettingsUi();
+                syncUi();
                 applyPanelBackgroundToDom();
-                return;
-            }
-            await persistPanelBgImage('day', url);
-        });
+            };
 
-        const panelBgOverlay = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_tracker_panel_bg_overlay'));
-        panelBgOverlay?.addEventListener('input', () => {
-            const val = Math.max(0, Math.min(100, parseInt(panelBgOverlay.value, 10) || 0));
-            settings.panelBgOverlayStrength = val;
-            const overlayVal = document.getElementById('rpg_tracker_panel_bg_overlay_val');
-            if (overlayVal) overlayVal.textContent = `${val}%`;
-            applyPanelBackgroundToDom();
-        });
-        panelBgOverlay?.addEventListener('change', () => {
-            saveSettings();
-        });
+            const uploadBtn = document.getElementById(`${idPrefix}_upload`);
+            const fileInp = /** @type {HTMLInputElement|null} */ (document.getElementById(`${idPrefix}_file`));
+            if (uploadBtn && fileInp) {
+                uploadBtn.addEventListener('click', () => fileInp.click());
+                fileInp.addEventListener('change', async () => {
+                    const file = fileInp.files?.[0];
+                    fileInp.value = '';
+                    if (!file) return;
+                    try {
+                        await persist('day', String(await fileToDataUrl(file)));
+                        toastr['success'](dayToast, 'RPG Tracker');
+                    } catch (err) {
+                        console.error(err);
+                        toastr['warning']('Could not read that file.', 'RPG Tracker');
+                    }
+                });
+            }
+
+            const nightUploadBtn = document.getElementById(`${idPrefix}_night_upload`);
+            const nightFileInp = /** @type {HTMLInputElement|null} */ (document.getElementById(`${idPrefix}_night_file`));
+            if (nightUploadBtn && nightFileInp) {
+                nightUploadBtn.addEventListener('click', () => nightFileInp.click());
+                nightFileInp.addEventListener('change', async () => {
+                    const file = nightFileInp.files?.[0];
+                    nightFileInp.value = '';
+                    if (!file) return;
+                    try {
+                        await persist('night', String(await fileToDataUrl(file)));
+                        toastr['success'](nightToast, 'RPG Tracker');
+                    } catch (err) {
+                        console.error(err);
+                        toastr['warning']('Could not read that file.', 'RPG Tracker');
+                    }
+                });
+            }
+
+            document.getElementById(`${idPrefix}_clear`)?.addEventListener('click', () => {
+                settings[keys.dayKey] = '';
+                saveSettings();
+                syncUi();
+                applyPanelBackgroundToDom();
+            });
+            document.getElementById(`${idPrefix}_night_clear`)?.addEventListener('click', () => {
+                settings[keys.nightKey] = '';
+                saveSettings();
+                syncUi();
+                applyPanelBackgroundToDom();
+            });
+
+            const urlInp = /** @type {HTMLInputElement|null} */ (document.getElementById(`${idPrefix}_url`));
+            urlInp?.addEventListener('change', async () => {
+                const url = urlInp.value.trim();
+                if (!url) {
+                    settings[keys.dayKey] = '';
+                    saveSettings();
+                    syncUi();
+                    applyPanelBackgroundToDom();
+                    return;
+                }
+                await persist('day', url);
+            });
+
+            const overlayInp = /** @type {HTMLInputElement|null} */ (document.getElementById(`${idPrefix}_overlay`));
+            overlayInp?.addEventListener('input', () => {
+                const val = Math.max(0, Math.min(100, parseInt(overlayInp.value, 10) || 0));
+                settings[keys.strengthKey] = val;
+                const overlayVal = document.getElementById(`${idPrefix}_overlay_val`);
+                if (overlayVal) overlayVal.textContent = `${val}%`;
+                applyPanelBackgroundToDom();
+            });
+            overlayInp?.addEventListener('change', () => saveSettings());
+
+            return syncUi;
+        };
+
+        const syncTrackerPanelBgUi = wirePanelBgControls(
+            'rpg_tracker_panel_bg',
+            PANEL_BG_TRACKER_KEYS,
+            'State Tracker background set.',
+            'State Tracker night background set.',
+        );
+        const syncAgentPanelBgUi = wirePanelBgControls(
+            'rpg_agent_panel_bg',
+            PANEL_BG_AGENT_KEYS,
+            'Lorebook Agent background set.',
+            'Lorebook Agent night background set.',
+        );
+        globalThis._rpgSyncPanelBgSettingsUi = () => {
+            syncTrackerPanelBgUi();
+            syncAgentPanelBgUi();
+        };
 
         $('#rpg_tracker_auto_reset_prompts').prop('checked', !!settings.autoResetPromptsOnUpdate).on('change', function () {
             settings.autoResetPromptsOnUpdate = !!$(this).prop('checked');
@@ -15007,18 +15052,11 @@ RULES:
             $('#rpg_tracker_chat_link_enabled').prop('checked', !!s.chatLinkEnabled);
             $('#rpg_tracker_debug').prop('checked', !!s.debugMode);
             $('#rpg_tracker_daynight_cycle').prop('checked', !!s.dayNightCycleEnabled);
-            const strength = Math.max(0, Math.min(100, parseInt(String(s.panelBgOverlayStrength ?? 55), 10) || 0));
-            const dayPreview = /** @type {HTMLElement|null} */ (document.getElementById('rpg_tracker_panel_bg_preview'));
-            const nightPreview = /** @type {HTMLElement|null} */ (document.getElementById('rpg_tracker_panel_bg_night_preview'));
-            const overlayInp = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_tracker_panel_bg_overlay'));
-            const overlayVal = document.getElementById('rpg_tracker_panel_bg_overlay_val');
-            const daySrc = (s.panelBgImage || '').trim();
-            const nightSrc = (s.panelBgImageNight || '').trim();
-            if (dayPreview) dayPreview.style.backgroundImage = daySrc ? `url(${JSON.stringify(daySrc)})` : 'none';
-            if (nightPreview) nightPreview.style.backgroundImage = nightSrc ? `url(${JSON.stringify(nightSrc)})` : 'none';
-            if (overlayInp) overlayInp.value = String(strength);
-            if (overlayVal) overlayVal.textContent = `${strength}%`;
-            applyPanelBackgroundToDom();
+            if (typeof globalThis._rpgSyncPanelBgSettingsUi === 'function') {
+                globalThis._rpgSyncPanelBgSettingsUi();
+            } else {
+                applyPanelBackgroundToDom();
+            }
             $('#rpg_tracker_auto_reset_prompts').prop('checked', !!s.autoResetPromptsOnUpdate);
             $('#rpg_main_sysprompt_backup_enabled').prop('checked', isMainSyspromptBackupEnabled(s));
             syncMainSyspromptBackupControlsUi();
