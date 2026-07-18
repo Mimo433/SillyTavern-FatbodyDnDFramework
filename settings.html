@@ -421,6 +421,14 @@
                                     <span>Auto-Update Prompts on Upgrade</span>
                                     <i class="fa-solid fa-circle-question interactable" title="When enabled, bundled default prompts are automatically reset on load whenever the shipped prompt defaults change — not on every version bump. No dialog is shown."></i>
                                 </label>
+                                <button id="rpg_tracker_btn_force_checkpoint" class="menu_button interactable"
+                                    style="width: 100%; margin-top: 6px; background: rgba(0, 180, 120, 0.18); border-color: #00b478;"
+                                    title="Force-writes SillyTavern settings.json to disk RIGHT NOW (awaits the save while this page stays open). Also refreshes the local memo recovery backup. Use this after important changes so the next F5/settings rollback lands on this known-good state instead of an older snapshot.">
+                                    <i class="fa-solid fa-floppy-disk"></i> Force Disk Checkpoint
+                                </button>
+                                <small style="display: block; margin-top: 4px; opacity: 0.65; font-size: 0.78em; line-height: 1.25;">
+                                    Keeps the tab open until the toast confirms — that write becomes the rollback baseline if a later reload aborts a save.
+                                </small>
                                 <button id="rpg_tracker_btn_reset_and_apply_sysprompt" class="menu_button interactable"
                                     style="width: 100%; margin-top: 6px; background: rgba(80, 140, 255, 0.18); border-color: #5588ff;"
                                     title="Resets ALL prompts (Core, Stock Modules, Block Order) and writes the current system prompt template to Quick Prompt Main box.">

@@ -562,10 +562,16 @@ ${CHARACTER_FORMAT_HINT}${xpHint}${TIME_FORMAT_HINT}${settingHint}`;
     }
 }
 
-export async function generatePersonaBio(charName, wordCount, extraHints = '') {
+export async function generatePersonaBio(charName, wordCount, extraHints = '', opts = {}) {
     const s = getSettings();
     const rawMemo = s.currentMemo || '';
-    const cleanMemo = rawMemo.replace(/<\/?memo>/gi, '').replace(/<[^>]+>/g, ' ').trim();
+    let cleanMemo = rawMemo.replace(/<\/?memo>/gi, '').replace(/<[^>]+>/g, ' ').trim();
+    if (opts.preferCharacterBlock) {
+        const charBlock = rawMemo.match(/\[CHARACTER\]([\s\S]*?)\[\/CHARACTER\]/i);
+        if (charBlock) {
+            cleanMemo = `[CHARACTER]\n${charBlock[1].trim()}\n[/CHARACTER]\n\n${cleanMemo}`;
+        }
+    }
 
     const coreSections = s.pcCoreSections && Array.isArray(s.pcCoreSections) && s.pcCoreSections.length > 0 ? s.pcCoreSections : DEFAULT_PC_SECTIONS;
     const sectionsTemplate = coreSections.map(sec => `${sec.name}:\n${sec.description}`).join('\n\n');
@@ -584,14 +590,24 @@ Rules:
 - Keep the prose grounded and natural. Avoid purple prose, excessive em-dashes, or clichés (e.g. "deliberate step", "breath hitched").
 - Do not include a preamble, title, or closing statement. Output ONLY the six sections.
 - CRITICAL: You MUST faithfully and explicitly incorporate ALL provided traits, background hints, species, gender, and appearance hints from the character card and the PLAYER PREFERENCES. Do not ignore user-provided details.
-- CRITICAL: Never output template macro strings such as {{char}}, {{user}}, or any other {{...}} placeholders. Always replace them with the actual character's name or a fitting proper name.`;
+- CRITICAL: Never output template macro strings such as {{char}}, {{user}}, or any other {{...}} placeholders. Always replace them with the actual character's name or a fitting proper name.
+- Use recent story messages only for voice, relationships, and ongoing situation — do not invent stats that contradict the character card.`;
 
     const { chat } = SillyTavern.getContext();
     let chatLog = '';
     if (chat && chat.length > 0) {
-        const numMsgs = s.directPromptContext > 0 ? s.directPromptContext : 15;
-        const recentChat = chat.slice(-numMsgs);
-        chatLog = `## NARRATIVE HISTORY (Last ${recentChat.length} messages)\n` +
+        const defaultLookback = s.directPromptContext > 0 ? s.directPromptContext : 15;
+        const numMsgs = Number.isFinite(opts.chatLookback) && opts.chatLookback > 0
+            ? opts.chatLookback
+            : defaultLookback;
+        // Prefer real story turns (skip empty/system) so "last N messages" means narrative context.
+        const storyMsgs = chat.filter(m => {
+            if (m?.is_system) return false;
+            const text = String(m?.mes || m?.content || '').trim();
+            return !!text;
+        });
+        const recentChat = storyMsgs.slice(-numMsgs);
+        chatLog = `## RECENT STORY (Last ${recentChat.length} messages)\n` +
             recentChat.map(m => {
                 const name = m.is_user ? 'Player' : (m.name || 'Narrator');
                 return `${name}: ${m.mes || m.content || ''}`;
@@ -676,7 +692,7 @@ async function injectAsSillyTavernPersona(name, description) {
     return avatarId;
 }
 
-export function showPersonaConfirmOverlay(bioText, charName, wordCount, extraHints = '') {
+export function showPersonaConfirmOverlay(bioText, charName, wordCount, extraHints = '', opts = {}) {
     const existing = document.getElementById('rt-persona-confirm-overlay');
     if (existing) existing.remove();
 
@@ -787,7 +803,7 @@ export function showPersonaConfirmOverlay(bioText, charName, wordCount, extraHin
          const regenBtn = /** @type {HTMLButtonElement} */ (overlay.querySelector('#rt-pco-regen'));
          regenBtn.disabled = true;
          regenBtn.textContent = '⏳ Regenerating...';
-         const newBio = await generatePersonaBio(charName, wordCount, extraHints);
+         const newBio = await generatePersonaBio(charName, wordCount, extraHints, opts);
          if (newBio) {
              /** @type {HTMLTextAreaElement} */ (overlay.querySelector('#rt-pco-bio')).value = newBio;
          } else {

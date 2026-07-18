@@ -957,7 +957,7 @@
     gap: 6px;
 }
 
-.rt-fullview-btn, .rt-category-settings-btn {
+.rt-fullview-btn, .rt-category-settings-btn, .rt-char-to-persona-btn {
     background: none;
     border: none;
     padding: 0;
@@ -973,7 +973,7 @@
     justify-content: center;
 }
 
-.rt-fullview-btn:hover, .rt-category-settings-btn:hover {
+.rt-fullview-btn:hover, .rt-category-settings-btn:hover, .rt-char-to-persona-btn:hover {
     opacity: 1;
     color: var(--rt-text);
 }
@@ -6123,3 +6123,10 @@ textarea.rt-cr-input {
     outline: none;
 }
 
+
+/* Memo recovery confirm: keep background readable so user can judge if UI looks stale */
+.popup.rt-memo-recovery-popup[open]::backdrop {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background-color: rgba(0, 0, 0, 0.28);
+}

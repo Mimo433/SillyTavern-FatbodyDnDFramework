@@ -163,13 +163,34 @@ async function checkLocalMemoRecovery(chatId) {
         prompted = true;
         _rtRecoveryPromptActive = true;
         const ageMins = Math.max(1, Math.round((Date.now() - entry.ts) / 60000));
-        const popupContent = `<div style="text-align:left;">
+        const popupContent = `<div style="text-align:left; line-height:1.45;">
             <p><b>Possible unsaved tracker data found.</b></p>
             <p>This browser has a newer local copy of the STATE MEMO for this chat (from ~${ageMins} min ago) than what's currently on disk. This can happen if the page reloaded before SillyTavern finished writing settings.json.</p>
             <p>Disk memo: ${diskMemo.length.toLocaleString()} chars &nbsp;|&nbsp; Local backup: ${entry.currentMemo.length.toLocaleString()} chars</p>
+            <p style="margin-top:10px; padding:8px 10px; border-left:3px solid #f0ad4e; background:rgba(240,173,78,0.12); border-radius:4px;">
+                <b>Look behind this dialog</b> (background is left unblurred on purpose). If the tracker / chat UI looks outdated or stale compared to what you just had — click <b>Restore</b>.
+            </p>
             <p>Restore the local backup?</p>
         </div>`;
-        const result = await ctx.callGenericPopup(popupContent, ctx.POPUP_TYPE?.CONFIRM ?? 1, '', { okButton: 'Restore', cancelButton: 'Keep disk version' });
+        const { Popup, POPUP_TYPE } = ctx;
+        let result = false;
+        if (typeof Popup === 'function') {
+            const popup = new Popup(popupContent, POPUP_TYPE?.CONFIRM ?? 1, '', {
+                okButton: 'Restore',
+                cancelButton: 'Keep disk version',
+                leftAlign: true,
+                animation: 'none',
+            });
+            popup.dlg?.classList.add('rt-memo-recovery-popup');
+            result = await popup.show();
+        } else {
+            result = await ctx.callGenericPopup(popupContent, ctx.POPUP_TYPE?.CONFIRM ?? 1, '', {
+                okButton: 'Restore',
+                cancelButton: 'Keep disk version',
+                leftAlign: true,
+                animation: 'none',
+            });
+        }
         if (result) {
             s.currentMemo = entry.currentMemo;
             s.lastDelta = entry.lastDelta || s.lastDelta;
@@ -632,6 +653,55 @@ let _saveSettingsInFlight = false;
 /** If a save is requested while one is in flight, run again after (keeps deletes durable). */
 let _saveSettingsPending = false;
 let _saveSettingsPendingForce = false;
+/** Cached core ST saveSettings (not on getContext — only saveSettingsDebounced is). */
+let _coreSaveSettingsFn = null;
+
+/**
+ * Resolve SillyTavern's immediate (non-debounced) saveSettings().
+ * Context only exposes saveSettingsDebounced; import core script when needed.
+ * @returns {Promise<((loopCounter?: number) => Promise<void>)|null>}
+ */
+async function resolveCoreSaveSettings() {
+    const ctx = SillyTavern.getContext();
+    if (typeof ctx.saveSettings === 'function') {
+        return ctx.saveSettings.bind(ctx);
+    }
+    if (typeof _coreSaveSettingsFn === 'function') return _coreSaveSettingsFn;
+    try {
+        const mod = await import(new URL('../../../../script.js', import.meta.url).href);
+        if (typeof mod.saveSettings === 'function') {
+            _coreSaveSettingsFn = mod.saveSettings;
+            return _coreSaveSettingsFn;
+        }
+    } catch (err) {
+        console.warn('[RPG Tracker] Could not import core saveSettings:', err);
+    }
+    return null;
+}
+
+/**
+ * Force-write settings.json to disk and refresh the local memo recovery backup.
+ * Must be awaited while the tab stays open (unlike unload flush races).
+ * @returns {Promise<void>}
+ */
+async function forceDiskCheckpoint() {
+    if (typeof globalThis._rpgFlushRawMemoChanges === 'function') {
+        globalThis._rpgFlushRawMemoChanges();
+    }
+    const s = getSettings();
+    const chatId = _currentChatId || SillyTavern.getContext()?.chatId || null;
+    if (s.chatLinkEnabled && chatId) {
+        saveChatState(chatId, { skipDiskWrite: true });
+    }
+    snapshotMemoToLocalStorage(chatId, { force: true });
+    const saveFn = await resolveCoreSaveSettings();
+    if (!saveFn) {
+        throw new Error('Core saveSettings() could not be loaded');
+    }
+    await saveFn();
+    snapshotMemoToLocalStorage(chatId, { force: true });
+}
+
 /**
  * @param {boolean} force Skip the debounce and save immediately.
  * @param {number} delay Debounce delay in ms when not forcing (default 0 = immediate).
@@ -685,8 +755,10 @@ export function saveSettings(force = false, delay = 0) {
                 // Mirror the live memo into localStorage on every save cycle — regardless of
                 // chatLinkEnabled — so a lost/raced disk write is recoverable at next boot.
                 snapshotMemoToLocalStorage(activeChatId);
-                if (useForce && typeof ctx.saveSettings === 'function') {
-                    await ctx.saveSettings();
+                if (useForce) {
+                    const saveFn = await resolveCoreSaveSettings();
+                    if (saveFn) await saveFn();
+                    else ctx.saveSettingsDebounced();
                 } else {
                     ctx.saveSettingsDebounced();
                 }
@@ -4071,6 +4143,42 @@ Gear:
             else s.fullViewSections.splice(idx, 1);
             saveSettings();
             refresh();
+        });
+    });
+
+    el.querySelectorAll('.rt-char-to-persona-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            if (btn.disabled) return;
+            const s = getSettings();
+            const memo = s.currentMemo || '';
+            if (!/\[CHARACTER\]/i.test(memo)) {
+                toastr['warning']('No [CHARACTER] block found in the state memo.', 'RPG Tracker');
+                return;
+            }
+            const charName = extractCharNameFromMemo(memo) || 'My Character';
+            const wordsRaw = s.onboardingPersonaWords === 'other'
+                ? s.onboardingPersonaWordsCustom
+                : (s.onboardingPersonaWords || '150');
+            const wordCount = parseInt(String(wordsRaw || '150'), 10) || 150;
+            const personaOpts = { chatLookback: 3, preferCharacterBlock: true };
+            const extraHints = '\n\nSource: existing [CHARACTER] sheet. Match its stats, class, gear, and traits. Use the last 3 story messages only for voice, relationships, and current situation.';
+            const prev = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = '⏳';
+            try {
+                toastr['info'](`Generating Lorebook Agent persona for "${charName}"…`, 'RPG Tracker');
+                const bio = await generatePersonaBio(charName, wordCount, extraHints, personaOpts);
+                if (bio) {
+                    showPersonaConfirmOverlay(bio, charName, wordCount, extraHints, personaOpts);
+                } else {
+                    toastr['warning']('Persona bio generation failed.', 'RPG Tracker');
+                }
+            } finally {
+                btn.disabled = false;
+                btn.textContent = prev || '👤';
+            }
         });
     });
 
@@ -15401,6 +15509,24 @@ RULES:
                 const dp = document.getElementById('rpg-tracker-delta-content');
                 if (dp) dp.innerHTML = '<span class="delta-empty">Log cleared.</span>';
                 toastr['success']("RPG Tracker logic wiped.", "RPG Tracker");
+            }
+        });
+
+        $('#rpg_tracker_btn_force_checkpoint').on('click', async function () {
+            const btn = /** @type {HTMLButtonElement} */ (this);
+            if (btn.disabled) return;
+            const prevHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Writing checkpoint…';
+            try {
+                await forceDiskCheckpoint();
+                toastr['success']('Disk checkpoint written. Future rollbacks should land on this state.', 'RPG Tracker');
+            } catch (err) {
+                console.error('[RPG Tracker] Force disk checkpoint failed:', err);
+                toastr['error'](`Checkpoint failed: ${err?.message || err}. Keep this tab open and try again.`, 'RPG Tracker');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = prevHtml;
             }
         });
 

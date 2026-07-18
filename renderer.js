@@ -2237,6 +2237,12 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
             </button>
         ` : '';
 
+        const personaFromCharBtn = tag === 'CHARACTER' ? `
+            <button class="rt-char-to-persona-btn" data-tag="CHARACTER" title="Create Lorebook Agent Persona from this CHARACTER (uses sheet + last 3 story messages)">
+                👤
+            </button>
+        ` : '';
+
         const fullViewBtn = NO_PAGINATE.has(renderType) ? '' : `
             <button class="rt-fullview-btn${isFullView ? ' active' : ''}" data-tag="${tag}" title="${isFullView ? 'Switch to Paged View' : 'Switch to Full List'}">
                 ${isFullView ? '📜' : '📑'}
@@ -2267,6 +2273,7 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                 <span>${icon} ${displayName}</span>
                 <div class="rt-section-header-right">
                     ${totalValueBadge}
+                    ${personaFromCharBtn}
                     ${detachBtn}
                     ${fullViewBtn}
                     <button class="rt-category-settings-btn" data-tag="${tag}" title="Category Rendering Options">
