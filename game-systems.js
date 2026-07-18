@@ -396,7 +396,7 @@ export function transformBaseSectionContent(tag, innerContent, settings) {
     const d100Mode = !!settings.diceD100Mode;
 
     if (tag === 'random_events' && !(settings.rngEnabled && settings.diceFunctionTool)) {
-        innerContent = innerContent.replace(/\n- Issue both RollTheDice calls in one parallel batch[^\n]+/g, '');
+        innerContent = innerContent.replace(/\s*Batch both RollTheDice calls together;[^.]*\./g, '');
     }
 
     if (tag === 'relationship_tracking') {
@@ -408,11 +408,11 @@ export function transformBaseSectionContent(tag, innerContent, settings) {
         const dieWord = d100Mode ? 'd100' : 'd20';
         let fallbackText = `To resolve actions, simulate a fair ${dieWord} roll internally and maintain all ROLL FORMAT rules.\n\n`;
         let matchedFormat = false;
-        if (innerContent.includes('[ROLL FORMAT]')) {
-            const rollFormatMatch = innerContent.match(/(\[ROLL FORMAT\][\s\S]*?)(?=\n\n\[FALLBACK\]|$)/i);
+        if (innerContent.includes('ROLL FORMAT')) {
+            const rollFormatMatch = innerContent.match(/(ROLL FORMAT[\s\S]*?)(?=\n\[FALLBACK\]|$)/i);
             if (rollFormatMatch) { fallbackText += rollFormatMatch[1].trim(); matchedFormat = true; }
         } else {
-            const l4 = innerContent.match(/4\.\s*(Output[\s\S]*?)(?=\n\n\[FALLBACK\]|$)/i);
+            const l4 = innerContent.match(/4\.\s*(Output[\s\S]*?)(?=\n\[FALLBACK\]|$)/i);
             if (l4) { fallbackText += l4[1].replace(/5\.\s*/g, '').trim(); matchedFormat = true; }
         }
         if (!matchedFormat) {

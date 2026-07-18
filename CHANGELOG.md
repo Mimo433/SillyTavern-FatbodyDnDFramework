@@ -2,6 +2,13 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [5.7.96] - 2026-07-18
+
+### Changed
+- **Sysprompt refresh**: Optimized main `sysprompt.txt` (hybrid RollTheDice + combat RNG queue); legacy prompt rebuilt from the same base with queue-only RNG (no RollTheDice).
+- **`[COMBAT]` stock prompt**: Soldier-tier martial/caster examples, Elite 2-attack demo, APR rule, and explicit Attack/Spell DC tier bands.
+- **Prompt transforms**: `random_events` / disabled-RNG fallback extractors updated for the new sysprompt wording.
+
 ## [5.7.95] - 2026-07-18
 
 ### Added
