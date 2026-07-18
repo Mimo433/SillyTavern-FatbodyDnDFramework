@@ -37,10 +37,118 @@ export const FOLDER_NAME = (function () {
 let _stateModelRunning = false;
 let _stateController = null;   // To abort ongoing state updates
 let _currentChatId = null;
+/**
+ * True once we're sure _currentChatId reflects a real chat ST actually has open — either
+ * because boot read a non-empty ctx.chatId, or because a real CHAT_CHANGED event has fired.
+ * ctx.chatId at extension-init time can race ST's own chat restoration (init runs alongside
+ * getCharacters/getBackgrounds/etc., not after them) and come back null/stale — more likely
+ * right after editing extension files forces a slower/uncached reload. If we treated that
+ * bogus null as a real "old chat" identity, the FIRST real CHAT_CHANGED of the session would
+ * look like a switch into an unknown chat, and onChatChanged's "no saved snapshot" branch
+ * would wipe currentMemo/memoHistory that settings.json had just loaded correctly. See
+ * onChatChanged's boot-confirmation guard below.
+ */
+let _chatIdBootConfirmed = false;
 let _prefixDeriveTimer = null; // Pending CHAT_CHANGED → prefix-derivation timer
 /** Set during init BOOTSTRAP so the immediate CHAT_CHANGED does not repeat /world scans. */
 let _sessionBootstrapChatId = null;
 let _bootstrapSyncPromise = null;
+
+// ─── localStorage recovery net (survives lost/raced settings.json writes) ───
+// ST's own saveSettings() POSTs settings.json via a plain (non-keepalive) fetch. If the
+// tab reloads/closes before that request lands — which races unload on every browser —
+// the disk copy silently reverts to whatever was last actually written, and with it the
+// memo/quests/etc. localStorage.setItem() is synchronous and cannot be cancelled by
+// navigation, so mirroring the live memo there on every save gives us a same-browser
+// safety net independent of that race. Not a substitute for the disk save; a recovery net.
+const RT_RECOVERY_LS_KEY = 'rpg_tracker_memo_recovery_v1';
+const RT_RECOVERY_MAX_CHATS = 8;
+const RT_RECOVERY_MAX_AGE_MS = 48 * 60 * 60 * 1000; // 48h — older snapshots are probably irrelevant
+/** True while a recovery prompt is open, so routine saves can't overwrite the evidence. */
+let _rtRecoveryPromptActive = false;
+
+/**
+ * Mirrors the live memo/quests/delta for one chat into localStorage. Cheap, synchronous,
+ * safe to call on every save — completely independent of chatLinkEnabled or network status.
+ * @param {string|null} chatId
+ */
+function snapshotMemoToLocalStorage(chatId) {
+    if (!chatId || _rtRecoveryPromptActive) return;
+    try {
+        const s = getSettings();
+        const memo = s.currentMemo || '';
+        // Skip snapshotting an empty memo over a real one — that pattern IS the bug we're
+        // guarding against, so never let it propagate into the recovery net itself.
+        if (!memo.trim()) return;
+        let map = {};
+        try { map = JSON.parse(localStorage.getItem(RT_RECOVERY_LS_KEY) || '{}') || {}; } catch (_) { map = {}; }
+        map[chatId] = {
+            ts: Date.now(),
+            currentMemo: memo,
+            lastDelta: s.lastDelta || '',
+            quests: Array.isArray(s.quests) ? s.quests : [],
+        };
+        // Bound total storage: keep only the most recently touched chats.
+        const ids = Object.keys(map).sort((a, b) => (map[b]?.ts || 0) - (map[a]?.ts || 0));
+        for (const id of ids.slice(RT_RECOVERY_MAX_CHATS)) delete map[id];
+        localStorage.setItem(RT_RECOVERY_LS_KEY, JSON.stringify(map));
+    } catch (err) {
+        console.warn('[RPG Tracker] localStorage memo snapshot failed:', err);
+    }
+}
+
+/**
+ * At boot, compares the just-loaded (disk) memo for this chat against the last memo this
+ * browser actually saw live. If the disk copy is stale (older, different, and the local
+ * snapshot isn't ancient), offers to restore the local copy. Must run BEFORE any save can
+ * fire during boot, or the stale disk memo would get mirrored over the recovery evidence.
+ * @param {string|null} chatId
+ */
+async function checkLocalMemoRecovery(chatId) {
+    if (!chatId) return;
+    let entry = null;
+    try {
+        const map = JSON.parse(localStorage.getItem(RT_RECOVERY_LS_KEY) || '{}') || {};
+        entry = map[chatId] || null;
+    } catch (_) { entry = null; }
+    if (!entry || !entry.currentMemo || !entry.currentMemo.trim()) return;
+    if (Date.now() - (entry.ts || 0) > RT_RECOVERY_MAX_AGE_MS) return;
+
+    const s = getSettings();
+    if (entry.currentMemo === (s.currentMemo || '')) return; // disk already matches; nothing to recover
+
+    const ctx = SillyTavern.getContext();
+    if (typeof ctx.callGenericPopup !== 'function') return;
+
+    _rtRecoveryPromptActive = true;
+    try {
+        const ageMins = Math.max(1, Math.round((Date.now() - entry.ts) / 60000));
+        const popupContent = `<div style="text-align:left;">
+            <p><b>Possible unsaved tracker data found.</b></p>
+            <p>This browser has a newer local copy of the STATE MEMO for this chat (from ~${ageMins} min ago) than what's currently on disk. This can happen if the page reloaded before SillyTavern finished writing settings.json.</p>
+            <p>Disk memo: ${(s.currentMemo || '').length.toLocaleString()} chars &nbsp;|&nbsp; Local backup: ${entry.currentMemo.length.toLocaleString()} chars</p>
+            <p>Restore the local backup?</p>
+        </div>`;
+        const result = await ctx.callGenericPopup(popupContent, ctx.POPUP_TYPE?.CONFIRM ?? 1, '', { okButton: 'Restore', cancelButton: 'Keep disk version' });
+        if (result) {
+            s.currentMemo = entry.currentMemo;
+            s.lastDelta = entry.lastDelta || s.lastDelta;
+            if (Array.isArray(entry.quests)) s.quests = entry.quests;
+            saveSettings(true);
+            if (typeof updateUIMemo === 'function') updateUIMemo(s.currentMemo);
+            if (typeof refreshRenderedView === 'function') refreshRenderedView();
+            if (typeof syncMemoView === 'function') syncMemoView();
+            toastr['success']('Local backup restored.', 'RPG Tracker');
+        }
+    } catch (err) {
+        console.warn('[RPG Tracker] Local memo recovery prompt failed:', err);
+    } finally {
+        _rtRecoveryPromptActive = false;
+        // Whatever the outcome, re-sync the recovery net to the now-current state so we
+        // don't nag again for the same delta on the next reload.
+        snapshotMemoToLocalStorage(chatId);
+    }
+}
 let _pillDeselectHandler = null;
 let renderRouterUI = null;
 globalThis._rpgRenderRouterUI = () => { if (typeof renderRouterUI === 'function') renderRouterUI(); };
@@ -517,6 +625,9 @@ export function saveSettings(force = false, delay = 0) {
                 } else {
                     writeModuleSchemaBackup(activeChatId);
                 }
+                // Mirror the live memo into localStorage on every save cycle — regardless of
+                // chatLinkEnabled — so a lost/raced disk write is recoverable at next boot.
+                snapshotMemoToLocalStorage(activeChatId);
                 if (useForce && typeof ctx.saveSettings === 'function') {
                     await ctx.saveSettings();
                 } else {
@@ -1702,6 +1813,26 @@ function onChatChanged(newChatId) {
     // Same-chat refresh (bare emit, F5, Copilot apply, etc.): keep live tracker state.
     if (!emitHadId || oldChatId === resolvedId) {
         _currentChatId = resolvedId;
+        _chatIdBootConfirmed = true;
+        updateChatLinkUI();
+        return;
+    }
+
+    // First real CHAT_CHANGED of this page load with no confirmed prior identity: our
+    // boot-time read of ctx.chatId can race ST's own chat restoration (init() runs
+    // alongside getCharacters/getBackgrounds/etc., not after them) and come back null —
+    // more likely right after editing extension files forces a slower/uncached reload.
+    // Without this guard, that bogus null "oldChatId" makes this look like a switch into
+    // an unknown chat below, and the "no saved snapshot" branch wipes currentMemo/memoHistory
+    // that settings.json had just loaded correctly for whichever chat ST is displaying.
+    // Adopt this chat's identity without touching any live state.
+    if (!_chatIdBootConfirmed) {
+        _chatIdBootConfirmed = true;
+        _currentChatId = resolvedId;
+        const bootPrefix = getEffectiveRouterCampaignPrefix(resolvedId);
+        s.routerCampaignPrefix = bootPrefix || '';
+        syncRouterPrefixDisplays(bootPrefix || '');
+        scheduleAgentManifestRefresh(true);
         updateChatLinkUI();
         return;
     }
@@ -12202,6 +12333,11 @@ async function runPortraitMigrationIfNeeded() {
         sanitizeRouterState(settings);
         const bootChatId = ctx.chatId || ctx.getCurrentChatId?.() || null;
         _currentChatId = bootChatId;
+        // Only mark identity as confirmed if this boot-time read actually got a real chat id.
+        // If ST's own chat restoration hasn't populated ctx.chatId yet (a race against our
+        // own network-bound awaits above), leave this false so onChatChanged's boot-confirmation
+        // guard can safely adopt the first real CHAT_CHANGED without wiping live state.
+        _chatIdBootConfirmed = !!bootChatId;
         // Strip intentionally-deleted custom modules (tombstones) and heal schema WAL
         // before loadChatState — cancelled settings saves otherwise resurrect NEW_FIELD etc.
         // Also strip global UI prefs from chat partitions so loadChatState cannot clobber
@@ -12219,6 +12355,13 @@ async function runPortraitMigrationIfNeeded() {
             loadChatState(bootChatId);
             // loadChatState can reintroduce tombstoned tags from a stale partition — strip again.
             applyDeletedCustomTagTombstones();
+        }
+        // Compare the just-loaded (disk) memo against this browser's last-seen live copy
+        // BEFORE any boot-time save can mirror the (possibly stale) disk memo over the
+        // recovery evidence. Runs regardless of chatLinkEnabled — the top-level currentMemo
+        // can go stale from a lost disk write either way.
+        if (bootChatId) {
+            await checkLocalMemoRecovery(bootChatId);
         }
         // Baseline WAL after boot so the next cancelled save still has a sync snapshot.
         writeModuleSchemaBackup(bootChatId);
@@ -12254,6 +12397,10 @@ async function runPortraitMigrationIfNeeded() {
                     _saveSettingsTimer = null;
                 }
                 const s = getSettings();
+                // Do this FIRST and unconditionally — localStorage.setItem is synchronous
+                // and cannot be cancelled by the unload that's about to happen, unlike the
+                // disk write below. This is the actual safety net; everything after is best-effort.
+                snapshotMemoToLocalStorage(_currentChatId);
                 // Snapshot chat-linked fields first so loadChatState() on next boot
                 // cannot overwrite live settings with a stale per-chat copy.
                 if (s.chatLinkEnabled && _currentChatId) {

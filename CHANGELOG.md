@@ -2,6 +2,11 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [5.7.102] - 2026-07-18
+
+### Added
+- **Memo recovery net**: mirrors live STATE MEMO / quests / delta into `localStorage` on every save and unload flush. On boot, if disk memo differs from the newer local copy, offers a Restore / Keep disk popup. Mitigates silent memo loss when SillyTavern's non-keepalive settings save is aborted by F5/reload (does not fix core settings rollback for toggles/background/etc.).
+
 ## [5.7.101] - 2026-07-18
 
 ### Added
