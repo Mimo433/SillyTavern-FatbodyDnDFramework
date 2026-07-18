@@ -30,6 +30,52 @@ function substituteLoreMacros(content) {
     }
 }
 
+/**
+ * Stealth end-of-output footer reminder for the first user turn of a chat.
+ * System prompt alone is often ignored; placing this once near the bottom of
+ * early context improves compliance for the rest of the session.
+ * @param {object} settings
+ * @returns {string}
+ */
+function buildEndOfOutputFooterReminder(settings) {
+    let block = `<end_of_output_footer>
+ALWAYS end every output (even after tool chains) with:
+*(Status: [HP]) | (XP: [current]/[next level]) | (Location: [Main, Sub, Sub-sub, etc])*
+*Level [X] | [HH:MM AM/PM], Day [X]*
+Footer shows ONLY {{user}}'s HP/XP/level/location — never party/NPC status or names.
+</end_of_output_footer>
+
+`;
+    if (settings?.use24hTime) {
+        block = block.replace(/\[HH:MM AM\/PM\]/g, '[HH:MM] (24-hour clock, NO AM/PM)');
+    }
+    if (settings?.useDdMmYyFormat) {
+        block = block.replace(/Day\s+\[X\]/g, '[DD/MM/YYYY]');
+    }
+    return substituteLoreMacros(block);
+}
+
+/** @param {any[]} chat */
+function countUserMessagesInChat(chat) {
+    if (!Array.isArray(chat)) return 0;
+    let n = 0;
+    for (const m of chat) {
+        if (m?.is_user) {
+            n++;
+            continue;
+        }
+        const role = String(m?.role || m?.Role || '').toLowerCase().trim();
+        if (role === 'user') n++;
+    }
+    return n;
+}
+
+/** True when this generation is the chat's first user turn (inject footer once). */
+function shouldInjectEndOfOutputFooterReminder(chat, content) {
+    if (content && content.includes('<end_of_output_footer>')) return false;
+    return countUserMessagesInChat(chat) <= 1;
+}
+
 // ── Dice naming helpers ────────────────────────────────────────────────────────
 
 export function getDiceToolName() {
@@ -736,6 +782,13 @@ export function installInterceptor() {
                     const questText = renderQuestsAsPlainText(freshQuests, currentTime);
                     if (questText) injections += questText;
                 }
+            }
+
+            // Once per chat: reinforce the status footer on the first user turn only
+            // (near the bottom of early context — system prompt alone is often ignored).
+            if (shouldInjectEndOfOutputFooterReminder(chat, content)) {
+                injections += buildEndOfOutputFooterReminder(settings);
+                if (settings.debugMode) console.log('[RPG Tracker] End-of-output footer reminder injected (first user turn).');
             }
         }
 

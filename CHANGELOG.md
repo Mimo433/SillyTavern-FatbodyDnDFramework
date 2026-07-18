@@ -2,6 +2,14 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [5.7.95] - 2026-07-18
+
+### Added
+- **Create Persona** option on Other ways to begin (Custom / quick generate), with tappable mobile help.
+- **First-turn footer reminder**: stealth-injects `<end_of_output_footer>` once on each chat's first user message.
+
+### Fixed
+- Create Persona overlay after Custom generate (settings survive panel refresh).
 ## [5.7.94] - 2026-07-18
 
 ### Changed

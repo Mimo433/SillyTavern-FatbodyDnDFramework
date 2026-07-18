@@ -798,7 +798,7 @@ export function showPersonaConfirmOverlay(bioText, charName, wordCount, extraHin
      });
 }
 
-function extractCharNameFromMemo(memo) {
+export function extractCharNameFromMemo(memo) {
     if (!memo) return '';
     const charBlock = memo.match(/\[CHARACTER\]([\s\S]*?)\[\/CHARACTER\]/i);
     if (charBlock) {

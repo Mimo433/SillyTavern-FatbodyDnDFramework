@@ -14,7 +14,7 @@ import { buildImmersionSceneState, renderImmersionViewHtml, getCurrentLocationTe
 import { migrateAllEmbeddedPortraits, countEmbeddedPortraitDataUrls, purgeAllPortraitData, resolvePortraitDisplaySrc, lookupCustomPortraitSrc, collectAllPortraitRefs, isManagedPortraitPath, isPortraitMigrationLocked, setPortraitMigrationLocked, PORTRAIT_STORAGE_FOLDER } from './portrait-storage.js';
 import { loadPanelGeometry, loadDeltaHeight, makeDraggable, makeResizableTR, makeResizableBR, makeResizableBL, setupResizeObserver, setupDeltaResize, canResizePanels, jqueryToggleSlide } from './ui-geometry.js';
 import { applyCustomTheme, openThemeWizard, refreshSavedThemesList, handleRecolor, undoThemeChange } from './theme-manager.js';
-import { showCharacterRollPanel, showPcImportPanel, handleCharacterCreatorGenerate } from './character-creator.js';
+import { showCharacterRollPanel, showPcImportPanel, handleCharacterCreatorGenerate, generatePersonaBio, showPersonaConfirmOverlay, extractCharNameFromMemo } from './character-creator.js';
 import { handleCategorySettings, openCustomFieldEditor, openPromptEditor, refreshOrderList, exportModules, importModulesFromJson, openNpcSectionEditor, openPcSectionEditor } from './ui-editors.js';
 import { openGameSystemWizard, openManageGameSystems, openSystemPromptControlRoom, syncAllNarratorTogglesForUnlockState, extractTopLevelSections, normalizeSectionOrder, getSectionRowDescriptor, transformBaseSectionContent, isBlankSectionContent } from './game-systems.js';
 import { openManageGameCartridges } from './game-cartridges.js';
@@ -960,6 +960,16 @@ function syncOnboardingUI() {
     onboarding.querySelectorAll('#rt-onboarding-gear-tier, #rt-cr-gear-tier').forEach(sel => {
         if (sel instanceof HTMLSelectElement && sel.value !== gearTier) sel.value = gearTier;
     });
+
+    const personaCbSync = /** @type {HTMLInputElement|null} */ (onboarding.querySelector('#rt-onboarding-persona-cb'));
+    if (personaCbSync) personaCbSync.checked = !!s.onboardingCreatePersona;
+    const personaWordsSync = /** @type {HTMLSelectElement|null} */ (onboarding.querySelector('#rt-onboarding-persona-words'));
+    const personaWordsCustomSync = /** @type {HTMLInputElement|null} */ (onboarding.querySelector('#rt-onboarding-persona-words-custom'));
+    if (personaWordsSync) personaWordsSync.value = s.onboardingPersonaWords || '150';
+    if (personaWordsCustomSync) {
+        personaWordsCustomSync.value = s.onboardingPersonaWordsCustom || '';
+        personaWordsCustomSync.style.display = (personaWordsSync?.value === 'other') ? 'inline-block' : 'none';
+    }
 }
 
 /**
@@ -3226,6 +3236,40 @@ async function showLocationImageSettingsMenu(locationPath, onRefresh, locContent
     }
 }
 
+/** Sync Create Persona prefs from the onboarding DOM into settings (call before sendDirectPrompt). */
+function syncOnboardingPersonaPrefsFromDom(el) {
+    if (!el) return;
+    const cb = /** @type {HTMLInputElement|null} */ (el.querySelector('#rt-onboarding-persona-cb'));
+    const wordsSelect = /** @type {HTMLSelectElement|null} */ (el.querySelector('#rt-onboarding-persona-words'));
+    const wordsCustom = /** @type {HTMLInputElement|null} */ (el.querySelector('#rt-onboarding-persona-words-custom'));
+    const s = getSettings();
+    if (cb) s.onboardingCreatePersona = !!cb.checked;
+    if (wordsSelect) s.onboardingPersonaWords = wordsSelect.value || '150';
+    if (wordsCustom) s.onboardingPersonaWordsCustom = wordsCustom.value || '';
+    saveSettings();
+}
+
+/**
+ * After a quick onboarding generate, optionally write a persona bio.
+ * Uses settings (not DOM) because sendDirectPrompt → refreshRenderedView removes the onboarding UI.
+ */
+async function maybeCreateOnboardingPersona(extraHints = '') {
+    const s = getSettings();
+    if (!s.onboardingCreatePersona) return;
+    const wordsRaw = s.onboardingPersonaWords === 'other'
+        ? s.onboardingPersonaWordsCustom
+        : s.onboardingPersonaWords;
+    const wordCount = parseInt(String(wordsRaw || '150'), 10) || 150;
+    const charName = extractCharNameFromMemo(s.currentMemo) || 'My Character';
+    toastr['info'](`Generating persona bio for "${charName}"…`, 'RPG Tracker');
+    const bio = await generatePersonaBio(charName, wordCount, extraHints);
+    if (bio) {
+        showPersonaConfirmOverlay(bio, charName, wordCount, extraHints);
+    } else {
+        toastr['warning']('Character created, but persona bio generation failed.', 'RPG Tracker');
+    }
+}
+
 export function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRefresh = null) {
     const refresh = onRefresh || refreshRenderedView;
 
@@ -3288,6 +3332,32 @@ export function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRe
         });
     }
 
+    // Create Persona (Other ways to begin) — persist + word-count "Other..." toggle
+    const onboardingPersonaCb = /** @type {HTMLInputElement|null} */ (el.querySelector('#rt-onboarding-persona-cb'));
+    if (onboardingPersonaCb) {
+        onboardingPersonaCb.addEventListener('change', () => {
+            getSettings().onboardingCreatePersona = !!onboardingPersonaCb.checked;
+            saveSettings();
+        });
+    }
+    const onboardingPersonaWords = /** @type {HTMLSelectElement|null} */ (el.querySelector('#rt-onboarding-persona-words'));
+    const onboardingPersonaWordsCustom = /** @type {HTMLInputElement|null} */ (el.querySelector('#rt-onboarding-persona-words-custom'));
+    if (onboardingPersonaWords) {
+        onboardingPersonaWords.addEventListener('change', () => {
+            getSettings().onboardingPersonaWords = onboardingPersonaWords.value || '150';
+            if (onboardingPersonaWordsCustom) {
+                onboardingPersonaWordsCustom.style.display = onboardingPersonaWords.value === 'other' ? 'inline-block' : 'none';
+            }
+            saveSettings();
+        });
+    }
+    if (onboardingPersonaWordsCustom) {
+        onboardingPersonaWordsCustom.addEventListener('input', () => {
+            getSettings().onboardingPersonaWordsCustom = onboardingPersonaWordsCustom.value;
+            saveSettings();
+        });
+    }
+
     // Time & Date segmented toggles — Character Creator + onboarding drawer
     const bindDateFormatSeg = (segId) => {
         const segEl = el.querySelector(`#${segId}`);
@@ -3315,6 +3385,37 @@ export function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRe
     if (crStartDateInput) syncStartDateInput(crStartDateInput);
     const drawerStartDateInput = /** @type {HTMLInputElement|null} */ (el.querySelector('#rt-onboarding-start-date'));
     if (drawerStartDateInput) syncStartDateInput(drawerStartDateInput);
+
+
+    // Character Creator / onboarding ? help icons — tap opens popup (hover title still works on desktop)
+    if (!el._crHelpDelegated) {
+        el._crHelpDelegated = true;
+        const helpSelector = '.rt-cr-help-icon[title]';
+        const openCrHelp = (icon) => {
+            const msg = icon.getAttribute('title');
+            if (msg) void showSettingsHelpPopup(msg);
+        };
+        el.addEventListener('click', (e) => {
+            const icon = e.target instanceof Element ? e.target.closest(helpSelector) : null;
+            if (!icon || !el.contains(icon)) return;
+            e.preventDefault();
+            e.stopPropagation();
+            openCrHelp(icon);
+        });
+        el.addEventListener('keydown', (e) => {
+            const icon = e.target instanceof Element ? e.target.closest(helpSelector) : null;
+            if (!icon || !el.contains(icon)) return;
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            e.preventDefault();
+            e.stopPropagation();
+            openCrHelp(icon);
+        });
+    }
+    el.querySelectorAll('.rt-cr-help-icon[title]').forEach(icon => {
+        icon.setAttribute('role', 'button');
+        icon.setAttribute('tabindex', '0');
+        icon.setAttribute('aria-label', 'Show help');
+    });
 
     // Character Creator Generate — delegated so clicks survive refreshRenderedView innerHTML swaps
     if (!el._crGenerateDelegated) {
@@ -3463,7 +3564,15 @@ Gear:
                 if (isCalendar) {
                     customPrompt += `\n\nCRITICAL REALISM RULE: This is a realistic/non-fantasy setting. Do NOT output a [SPELLS] block. Use realistic modern/historical currencies instead of GP/SP/CP.`;
                 }
-                await sendDirectPrompt(customPrompt + combatSkillHint);
+                try {
+                    syncOnboardingPersonaPrefsFromDom(el);
+                    await sendDirectPrompt(customPrompt + combatSkillHint);
+                    const personaHints = `\n\n--- PLAYER PREFERENCES & HINTS ---\nAdditional: ${customInstructions}\n`;
+                    await maybeCreateOnboardingPersona(personaHints);
+                } finally {
+                    el.querySelectorAll('.rt-random-char-btn').forEach(b => b.disabled = false);
+                    btn.textContent = '⚙️ Custom';
+                }
                 return;
             }
 
@@ -3497,7 +3606,16 @@ Gear:
             if (customInstructions) {
                 promptText += `\n\nAdditional setting/instruction constraints: ${customInstructions}. Adapt the name, attributes, description, gear, and spells (if any) to match this setting/instruction perfectly.`;
             }
-            await sendDirectPrompt(promptText + combatSkillHint);
+            try {
+                syncOnboardingPersonaPrefsFromDom(el);
+                await sendDirectPrompt(promptText + combatSkillHint);
+                const personaHints = customInstructions
+                    ? `\n\n--- PLAYER PREFERENCES & HINTS ---\nAdditional: ${customInstructions}\n`
+                    : '';
+                await maybeCreateOnboardingPersona(personaHints);
+            } finally {
+                el.querySelectorAll('.rt-random-char-btn').forEach(b => b.disabled = false);
+            }
         });
     });
 

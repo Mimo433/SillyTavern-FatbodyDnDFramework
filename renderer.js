@@ -1806,6 +1806,22 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                         </div>
                     </div>
                     <textarea id="rt-onboarding-custom-instructions" class="text_pole" placeholder="Custom setting/character instructions (e.g. Victorian London, space marine, gritty realism, cyberpunk decker...)" style="width: 100%; min-height: 40px; max-height: 120px; font-size: 11px; padding: 4px 6px; border-radius: 4px; background: var(--black70a); resize: vertical; margin-top: 2px;">${escapeHtml(obSettings.onboardingCustomInstructions || '')}</textarea>
+                    <div style="display:flex; align-items:center; gap:6px; flex-shrink:0; padding:4px 0 2px; flex-wrap:wrap;">
+                        <label style="display:flex; align-items:center; gap:5px; cursor:pointer; font-size:0.88em;">
+                            <input type="checkbox" id="rt-onboarding-persona-cb"${obSettings.onboardingCreatePersona ? ' checked' : ''} />
+                            <span>Create Persona (Recommended)</span>
+                        </label>
+                        <span class="rt-cr-help-icon" title="When checked, after generating a character the AI also writes an appearance, personality, habits, and backstory. A preview will appear — you can accept (which auto-creates a new SillyTavern persona locked to this chat) or regenerate just this part without re-rolling the whole character. Does not apply when using an existing Persona.">?</span>
+                        <span style="opacity:0.6; font-size:0.8em; margin-left:4px;">Word count:</span>
+                        <select id="rt-onboarding-persona-words" class="text_pole" style="width:65px; font-size:11px; height:22px; padding:2px 4px;">
+                            ${[100, 150, 200, 300, 400, 500, 750, 1000].map(n => {
+                                const sel = String(obSettings.onboardingPersonaWords || '150') === String(n) ? ' selected' : '';
+                                return `<option value="${n}"${sel}>${n}</option>`;
+                            }).join('')}
+                            <option value="other"${obSettings.onboardingPersonaWords === 'other' ? ' selected' : ''}>Other...</option>
+                        </select>
+                        <input id="rt-onboarding-persona-words-custom" type="number" class="text_pole" value="${escapeHtml(String(obSettings.onboardingPersonaWordsCustom || ''))}" style="display:${obSettings.onboardingPersonaWords === 'other' ? 'inline-block' : 'none'}; width:65px; font-size:11px; height:22px; padding:2px 4px; margin-left:4px;" placeholder="e.g. 800" min="50" max="5000" />
+                    </div>
                 </div>
 
                 <!-- Archetype Buttons -->

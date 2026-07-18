@@ -730,6 +730,9 @@ function buildDefaultSettings() {
         onboardingLevel: 1,
         onboardingGearTier: "auto",
         onboardingCustomInstructions: "",
+        onboardingCreatePersona: false,
+        onboardingPersonaWords: "150",
+        onboardingPersonaWordsCustom: "",
         /** Last Character Creator form values, saved when Generate Character is pressed. */
         characterCreatorDraft: null,
         /** True while the Character Creator inline panel is open on the onboarding screen. */
