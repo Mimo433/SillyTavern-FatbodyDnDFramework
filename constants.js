@@ -192,6 +192,7 @@ Rules:
   Elite: Attack +7–10 | Spell DC 18–23
   Boss: Attack +11–15 | Spell DC 23–28
   Legendary: Attack +16–20+ | Spell DC 28–33+
+- Firearms (new combatant damage — including enemies you invent when the GM didn't supply stats): ~2–3× typical D&D/PF firearm dice for lethality (pistol ≥2d8, not 1d8+2; rifle/shotgun higher). Attack bonuses stay normal — only damage scales. Never convert mid-fight.
 
 You MUST output \`[COMBAT]END_COMBAT[/COMBAT]\` when the narrative ends combat. Do not put members of [PARTY] into [COMBAT]`,
   inventory: `Items, loot, equipment, and wealth. You MAY create this section if loot is found and it doesn't currently exist.

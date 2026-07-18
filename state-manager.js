@@ -1917,6 +1917,13 @@ function getSettingsInternal(extensionSettings) {
         s.stockPrompts.combat = DEFAULT_STOCK_PROMPTS.combat;
     }
 
+    // ── MIGRATION: COMBAT — realistic firearm damage when inventing enemies ─────
+    if (s.stockPrompts?.combat &&
+        s.stockPrompts.combat.includes('TIER BANDS') &&
+        !s.stockPrompts.combat.includes('Firearms (new combatant damage')) {
+        s.stockPrompts.combat = DEFAULT_STOCK_PROMPTS.combat;
+    }
+
     // ── MIGRATION: CHARACTER/PARTY/COMBAT — "1 attack" singular grammar ──────────
     if (s.stockPrompts?.character &&
         (s.stockPrompts.character.includes('1 attacks') || s.stockPrompts.character.includes('Ranged (N attacks):'))) {
