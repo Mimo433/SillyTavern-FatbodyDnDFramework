@@ -3692,15 +3692,6 @@ Gear:
         });
     }
 
-    // Custom Sysprompt toggle (onboarding)
-    const onboardingCustomSyspromptCb = el.querySelector('#rt_onboarding_custom_sysprompt');
-    if (onboardingCustomSyspromptCb) {
-        onboardingCustomSyspromptCb.checked = !!getSettings().customSysprompt;
-        onboardingCustomSyspromptCb.addEventListener('change', () => {
-            syncSettingsAndUI(s => { s.customSysprompt = !!onboardingCustomSyspromptCb.checked; });
-        });
-    }
-
     // Apply System Prompt button (onboarding) — same logic as settings panel "Update Main Sysprompt"
     const onboardingBtnApply = el.querySelector('#rt_onboarding_btn_update_sysprompt');
     if (onboardingBtnApply) {
