@@ -940,10 +940,6 @@ function syncOnboardingUI() {
         if (cb) cb.checked = key === 'CYOA_mode' ? s.syspromptModules?.CYOA_mode === true : !!s.syspromptModules?.[key];
     }
 
-    // Custom Sysprompt Sync
-    const customSyspromptCb = /** @type {HTMLInputElement|null} */ (onboarding.querySelector('#rt_onboarding_custom_sysprompt'));
-    if (customSyspromptCb) customSyspromptCb.checked = !!s.customSysprompt;
-
     // Time & Date sync — Character Creator + "Other ways to begin" drawer
     syncSegToggle(onboarding.querySelector('#rt-cr-date-seg'), s.useDdMmYyFormat ? 'date' : 'day');
     syncSegToggle(onboarding.querySelector('#rt-cr-clock-seg'), s.use24hTime ? '24' : '12');

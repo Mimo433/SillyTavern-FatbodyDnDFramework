@@ -2040,7 +2040,7 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                 <!-- Narrator Configuration (Salad Bar) -->
                 <div style="margin-top: 12px; border: 1px solid rgba(255,255,255,0.12); border-radius: 6px; padding: 10px; background: rgba(255,255,255,0.03); width: 100%; box-sizing: border-box;">
                     <b style="color: var(--rt-accent); font-size: 14px; display: block; margin-bottom: 6px;">Narrator Configuration</b>
-                    <small style="display: block; margin-bottom: 8px; opacity: 0.65; font-style: italic; line-height: 1.3;">Select your preferred modes and components. Changes apply to your system prompt automatically (unless Custom Sysprompt Mode is on).</small>
+                    <small style="display: block; margin-bottom: 8px; opacity: 0.65; font-style: italic; line-height: 1.3;">Select your preferred modes and components. Changes apply to your system prompt automatically.</small>
                     
                     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 4px;">
                         <span style="font-size: 0.85em; font-weight: bold; opacity: 0.8;">RNG</span>
@@ -2122,11 +2122,6 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                             <span>💞 Relationship System (BETA)</span>
                         </label>
                     </div>
-
-                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-top: 4px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">
-                        <input type="checkbox" id="rt_onboarding_custom_sysprompt" />
-                        <span style="font-size: 0.88em; opacity: 0.8;">Custom Sysprompt Mode — I'll manage my own system prompt</span>
-                    </label>
 
                     <button id="rt_onboarding_btn_update_sysprompt" style="width: 100%; margin-top: 10px; padding: 7px 12px; background: rgba(0, 200, 140, 0.18); border: 1px solid #00c88c; border-radius: 4px; color: var(--rt-text, #eee); font-size: 0.88em; cursor: pointer;" title="Writes the system prompt to your Quick Prompt Main box based on the options selected above.">
                         ↑ Apply System Prompt
