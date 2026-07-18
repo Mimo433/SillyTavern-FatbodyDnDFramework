@@ -98,7 +98,13 @@ Finesse weapons (rapier, dagger, scimitar, etc.) may use DEX instead of STR in m
 </weapon_proficiencies>
 
 <attacks_per_round>
-Simplified APR: second attack unlocks at exactly +8 BAB, at −5 to that attack. No further attacks beyond 2, regardless of BAB.
+Simplified APR: second attack unlocks at exactly +8 total Attack/BAB, at −5. No further attacks from BAB alone, regardless of level.
+
+DUAL-WIELDING (the ONLY path to a 3rd attack): wielding two light/one-handed melee weapons (or a weapon + usable offhand weapon) grants one additional offhand attack as part of the same attack action. The offhand attack is always at −5 from the base Attack total (before any BAB-based second-attack penalty) and does NOT add the STR/DEX ability modifier to damage, unless a specific trait/feat states otherwise.
+- This offhand attack stacks with the BAB +8 second attack, allowing a maximum of 3 total attacks per round.
+- 3 is the absolute ceiling — no combination of BAB, dual-wielding, or abilities may ever exceed 3 attacks per round.
+- Dual-wielding without BAB +8 = 2 total attacks (primary + offhand). Dual-wielding with BAB +8 = 3 total attacks (primary, primary second at −5, offhand at −5).
+- Losing/sheathing the offhand weapon removes the offhand attack immediately; it is gear-dependent, not a permanent unlock.
 </attacks_per_round>
 
 <saving_throws>

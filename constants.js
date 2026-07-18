@@ -27,7 +27,14 @@ export const COLOR_EXAMPLES = `<font color=#ff5555>Red Text</font>
 // ── Default module prompts ─────────────────────────────────────────────────────
 
 /** Stock-prompt APR note (sysprompt uses <attacks_per_round> instead). */
-export const ATTACKS_PER_ROUND_STOCK_HINT = `APR: Second attack at exactly +8 BAB, at −5; no further attacks. Pre-calculate on the Combat line: Ranged (N attacks): +X or +C/+D | Melee (N attacks): +X or +A/+B — N=1 below BAB +8; N=2 at BAB +8+ (second slash value is 5 lower).`;
+export const ATTACKS_PER_ROUND_STOCK_HINT = `APR: Second attack at exactly BAB +8, at −5. DUAL-WIELDING (two light/one-handed melee weapons or offhand weapon equipped) adds one further offhand attack at −5 from base total, with NO ability modifier added to offhand damage (unless a trait/feat overrides this) — this is the only way to exceed 2 attacks. Maximum 3 attacks per round, ever.
+
+Pre-calculate on the Combat line: Ranged (N attacks): +X or +C/+D | Melee (N attacks): +X, +A/+B, or +A/+B/+C.
+- N=1: below BAB +8, no offhand weapon.
+- N=2: BAB +8+ (no offhand), OR below BAB +8 with dual-wielding (primary + offhand at −5).
+- N=3: BAB +8+ AND dual-wielding (primary, primary second at −5, offhand at −5).
+
+Upon LEVEL UP or equipment change (equipping/removing an offhand weapon), recalculate N and update the Combat line accordingly.`;
 
 /** How Combat-line Melee/Ranged totals are derived (used in stock prompts). */
 export const ATTACK_TOTAL_FORMULA_HINT = `ATTACK TOTALS: Melee Total Formula: Melee Total = BAB + STR modifier + Weapon enhancement bonus. Ranged Total Formula: Ranged Total = BAB + DEX modifier + Weapon enhancement bonus. The Melee and Ranged values on the Combat line are these totals (weapon enhancement = +1/+2/+3 from the equipped weapon; 0 if mundane). Finesse: melee attacks with finesse weapons (rapier, dagger, scimitar, etc.) use DEX modifier instead of STR when the wielder benefits. ${ATTACKS_PER_ROUND_STOCK_HINT}`;
@@ -163,12 +170,21 @@ Abilities: Brutal Strike
 Other: Elite Tier
 Status: Healthy
 
+Example (Elite dual-wielder, showing the 3-attack case):
+Elite Duelist: 40/40 HP
+Att/def: Twin Shortswords (3 attacks, +9/+4/+4 / 1d6+3 P) | Studded Leather (AC: 16)
+Saves: Fort +4, Ref +6, Will +3
+Abilities: Dual Strike
+Other: Elite Tier, Dual-Wielder
+Status: Healthy
+
 Rules:
 - Pre-calculate Spell Atk, Spell DC, and weapon bonuses when the enemy is first declared; use listed values directly — do not invent or re-derive mid-fight.
 - Martial: weapon Attack is the primary threat. Never output Spells:.
 - Caster: Spell Atk for spell attack rolls; Spell DC for saving-throw spells. Backup weapon Attack should be weaker than Spell Atk. Output ONE Spells: line per level (Cantrips, then Level 1, etc.) and track avail/max slots as they are spent.
 - Hybrid gishes: use the CASTER Att/def + Spells pattern; backup weapon may match martial Attack of the same tier.
-- APR: second attack unlocks at total Attack bonus +8, at −5 to that attack; no further attacks regardless of tier.
+- APR: second attack unlocks at total Attack bonus +8, at −5. DUAL-WIELDING is the only way an NPC exceeds 2 attacks: an offhand weapon adds one further attack at −5 from base total, no ability modifier on offhand damage unless a trait says otherwise. Maximum 3 attacks per round, ever, regardless of tier.
+- Weapon notation reflects this directly: Weapon (N attacks, +X, +A/+B, or +A/+B/+C / damage) | Armor (AC: Z). A dual-wielding NPC below Attack +8 shows N=2 (primary/offhand); at Attack +8+ shows N=3 (primary/primary second/offhand).
 - TIER BANDS for creating enemies on user request if there's no current narrative to record them from (keep Attack/Spell DC within the declared tier — do not mix bands):
   Minion: Attack +0–2 | Spell DC 12–14
   Soldier: Attack +3–6 | Spell DC 14–18
@@ -407,7 +423,13 @@ Finesse weapons (rapier, dagger, scimitar, etc.) may use DEX instead of STR in m
 </weapon_proficiencies>
 
 <attacks_per_round>
-Simplified APR: second attack unlocks at exactly +8 BAB, at −5 to that attack. No further attacks beyond 2, regardless of BAB.
+Simplified APR: second attack unlocks at exactly +8 total Attack/BAB, at −5. No further attacks from BAB alone, regardless of level.
+
+DUAL-WIELDING (the ONLY path to a 3rd attack): wielding two light/one-handed melee weapons (or a weapon + usable offhand weapon) grants one additional offhand attack as part of the same attack action. The offhand attack is always at −5 from the base Attack total (before any BAB-based second-attack penalty) and does NOT add the STR/DEX ability modifier to damage, unless a specific trait/feat states otherwise.
+- This offhand attack stacks with the BAB +8 second attack, allowing a maximum of 3 total attacks per round.
+- 3 is the absolute ceiling — no combination of BAB, dual-wielding, or abilities may ever exceed 3 attacks per round.
+- Dual-wielding without BAB +8 = 2 total attacks (primary + offhand). Dual-wielding with BAB +8 = 3 total attacks (primary, primary second at −5, offhand at −5).
+- Losing/sheathing the offhand weapon removes the offhand attack immediately; it is gear-dependent, not a permanent unlock.
 </attacks_per_round>
 
 <saving_throws>
@@ -638,7 +660,13 @@ Finesse weapons (rapier, dagger, scimitar, etc.) may use DEX instead of STR in m
 </weapon_proficiencies>
 
 <attacks_per_round>
-Simplified APR: second attack unlocks at exactly +8 BAB, at −5 to that attack. No further attacks beyond 2, regardless of BAB.
+Simplified APR: second attack unlocks at exactly +8 total Attack/BAB, at −5. No further attacks from BAB alone, regardless of level.
+
+DUAL-WIELDING (the ONLY path to a 3rd attack): wielding two light/one-handed melee weapons (or a weapon + usable offhand weapon) grants one additional offhand attack as part of the same attack action. The offhand attack is always at −5 from the base Attack total (before any BAB-based second-attack penalty) and does NOT add the STR/DEX ability modifier to damage, unless a specific trait/feat states otherwise.
+- This offhand attack stacks with the BAB +8 second attack, allowing a maximum of 3 total attacks per round.
+- 3 is the absolute ceiling — no combination of BAB, dual-wielding, or abilities may ever exceed 3 attacks per round.
+- Dual-wielding without BAB +8 = 2 total attacks (primary + offhand). Dual-wielding with BAB +8 = 3 total attacks (primary, primary second at −5, offhand at −5).
+- Losing/sheathing the offhand weapon removes the offhand attack immediately; it is gear-dependent, not a permanent unlock.
 </attacks_per_round>
 
 <saving_throws>

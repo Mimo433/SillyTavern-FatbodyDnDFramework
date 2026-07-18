@@ -2,6 +2,12 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [5.7.101] - 2026-07-18
+
+### Added
+- **Dual-wielding**: only path to a 3rd attack per round (offhand at −5, no ability mod on offhand damage unless a trait overrides). Hard cap of 3 APR everywhere; gear-dependent (sheathing offhand removes it).
+- Documented in `<attacks_per_round>`, CHARACTER/PARTY ATTACK TOTALS (N=1/2/3), and `[COMBAT]` APR/notation plus Elite Duelist 3-attack example.
+
 ## [5.7.96] - 2026-07-18
 
 ### Changed
