@@ -2,6 +2,11 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [5.8.1] - 2026-07-18
+
+### Fixed
+- **Memo recovery net**: no longer lets early boot `saveSettings()` overwrite a good `localStorage` backup with a wiped disk memo (which made the restore popup silently skip). Gate snapshots until recovery runs; refuse to shrink richer backups; run recovery earlier and again on first `CHAT_CHANGED`; log skip reasons to the console.
+
 ## [5.8.0] - 2026-07-18
 
 ### Added

@@ -66,14 +66,22 @@ const RT_RECOVERY_MAX_CHATS = 8;
 const RT_RECOVERY_MAX_AGE_MS = 48 * 60 * 60 * 1000; // 48h — older snapshots are probably irrelevant
 /** True while a recovery prompt is open, so routine saves can't overwrite the evidence. */
 let _rtRecoveryPromptActive = false;
+/**
+ * False until boot recovery has inspected localStorage. Until then, refuse to write
+ * snapshots — early init saveSettings() otherwise copies the wiped disk memo over the
+ * good backup, then the recovery check sees a match and stays silent.
+ */
+let _rtRecoveryBootCheckDone = false;
 
 /**
  * Mirrors the live memo/quests/delta for one chat into localStorage. Cheap, synchronous,
  * safe to call on every save — completely independent of chatLinkEnabled or network status.
  * @param {string|null} chatId
+ * @param {{ force?: boolean, allowDowngrade?: boolean }} [opts]
  */
-function snapshotMemoToLocalStorage(chatId) {
+function snapshotMemoToLocalStorage(chatId, opts = {}) {
     if (!chatId || _rtRecoveryPromptActive) return;
+    if (!_rtRecoveryBootCheckDone && !opts.force) return;
     try {
         const s = getSettings();
         const memo = s.currentMemo || '';
@@ -82,6 +90,16 @@ function snapshotMemoToLocalStorage(chatId) {
         if (!memo.trim()) return;
         let map = {};
         try { map = JSON.parse(localStorage.getItem(RT_RECOVERY_LS_KEY) || '{}') || {}; } catch (_) { map = {}; }
+        const existing = map[chatId];
+        // Never shrink a richer backup (settings wipe → short/empty disk memo).
+        if (!opts.allowDowngrade && existing?.currentMemo && existing.currentMemo.length > memo.length) {
+            console.warn('[RPG Tracker] Refusing to shrink local memo backup', {
+                chatId,
+                localChars: existing.currentMemo.length,
+                incomingChars: memo.length,
+            });
+            return;
+        }
         map[chatId] = {
             ts: Date.now(),
             currentMemo: memo,
@@ -105,28 +123,50 @@ function snapshotMemoToLocalStorage(chatId) {
  * @param {string|null} chatId
  */
 async function checkLocalMemoRecovery(chatId) {
-    if (!chatId) return;
-    let entry = null;
+    let prompted = false;
+    let restored = false;
     try {
-        const map = JSON.parse(localStorage.getItem(RT_RECOVERY_LS_KEY) || '{}') || {};
-        entry = map[chatId] || null;
-    } catch (_) { entry = null; }
-    if (!entry || !entry.currentMemo || !entry.currentMemo.trim()) return;
-    if (Date.now() - (entry.ts || 0) > RT_RECOVERY_MAX_AGE_MS) return;
+        if (!chatId) {
+            console.warn('[RPG Tracker] Memo recovery skipped: no chatId yet');
+            return;
+        }
+        let entry = null;
+        try {
+            const map = JSON.parse(localStorage.getItem(RT_RECOVERY_LS_KEY) || '{}') || {};
+            entry = map[chatId] || null;
+        } catch (_) { entry = null; }
+        if (!entry || !entry.currentMemo || !entry.currentMemo.trim()) {
+            console.warn('[RPG Tracker] Memo recovery skipped: no local backup for this chat', { chatId });
+            return;
+        }
+        if (Date.now() - (entry.ts || 0) > RT_RECOVERY_MAX_AGE_MS) {
+            console.warn('[RPG Tracker] Memo recovery skipped: local backup too old', { chatId, ts: entry.ts });
+            return;
+        }
 
-    const s = getSettings();
-    if (entry.currentMemo === (s.currentMemo || '')) return; // disk already matches; nothing to recover
+        const s = getSettings();
+        const diskMemo = s.currentMemo || '';
+        if (entry.currentMemo === diskMemo) {
+            console.warn('[RPG Tracker] Memo recovery skipped: disk already matches local backup', {
+                chatId,
+                chars: diskMemo.length,
+            });
+            return;
+        }
 
-    const ctx = SillyTavern.getContext();
-    if (typeof ctx.callGenericPopup !== 'function') return;
+        const ctx = SillyTavern.getContext();
+        if (typeof ctx.callGenericPopup !== 'function') {
+            console.warn('[RPG Tracker] Memo recovery skipped: popup API unavailable');
+            return;
+        }
 
-    _rtRecoveryPromptActive = true;
-    try {
+        prompted = true;
+        _rtRecoveryPromptActive = true;
         const ageMins = Math.max(1, Math.round((Date.now() - entry.ts) / 60000));
         const popupContent = `<div style="text-align:left;">
             <p><b>Possible unsaved tracker data found.</b></p>
             <p>This browser has a newer local copy of the STATE MEMO for this chat (from ~${ageMins} min ago) than what's currently on disk. This can happen if the page reloaded before SillyTavern finished writing settings.json.</p>
-            <p>Disk memo: ${(s.currentMemo || '').length.toLocaleString()} chars &nbsp;|&nbsp; Local backup: ${entry.currentMemo.length.toLocaleString()} chars</p>
+            <p>Disk memo: ${diskMemo.length.toLocaleString()} chars &nbsp;|&nbsp; Local backup: ${entry.currentMemo.length.toLocaleString()} chars</p>
             <p>Restore the local backup?</p>
         </div>`;
         const result = await ctx.callGenericPopup(popupContent, ctx.POPUP_TYPE?.CONFIRM ?? 1, '', { okButton: 'Restore', cancelButton: 'Keep disk version' });
@@ -139,15 +179,32 @@ async function checkLocalMemoRecovery(chatId) {
             if (typeof refreshRenderedView === 'function') refreshRenderedView();
             if (typeof syncMemoView === 'function') syncMemoView();
             toastr['success']('Local backup restored.', 'RPG Tracker');
+            restored = true;
         }
     } catch (err) {
         console.warn('[RPG Tracker] Local memo recovery prompt failed:', err);
     } finally {
         _rtRecoveryPromptActive = false;
-        // Whatever the outcome, re-sync the recovery net to the now-current state so we
-        // don't nag again for the same delta on the next reload.
-        snapshotMemoToLocalStorage(chatId);
+        // Only seal the boot check when we had a real chat id. A null bootChatId must
+        // leave the gate open so the first CHAT_CHANGED can still run recovery.
+        if (chatId) {
+            _rtRecoveryBootCheckDone = true;
+            // After an explicit choice: sync local to the live memo (allow shrink if user kept disk).
+            // If we never prompted, do not force a shrink — never-downgrade guard still applies.
+            if (prompted) {
+                snapshotMemoToLocalStorage(chatId, { force: true, allowDowngrade: !restored });
+            }
+        }
     }
+}
+
+/** Run recovery once chat identity is known (boot or first CHAT_CHANGED). */
+async function ensureLocalMemoRecovery(chatId) {
+    if (_rtRecoveryBootCheckDone || !chatId) return;
+    await checkLocalMemoRecovery(chatId);
+    // checkLocalMemoRecovery sets the flag in finally; if it returned before try's finally
+    // on !chatId we already returned — still mark done when we had a chatId.
+    if (!_rtRecoveryBootCheckDone) _rtRecoveryBootCheckDone = true;
 }
 let _pillDeselectHandler = null;
 let renderRouterUI = null;
@@ -1814,6 +1871,7 @@ function onChatChanged(newChatId) {
     if (!emitHadId || oldChatId === resolvedId) {
         _currentChatId = resolvedId;
         _chatIdBootConfirmed = true;
+        void ensureLocalMemoRecovery(resolvedId);
         updateChatLinkUI();
         return;
     }
@@ -1833,6 +1891,7 @@ function onChatChanged(newChatId) {
         s.routerCampaignPrefix = bootPrefix || '';
         syncRouterPrefixDisplays(bootPrefix || '');
         scheduleAgentManifestRefresh(true);
+        void ensureLocalMemoRecovery(resolvedId);
         updateChatLinkUI();
         return;
     }
@@ -11375,6 +11434,11 @@ async function runPortraitMigrationIfNeeded() {
     const pm = ctx.getPresetManager ? ctx.getPresetManager() : null;
 
     getSettings();
+    // Recover BEFORE any init saveSettings can clobber the localStorage backup.
+    {
+        const earlyChatId = ctx.chatId || ctx.getCurrentChatId?.() || null;
+        if (earlyChatId) await ensureLocalMemoRecovery(earlyChatId);
+    }
     migrateCustomFields();
     createPanel();
 
@@ -12363,7 +12427,15 @@ async function runPortraitMigrationIfNeeded() {
         // recovery evidence. Runs regardless of chatLinkEnabled — the top-level currentMemo
         // can go stale from a lost disk write either way.
         if (bootChatId) {
-            await checkLocalMemoRecovery(bootChatId);
+            await ensureLocalMemoRecovery(bootChatId);
+        } else {
+            console.warn('[RPG Tracker] Memo recovery deferred: no boot chatId');
+            setTimeout(() => {
+                if (!_rtRecoveryBootCheckDone) {
+                    console.warn('[RPG Tracker] Memo recovery gate opened after timeout (no chat yet)');
+                    _rtRecoveryBootCheckDone = true;
+                }
+            }, 20000);
         }
         // Baseline WAL after boot so the next cancelled save still has a sync snapshot.
         writeModuleSchemaBackup(bootChatId);
