@@ -29,10 +29,11 @@ export const COLOR_EXAMPLES = `<font color=#ff5555>Red Text</font>
 /** Stock-prompt APR note (sysprompt uses <attacks_per_round> instead). */
 export const ATTACKS_PER_ROUND_STOCK_HINT = `APR: Second attack at exactly BAB +8, at −5. DUAL-WIELDING (two light/one-handed melee weapons or offhand weapon equipped) adds one further offhand attack at −5 from base total, with NO ability modifier added to offhand damage (unless a trait/feat overrides this) — this is the only way to exceed 2 attacks. Maximum 3 attacks per round, ever.
 
-Pre-calculate on the Combat line: Ranged (N attacks): +X or +C/+D | Melee (N attacks): +X, +A/+B, or +A/+B/+C.
-- N=1: below BAB +8, no offhand weapon.
-- N=2: BAB +8+ (no offhand), OR below BAB +8 with dual-wielding (primary + offhand at −5).
-- N=3: BAB +8+ AND dual-wielding (primary, primary second at −5, offhand at −5).
+Pre-calculate on the Combat line: Ranged (1 attack / 2 attacks / 3 attacks): +X or +C/+D | Melee (1 attack / 2 attacks / 3 attacks): +X, +A/+B, or +A/+B/+C.
+Grammar: use singular "attack" when N=1; plural "attacks" when N≥2. Never write "1 attacks".
+- N=1: below BAB +8, no offhand weapon → (1 attack)
+- N=2: BAB +8+ (no offhand), OR below BAB +8 with dual-wielding (primary + offhand at −5) → (2 attacks)
+- N=3: BAB +8+ AND dual-wielding (primary, primary second at −5, offhand at −5) → (3 attacks)
 
 Upon LEVEL UP or equipment change (equipping/removing an offhand weapon), recalculate N and update the Combat line accordingly.`;
 
@@ -43,7 +44,7 @@ export const DEFAULT_STOCK_PROMPTS = {
   character: `Main character's core stats. Use this format:
 [CHARACTER]
 {{user}} (Class): current/max HP
-Combat: BAB: +X | Ranged (N attacks): +X or +C/+D | Melee (N attacks): +X or +A/+B | Base AC: X | Total AC: Z
+Combat: BAB: +X | Ranged (1 attack / 2 attacks / 3 attacks): +X or +C/+D | Melee (1 attack / 2 attacks / 3 attacks): +X, +A/+B, or +A/+B/+C | Base AC: X | Total AC: Z
 Gear: Weapon1 (stats) | Weapon2, if exists, (stats) | Armor Name (+Y AC)
 Proficiencies: Category1, Category2
 Attr: STR X (mod), DEX X (mod), CON X (mod), INT X (mod), WIS X (mod), CHA X (mod)
@@ -59,7 +60,7 @@ ${ATTACK_TOTAL_FORMULA_HINT}
 Upon LEVEL UP, incorporate attribute changes.`,
   party: `Companion/Party members. Use this format for each member:
 Name (Class): current/max HP
-Combat: BAB: +X | Ranged (N attacks): +X or +C/+D | Melee (N attacks): +X or +A/+B | Base AC: X | Total AC: Z
+Combat: BAB: +X | Ranged (1 attack / 2 attacks / 3 attacks): +X or +C/+D | Melee (1 attack / 2 attacks / 3 attacks): +X, +A/+B, or +A/+B/+C | Base AC: X | Total AC: Z
 Gear: Weapon (stats) | Armor Name (+Y AC)
 Proficiencies: Category1, Category2
 Attr: STR X (mod), DEX X (mod), CON X (mod), INT X (mod), WIS X (mod), CHA X (mod)
@@ -85,7 +86,7 @@ TRIGGERS:
 PERSISTENCE: If [PARTY] changes, you MUST output the ENTIRE block (all remaining members), per standard BLOCK PERSISTENCE rules. If it had no changes this turn, omit it entirely from your output.
 
 Example: [PARTY]Elara (Ranger): 26/45 HP
-Combat: BAB: +3 | Ranged (1 attacks): +6 | Melee (1 attacks): +4 | Base AC: 13 | Total AC: 15
+Combat: BAB: +3 | Ranged (1 attack): +6 | Melee (1 attack): +4 | Base AC: 13 | Total AC: 15
 Gear: Shortbow (1d6+3 P) | Leather Armor (+2 AC)
 Proficiencies: Simple Weapons, Martial Weapons
 Attr: STR 12 (+1), DEX 16 (+3), CON 14 (+2), INT 10 (+0), WIS 14 (+2), CHA 12 (+1)
@@ -139,7 +140,7 @@ Other: Trait1 (description), Trait2 (description)
 Status: Effect (duration)
 
 MARTIAL (fighters, beasts, thugs — omit Spells: entirely):
-Att/def: Weapon (N attacks, +X / damage) | Armor (AC: Z)
+Att/def: Weapon (1 attack / 2 attacks / 3 attacks, +X / damage) | Armor (AC: Z)
 Example:
 Bandit: 18/18 HP
 Att/def: Longsword (1 attack, +5 / 1d8+2 S) | Scale Mail (AC: 15)
@@ -149,7 +150,7 @@ Other: Soldier Tier
 Status: Healthy
 
 CASTER (mages, priests, warlocks — must include Spells: lines):
-Att/def: Spell Atk +X | Spell DC Y | Backup Weapon (1 attacks, +Z / damage) | Armor (AC: Z)
+Att/def: Spell Atk +X | Spell DC Y | Backup Weapon (1 attack, +Z / damage) | Armor (AC: Z)
 Spells: Cantrips: Spell1, Spell2
 Spells: Level N (avail/max): Spell1, Spell2
 Example:
@@ -184,7 +185,7 @@ Rules:
 - Caster: Spell Atk for spell attack rolls; Spell DC for saving-throw spells. Backup weapon Attack should be weaker than Spell Atk. Output ONE Spells: line per level (Cantrips, then Level 1, etc.) and track avail/max slots as they are spent.
 - Hybrid gishes: use the CASTER Att/def + Spells pattern; backup weapon may match martial Attack of the same tier.
 - APR: second attack unlocks at total Attack bonus +8, at −5. DUAL-WIELDING is the only way an NPC exceeds 2 attacks: an offhand weapon adds one further attack at −5 from base total, no ability modifier on offhand damage unless a trait says otherwise. Maximum 3 attacks per round, ever, regardless of tier.
-- Weapon notation reflects this directly: Weapon (N attacks, +X, +A/+B, or +A/+B/+C / damage) | Armor (AC: Z). A dual-wielding NPC below Attack +8 shows N=2 (primary/offhand); at Attack +8+ shows N=3 (primary/primary second/offhand).
+- Weapon notation reflects this directly: Weapon (1 attack / 2 attacks / 3 attacks, +X, +A/+B, or +A/+B/+C / damage) | Armor (AC: Z). Use singular "attack" when N=1; plural "attacks" when N≥2 — never "1 attacks". A dual-wielding NPC below Attack +8 shows N=2 (primary/offhand); at Attack +8+ shows N=3 (primary/primary second/offhand).
 - TIER BANDS for creating enemies on user request if there's no current narrative to record them from (keep Attack/Spell DC within the declared tier — do not mix bands):
   Minion: Attack +0–2 | Spell DC 12–14
   Soldier: Attack +3–6 | Spell DC 14–18
@@ -503,8 +504,8 @@ Context includes "World Progression" reports (background/off-screen macro events
 On joining: state *(Name joins the party)* and declare their profile:
 [PARTY]
 Name (Class): current/max HP
-Combat: BAB: +X | Ranged (N attacks): +X or +C/+D | Melee (N attacks): +X or +A/+B | Base AC: X | Total AC: Z
-(Melee = BAB + STR mod + weapon enhancement; Ranged = BAB + DEX mod + weapon enhancement; N attacks = 1 below BAB +8, 2 at +8+ with second at −5)
+Combat: BAB: +X | Ranged (1 attack / 2 attacks / 3 attacks): +X or +C/+D | Melee (1 attack / 2 attacks / 3 attacks): +X, +A/+B, or +A/+B/+C | Base AC: X | Total AC: Z
+(Melee = BAB + STR mod + weapon enhancement; Ranged = BAB + DEX mod + weapon enhancement; use singular "attack" when N=1, plural "attacks" when N≥2 — never "1 attacks"; N=1 below BAB +8 with no offhand, N=2 at BAB +8+ or dual-wielding below +8, N=3 at BAB +8+ with dual-wielding)
 Gear: Primary_Weapon (Damage_Die + Mod / Type) | Armor_Name (+Y AC)
 Proficiencies: Category1, Category2
 Attr: STR X (mod), DEX X (mod), CON X (mod), INT X (mod), WIS X (mod), CHA X (mod)
@@ -740,8 +741,8 @@ Context includes "World Progression" reports (background/off-screen macro events
 On joining: state *(Name joins the party)* and declare their profile:
 [PARTY]
 Name (Class): current/max HP
-Combat: BAB: +X | Ranged (N attacks): +X or +C/+D | Melee (N attacks): +X or +A/+B | Base AC: X | Total AC: Z
-(Melee = BAB + STR mod + weapon enhancement; Ranged = BAB + DEX mod + weapon enhancement; N attacks = 1 below BAB +8, 2 at +8+ with second at −5)
+Combat: BAB: +X | Ranged (1 attack / 2 attacks / 3 attacks): +X or +C/+D | Melee (1 attack / 2 attacks / 3 attacks): +X, +A/+B, or +A/+B/+C | Base AC: X | Total AC: Z
+(Melee = BAB + STR mod + weapon enhancement; Ranged = BAB + DEX mod + weapon enhancement; use singular "attack" when N=1, plural "attacks" when N≥2 — never "1 attacks"; N=1 below BAB +8 with no offhand, N=2 at BAB +8+ or dual-wielding below +8, N=3 at BAB +8+ with dual-wielding)
 Gear: Primary_Weapon (Damage_Die + Mod / Type) | Armor_Name (+Y AC)
 Proficiencies: Category1, Category2
 Attr: STR X (mod), DEX X (mod), CON X (mod), INT X (mod), WIS X (mod), CHA X (mod)

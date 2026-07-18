@@ -3503,7 +3503,7 @@ export function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRe
 Use this exact style:
 [CHARACTER]
 Barnaby "Salt-Eye" Finch (Pirate): 36/36 HP
-Combat: BAB: +4 | Ranged (1 attacks): +6 | Melee (1 attacks): +5
+Combat: BAB: +4 | Ranged (1 attack): +6 | Melee (1 attack): +5
 Gear: Cutlass (1d6+2 Slashing) [E], AC: 14 (Leather Jerkin)
 Attr: STR 14 (+2), DEX 15 (+2), CON 14 (+2), INT 12 (+1), WIS 10 (+0), CHA 14 (+2)
 Saves: Fort +6 | Ref +6 | Will +1
@@ -10914,7 +10914,7 @@ const RENDER_HINTS = {
     CHARACTER: {
         label: 'Entity Rows — HP Bars (Characters)',
         description: 'Each entity is one row with an HP bar. First line: "Name (Race/Class): cur/max HP". Sub-lines: Combat (BAB), Gear, Attr, Saves, Skills, Traits, Abilities, HD, Status.',
-        example: 'Korgath Iron-Hide (Dwarven Warrior): 32/32 HP\nCombat: BAB: +2 | Ranged (1 attacks): +3 | Melee (1 attacks): +5\nGear: Volcanic Mace (+1 / 2d6+3), AC: 13 (Furs)\nAttr: STR 16 (+3), DEX 12 (+1), CON 16 (+3), INT 8 (-1), WIS 16 (+3), CHA 6 (-2)\nSaves: Fort +6 | Ref +1 | Will +1\nSkills: Athletics +5, Intimidation +4\nTraits: Darkvision (60 ft)\nAbilities: Second Wind (1/1), Action Surge (1/1)\nHD: d10 (2/2)\nStatus: Healthy'
+        example: 'Korgath Iron-Hide (Dwarven Warrior): 32/32 HP\nCombat: BAB: +2 | Ranged (1 attack): +3 | Melee (1 attack): +5\nGear: Volcanic Mace (+1 / 2d6+3), AC: 13 (Furs)\nAttr: STR 16 (+3), DEX 12 (+1), CON 16 (+3), INT 8 (-1), WIS 16 (+3), CHA 6 (-2)\nSaves: Fort +6 | Ref +1 | Will +1\nSkills: Athletics +5, Intimidation +4\nTraits: Darkvision (60 ft)\nAbilities: Second Wind (1/1), Action Surge (1/1)\nHD: d10 (2/2)\nStatus: Healthy'
     },
     COMBAT: {
         label: 'Entity Rows — HP Bars (Enemies)',
