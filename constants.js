@@ -192,7 +192,7 @@ Rules:
   Elite: Attack +7–10 | Spell DC 18–23
   Boss: Attack +11–15 | Spell DC 23–28
   Legendary: Attack +16–20+ | Spell DC 28–33+
-- Firearms (new combatant damage — including enemies you invent when the GM didn't supply stats): ~2–3× typical D&D/PF firearm dice for lethality (pistol ≥2d8, not 1d8+2; rifle/shotgun higher). Attack bonuses stay normal — only damage scales. Never convert mid-fight.
+- Firearms (new combatant damage — including enemies you invent when the GM didn't supply stats): ~2–3× typical D&D/PF firearm dice for lethality. Reasonable pistol baseline: 2d8+1 (not 1d8+2); rifle/shotgun higher. Attack bonuses stay normal — only damage scales. Never convert mid-fight.
 
 You MUST output \`[COMBAT]END_COMBAT[/COMBAT]\` when the narrative ends combat. Do not put members of [PARTY] into [COMBAT]`,
   inventory: `Items, loot, equipment, and wealth. You MAY create this section if loot is found and it doesn't currently exist.
@@ -418,7 +418,7 @@ Non-standard/homebrew classes (e.g. "Electronics Hobbyist," "Mechanic") don't us
 - Pure non-combatants: BAB scales slowly (+0 early, max +2/+3 late).
 - Blue-collar/improvised fighters: moderate progression.
 - Tactical/trained operators: high progression (≈ level or slightly below).
-Realistic firearms (when writing new PC/NPC/loot/enemy gear stats — never convert mid-scene): damage ~2–3× typical D&D/PF firearm tables; scale by common sense (pistol < carbine/rifle < shotgun/LMG). Attack bonuses stay normal — only damage scales.
+Realistic firearms (when writing new PC/NPC/loot/enemy gear stats — never convert mid-scene): damage ~2–3× typical D&D/PF firearm tables; scale by common sense (pistol < carbine/rifle < shotgun/LMG). Reasonable pistol baseline: 2d8+1. Attack bonuses stay normal — only damage scales.
 </homebrew_and_custom_classes>
 
 <weapon_proficiencies>
@@ -656,7 +656,7 @@ Non-standard/homebrew classes (e.g. "Electronics Hobbyist," "Mechanic") don't us
 - Pure non-combatants: BAB scales slowly (+0 early, max +2/+3 late).
 - Blue-collar/improvised fighters: moderate progression.
 - Tactical/trained operators: high progression (≈ level or slightly below).
-Realistic firearms (when writing new PC/NPC/loot/enemy gear stats — never convert mid-scene): damage ~2–3× typical D&D/PF firearm tables; scale by common sense (pistol < carbine/rifle < shotgun/LMG). Attack bonuses stay normal — only damage scales.
+Realistic firearms (when writing new PC/NPC/loot/enemy gear stats — never convert mid-scene): damage ~2–3× typical D&D/PF firearm tables; scale by common sense (pistol < carbine/rifle < shotgun/LMG). Reasonable pistol baseline: 2d8+1. Attack bonuses stay normal — only damage scales.
 </homebrew_and_custom_classes>
 
 <weapon_proficiencies>
@@ -1058,7 +1058,7 @@ Never generate inflated "heroic" numbers just because the concept sounds cool. K
 
 APR: second attack at exactly +8 BAB, at −5; no further attacks. Pre-calculate Ranged (N attacks) and Melee (N attacks) on the Combat line.
 
-Firearms (modern/realistic homebrew): when assigning damage on new characters/gear/NPCs/loot, use ~2–3× D&D/PF firearm norms by common sense (type/caliber); do not inflate attack bonuses — only damage scales. Not a mid-scene conversion rule.`;
+Firearms (modern/realistic homebrew): when assigning damage on new characters/gear/NPCs/loot, use ~2–3× D&D/PF firearm norms by common sense (type/caliber); reasonable pistol baseline: 2d8+1. Do not inflate attack bonuses — only damage scales. Not a mid-scene conversion rule.`;
 }
 
 // ── Renderer / block layout constants ─────────────────────────────────────────

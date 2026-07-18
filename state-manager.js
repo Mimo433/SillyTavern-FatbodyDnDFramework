@@ -1920,7 +1920,7 @@ function getSettingsInternal(extensionSettings) {
     // ── MIGRATION: COMBAT — realistic firearm damage when inventing enemies ─────
     if (s.stockPrompts?.combat &&
         s.stockPrompts.combat.includes('TIER BANDS') &&
-        !s.stockPrompts.combat.includes('Firearms (new combatant damage')) {
+        !s.stockPrompts.combat.includes('Reasonable pistol baseline: 2d8+1')) {
         s.stockPrompts.combat = DEFAULT_STOCK_PROMPTS.combat;
     }
 
