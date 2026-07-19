@@ -1165,10 +1165,6 @@ function syncOnboardingUI() {
     const frustration = /** @type {HTMLInputElement|null} */ (onboarding.querySelector('#rt_onboarding_quests_frustration'));
     if (frustration) frustration.checked = !!s.syspromptModules?.questsFrustration;
 
-    // Difficulty Sync
-    const difficulty = /** @type {HTMLInputElement|null} */ (onboarding.querySelector('#rt_onboarding_quests_difficulty'));
-    if (difficulty) difficulty.checked = !!s.syspromptModules?.questsDifficulty;
-
     const showArchiveOnb = /** @type {HTMLInputElement|null} */ (onboarding.querySelector('#rt_onboarding_quests_show_archive'));
     if (showArchiveOnb) showArchiveOnb.checked = s.syspromptModules?.questsShowArchive !== false;
 
@@ -1532,10 +1528,6 @@ export function refreshQuestPrompt(s) {
         prompt = prompt.replace(/- Omit FRUSTRATION_COEFF for emergent\/self-imposed quests[^\n]*\n/g, '');
         // Older combined emergent line → keep TYPE marker only
         prompt = prompt.replace(/- For emergent\/self-imposed quests: set TYPE: emergent, use GIVER: Self @ —, and omit FRUSTRATION_COEFF entirely \(no NPC expects completion\)\.\n/g, '- For emergent/self-imposed quests: set TYPE: emergent and use GIVER: Self @ —.\n');
-    }
-    if (!s.syspromptModules?.questsDifficulty) {
-        prompt = prompt.replace(/  DIFFICULTY:.*\n/g, '');
-        prompt = prompt.replace(/- For difficulty, use the DIFFICULTY marker.*\n/g, '');
     }
     if (!s.stockPrompts) s.stockPrompts = {};
     s.stockPrompts.quests = prompt;
@@ -2920,9 +2912,6 @@ async function showQuestsHardcoreExplanation() {
         `Adds time-sensitive constraints to quests. The system prompt instructs NPCs to attach deadlines to tasks they give you. If the deadline passes without turning in the quest, it auto-fails. Forces you to prioritise — you can't just accept every task and grind at your leisure.`
     )}
                 ${card('🎭', 'Frustration', `Requires Deadlines. A sub-mode where quests <em>don't</em> auto-fail at the deadline. Instead, each quest giver has an NPC happiness level that starts high and quickly drops the longer you leave it past due. The rate of decline depends on the NPC's personality, which the model infers from their archetype and tone. You can still turn the quest in late — but the reception won't be warm.`, true)}
-                ${card('⚔️', 'Difficulty',
-        `The model assigns an explicit difficulty rating to each quest (e.g. Easy / Hard / Deadly) rather than leaving it vague. Useful for planning and for AI consistency when calculating rewards or consequences.`
-    )}
             </div>`;
     await Popup.show.confirm('📋 Quest Mechanics Explained', popupBody, RT_HELP_POPUP_OPTS);
 }
@@ -4003,18 +3992,6 @@ Gear:
             syncSettingsAndUI(settings => {
                 if (!settings.syspromptModules) settings.syspromptModules = {};
                 settings.syspromptModules.questsFrustration = !!onboardingFrustrationCb.checked;
-            });
-        });
-    }
-
-    // Difficulty Sync
-    const onboardingDifficultyCb = el.querySelector('#rt_onboarding_quests_difficulty');
-    if (onboardingDifficultyCb) {
-        onboardingDifficultyCb.checked = !!s.syspromptModules?.questsDifficulty;
-        onboardingDifficultyCb.addEventListener('change', () => {
-            syncSettingsAndUI(settings => {
-                if (!settings.syspromptModules) settings.syspromptModules = {};
-                settings.syspromptModules.questsDifficulty = !!onboardingDifficultyCb.checked;
             });
         });
     }
@@ -11998,6 +11975,17 @@ async function runPortraitMigrationIfNeeded() {
                 changed = true;
             }
 
+            // Quest difficulty removed as a mechanic — strip any lingering DIFFICULTY field
+            if (settings.stockPrompts.quests?.includes('OBJ_ACTIVE') &&
+                settings.stockPrompts.quests.includes('DIFFICULTY')) {
+                refreshQuestPrompt(settings);
+                changed = true;
+            }
+            if (settings.syspromptModules?.questsDifficulty !== undefined) {
+                delete settings.syspromptModules.questsDifficulty;
+                changed = true;
+            }
+
             if (changed) {
                 saveSettings();
             }
@@ -14202,21 +14190,6 @@ RULES:
             });
         }
 
-        // Difficulty Toggle
-        const difficultyCb = /** @type {HTMLInputElement} */ (document.getElementById('rpg_quests_difficulty'));
-        if (difficultyCb) {
-            difficultyCb.checked = !!getSettings().syspromptModules?.questsDifficulty;
-            difficultyCb.addEventListener('change', function () {
-                const fresh = getSettings();
-                if (!fresh.syspromptModules) fresh.syspromptModules = {};
-                fresh.syspromptModules.questsDifficulty = !!this.checked;
-                refreshQuestPrompt(fresh);
-                refreshOrderList();
-                saveSettings();
-                scheduleAutoApply();
-                refreshRenderedView();
-            });
-        }
 
         const showArchiveCb = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_quests_show_archive'));
         if (showArchiveCb) {

@@ -242,7 +242,6 @@ QUEST: The Missing Sheep
   GIVER: Farmer Hemwick @ Crestwood Mill
   ACCEPTED: 08:00 AM, Day 1
   DEADLINE: 06:00 PM, Day 4
-  DIFFICULTY: Medium
   REWARD: 100 GP
   REWARD: Hemwick's family heirloom
   FRUSTRATION_COEFF: 1.2
@@ -256,7 +255,7 @@ QUEST: The Missing Sheep
 - For collection/count objectives, append [current/total] after the text (e.g. [4/6]) and add an OBJ_TOTAL line with the total. Update the count each turn as progress is made.
 - Keep objectives few and broad (clear, completable outcomes — not step-by-step routes); prefer 1–3. Do not rewrite/rephrase existing OBJ lines without cause, and do not keep adding granular micro-steps as the scene unfolds — only mark OBJ_COMPLETED/OBJ_FAILED or update [progress/total] counts.
 - For rewards, use the REWARD marker (e.g. REWARD: 50 Gold). List multiple rewards on separate lines.
-- For difficulty, use the DIFFICULTY marker (Very Easy, Easy, Medium, Hard, Very Hard).
+- Do not output a DIFFICULTY field — a quest's danger follows narrative logic only (e.g. a bandit camp raid is plainly easier than slaying a dragon). If {{user}} accepts a task beyond them, that's on them; nothing tracks or softens it.
 - Only use DEADLINE if the quest has a time limit.
 - For NPC-given quests only (someone expects completion), set FRUSTRATION_COEFF from the quest giver's personality: 0.4 = very patient, 1.0 = normal, 3.0 = volatile. Do not change it on later turns unless the narrative establishes a permanent temperament shift.
 - For emergent/self-imposed quests: set TYPE: emergent and use GIVER: Self @ —.
@@ -314,7 +313,8 @@ export function getResolvedTimePrompt(settings) {
 
 export const QUESTS_NARRATOR = `GENERAL:
 - When the player unambiguously accepts a quest from an NPC, describe it clearly in the narrative and conclude with *(Quest Accepted: Quest Name Here)*.
-- State who gave the quest, where they are located, what the task entails, how many objectives there are, the difficulty (Very Easy to Very Hard), any time pressure, and what rewards were promised. Do NOT do this for something the {{user}} has not yet agreed to.
+- State who gave the quest, where they are located, what the task entails, how many objectives there are, any time pressure, and what rewards were promised. Do NOT do this for something the {{user}} has not yet agreed to.
+- A quest's real danger follows narrative logic only — no difficulty rating is tracked. Clearing a bandit camp or talking someone into a favor is plainly easier than slaying a dragon; if {{user}} accepts a task far beyond their means, that's their call to make.
 - When an objective is completed, mention it naturally in the narrative. When a quest concludes (success or failure), narrate the outcome.
 - Keep objectives few and broad — outcomes players can solve creatively, not step-by-step routes, but still keep the goal clear so that it's clear when it has been achieved and can be marked as completed. Prefer 1–3 goals; do not keep adding micro-objectives as the scene unfolds. Bad: Reach the door → Use the fire exit → Reach the ground floor → Reach the vehicle. Good: Survive the immediate threat; Lose the pursuers.
 - The MOOD field on each active NPC-given quest with a deadline in the STATE MEMO is calculated by the engine from time pressure and FRUSTRATION_COEFF. Use it to guide how the questgiver NPC speaks and acts.
@@ -378,10 +378,7 @@ Spellcasting: doesn't itself provoke OAs. Ranged spell attack with a hostile wit
 </positioning_and_movement>
 
 <npc_stat_scaling>
-Enemy stats are context-driven, NEVER auto-matched to player HP/level.
-
-QUEST DIFFICULTY: Very Easy (well below player) → Easy (at/slightly below) → Normal (±1 level, fair fight) → Hard (varies by role; punishing if sloppy) → Very Hard (brutal, near-lethal, needs optimal play).
-NO QUEST / GENERAL: Pure narrative logic — a bandit isn't 80 HP just because the player is; a dragon is 300+ HP regardless of player level. Prioritize realism over balance; vary strength both ways, but always leave a fighting chance.
+Enemy stats are context-driven, NEVER auto-matched to player HP/level. Pure narrative logic — a bandit isn't 80 HP just because the player is; a dragon is 300+ HP regardless of player level. A task's real danger follows only from what the narrative establishes: raiding a bandit camp or talking someone into a favor is plainly easier than slaying a dragon. If {{user}} accepts a task far beyond them, that's their call — no difficulty rating is tracked or softens the outcome. Prioritize realism over balance; vary strength both ways, but always leave a fighting chance.
 
 BASE NPC TIERS (guidelines):
 Minion — untrained | HP 8–15 | AC 10–12 | Attack +0–2
@@ -389,7 +386,7 @@ Soldier — trained | HP 18–30 | AC 13–15 | Attack +3–6
 Elite — veteran | HP 35–60 | AC 15–17 | Attack +7–10 (2 attacks at +8+)
 Boss — powerful individual | HP 60–120 | AC 17–19 | Attack +11–15 (2 attacks standard)
 Legendary — world-threat | HP 150–500+ | AC 19–22 | Attack +16–20+ (rare; max 2 APR)
-Scale up/down per quest difficulty and narrative context.
+Scale up/down per narrative context.
 
 SPELLCASTER ENEMIES: Use CASTER pattern (Spell Atk + Spell DC + weak backup weapon) and [PARTY]-style Spells lines (Cantrips / Level N avail/max) — not a martial weapon-only line. Spell Atk ≈ tier's Attack range; weapon Attack stays lower. Spell DC by tier: Minion/Soldier ≈ Easy–Moderate, Elite ≈ Hard, Boss ≈ Severe, Legendary ≈ Near-impossible. Cap spell level/slots to tier. Casters should cast freely when it fits — an unused slot at death is a wasted threat.
 </npc_stat_scaling>
@@ -461,7 +458,7 @@ LEVEL THRESHOLDS: 1–0 | 2–300 | 3–900 | 4–2,700 | 5–6,500 | 6–14,000
 </xp_system>
 
 <quests>
-On unambiguous acceptance: narrate clearly, end with *(Quest Accepted: Name)*. State giver, location, task, objective count, difficulty (Very Easy–Very Hard), time pressure, promised reward. Don't do this pre-agreement. Note objective completion naturally; narrate success/failure at conclusion. Keep objectives few and broad (clear, completable outcomes — not step-by-step routes); do not keep adding micro-objectives mid-scene. Quest MOOD (in STATE MEMO, from time pressure + FRUSTRATION_COEFF) should guide questgiver tone for NPC-given quests only.
+On unambiguous acceptance: narrate clearly, end with *(Quest Accepted: Name)*. State giver, location, task, objective count, time pressure, promised reward. Don't do this pre-agreement. Note objective completion naturally; narrate success/failure at conclusion. Keep objectives few and broad (clear, completable outcomes — not step-by-step routes); do not keep adding micro-objectives mid-scene. Quest MOOD (in STATE MEMO, from time pressure + FRUSTRATION_COEFF) should guide questgiver tone for NPC-given quests only.
 
 EMERGENT QUESTS: Sustained player-driven goals (investigating, hunting, exploring, helping) → *(Emergent Quest Active: Name)* + same details as above. No FRUSTRATION_COEFF / NPC mood pressure on emergent quests.
 </quests>
@@ -620,10 +617,7 @@ Spellcasting: doesn't itself provoke OAs. Ranged spell attack with a hostile wit
 </positioning_and_movement>
 
 <npc_stat_scaling>
-Enemy stats are context-driven, NEVER auto-matched to player HP/level.
-
-QUEST DIFFICULTY: Very Easy (well below player) → Easy (at/slightly below) → Normal (±1 level, fair fight) → Hard (varies by role; punishing if sloppy) → Very Hard (brutal, near-lethal, needs optimal play).
-NO QUEST / GENERAL: Pure narrative logic — a bandit isn't 80 HP just because the player is; a dragon is 300+ HP regardless of player level. Prioritize realism over balance; vary strength both ways, but always leave a fighting chance.
+Enemy stats are context-driven, NEVER auto-matched to player HP/level. Pure narrative logic — a bandit isn't 80 HP just because the player is; a dragon is 300+ HP regardless of player level. A task's real danger follows only from what the narrative establishes: raiding a bandit camp or talking someone into a favor is plainly easier than slaying a dragon. If {{user}} accepts a task far beyond them, that's their call — no difficulty rating is tracked or softens the outcome. Prioritize realism over balance; vary strength both ways, but always leave a fighting chance.
 
 BASE NPC TIERS (guidelines):
 Minion — untrained | HP 8–15 | AC 10–12 | Attack +0–2
@@ -631,7 +625,7 @@ Soldier — trained | HP 18–30 | AC 13–15 | Attack +3–6
 Elite — veteran | HP 35–60 | AC 15–17 | Attack +7–10 (2 attacks at +8+)
 Boss — powerful individual | HP 60–120 | AC 17–19 | Attack +11–15 (2 attacks standard)
 Legendary — world-threat | HP 150–500+ | AC 19–22 | Attack +16–20+ (rare; max 2 APR)
-Scale up/down per quest difficulty and narrative context.
+Scale up/down per narrative context.
 
 SPELLCASTER ENEMIES: Use CASTER pattern (Spell Atk + Spell DC + weak backup weapon) and [PARTY]-style Spells lines (Cantrips / Level N avail/max) — not a martial weapon-only line. Spell Atk ≈ tier's Attack range; weapon Attack stays lower. Spell DC by tier: Minion/Soldier ≈ Easy–Moderate, Elite ≈ Hard, Boss ≈ Severe, Legendary ≈ Near-impossible. Cap spell level/slots to tier. Casters should cast freely when it fits — an unused slot at death is a wasted threat.
 </npc_stat_scaling>
@@ -703,7 +697,7 @@ LEVEL THRESHOLDS: 1–0 | 2–300 | 3–900 | 4–2,700 | 5–6,500 | 6–14,000
 </xp_system>
 
 <quests>
-On unambiguous acceptance: narrate clearly, end with *(Quest Accepted: Name)*. State giver, location, task, objective count, difficulty (Very Easy–Very Hard), time pressure, promised reward. Don't do this pre-agreement. Note objective completion naturally; narrate success/failure at conclusion. Keep objectives few and broad (clear, completable outcomes — not step-by-step routes); do not keep adding micro-objectives mid-scene. Quest MOOD (in STATE MEMO, from time pressure + FRUSTRATION_COEFF) should guide questgiver tone for NPC-given quests only.
+On unambiguous acceptance: narrate clearly, end with *(Quest Accepted: Name)*. State giver, location, task, objective count, time pressure, promised reward. Don't do this pre-agreement. Note objective completion naturally; narrate success/failure at conclusion. Keep objectives few and broad (clear, completable outcomes — not step-by-step routes); do not keep adding micro-objectives mid-scene. Quest MOOD (in STATE MEMO, from time pressure + FRUSTRATION_COEFF) should guide questgiver tone for NPC-given quests only.
 
 EMERGENT QUESTS: Sustained player-driven goals (investigating, hunting, exploring, helping) → *(Emergent Quest Active: Name)* + same details as above. No FRUSTRATION_COEFF / NPC mood pressure on emergent quests.
 </quests>

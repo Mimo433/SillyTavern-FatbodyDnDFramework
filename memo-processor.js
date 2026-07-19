@@ -1094,7 +1094,6 @@ export function parseQuestsFromText(text) {
             giver_location:         giverLoc,
             accepted_time:          getField('ACCEPTED'),
             deadline_time:          getField('DEADLINE'),
-            difficulty:             getField('DIFFICULTY'),
             emergent:               emergent || undefined,
             type:                   emergent ? 'emergent' : undefined,
             // Emergent/self-imposed: no NPC expects completion → never store a coeff
@@ -1124,7 +1123,6 @@ export function serializeQuestsToText(quests) {
         lines.push(`  GIVER: ${q.giver_name} @ ${q.giver_location}`);
         if (q.accepted_time)          lines.push(`  ACCEPTED: ${q.accepted_time}`);
         if (q.deadline_time)          lines.push(`  DEADLINE: ${q.deadline_time}`);
-        if (q.difficulty)             lines.push(`  DIFFICULTY: ${q.difficulty}`);
         // Only NPC-given quests carry a frustration coefficient
         if (!emergent && q.frustration_coefficient != null)
                                       lines.push(`  FRUSTRATION_COEFF: ${q.frustration_coefficient}`);
@@ -1576,7 +1574,6 @@ export function buildModulesInstructionText(settings) {
             if (key === 'quests') {
                 const isDeadlines = !!settings.syspromptModules?.questsDeadlines;
                 const isFrustration = !!settings.syspromptModules?.questsFrustration;
-                const isDifficulty = !!settings.syspromptModules?.questsDifficulty;
                 if (settings.useDdMmYyFormat) {
                     p = p
                         .replace(/Day 1/g, '01/01/2026')
@@ -1590,10 +1587,6 @@ export function buildModulesInstructionText(settings) {
                     p = p.replace(/\n- For NPC-given quests only[^\n]*\n/g, '\n');
                     p = p.replace(/\n- Omit FRUSTRATION_COEFF for emergent\/self-imposed quests[^\n]*\n/g, '\n');
                     p = p.replace(/\n- For emergent\/self-imposed quests: set TYPE: emergent, use GIVER: Self @ —, and omit FRUSTRATION_COEFF entirely \(no NPC expects completion\)\.\n/g, '\n- For emergent/self-imposed quests: set TYPE: emergent and use GIVER: Self @ —.\n');
-                }
-                if (!isDifficulty) {
-                    p = p.replace(/\n\s*DIFFICULTY:.*?\n/g, '\n');
-                    p = p.replace(/\n- For difficulty, use the DIFFICULTY marker.*\n/g, '\n');
                 }
             }
 

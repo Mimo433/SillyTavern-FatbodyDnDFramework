@@ -426,10 +426,6 @@ export function transformBaseSectionContent(tag, innerContent, settings) {
         if (!mods.questsFrustration) {
             instruction = instruction.replace(/\n- The MOOD field[^\n]*questgiver NPC speaks and acts\./g, '');
         }
-        if (!mods.questsDifficulty) {
-            instruction = instruction.replace(/the difficulty \(Very Easy to Very Hard\), /g, '');
-            instruction = instruction.replace(/Assign an appropriate difficulty \(Very Easy to Very Hard\) based on the narrative stakes\. /g, '');
-        }
         let result = `<quests>\n${instruction.trim()}\n</quests>`;
         if (!mods.questsDeadlines) {
             result = result.replace(/- Assign an in-world Deadline.*\n/g, '');

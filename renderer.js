@@ -2101,10 +2101,6 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                                 </label>
                             </div>
                             <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                <input type="checkbox" id="rt_onboarding_quests_difficulty" />
-                                <span>Difficulty</span>
-                            </label>
-                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                                 <input type="checkbox" id="rt_onboarding_quests_show_archive" checked />
                                 <span>Show completed/failed quests</span>
                             </label>
@@ -2684,16 +2680,6 @@ export function renderQuestLog(quests, currentTime, collapsed, detached, filterT
         if (quest.status !== 'active') cardClass += ' rt-quest-inactive';
         if (isFailed) cardClass += ' rt-quest-card-failed';
 
-        const diffColors = {
-            'Very Easy': '#a3e635', // Lime
-            'Easy': '#22c55e',      // Green
-            'Medium': '#f59e0b',    // Amber
-            'Hard': '#f97316',      // Orange
-            'Very Hard': '#ef4444'  // Red
-        };
-        const badgeBg = diffColors[quest.difficulty] || 'rgba(120, 120, 120, 0.2)';
-        const badgeColor = diffColors[quest.difficulty] ? '#000' : 'rgba(255,255,255,0.9)';
-        const diffBadge = quest.difficulty ? `<span class="rt-quest-badge" style="background: ${badgeBg}; color: ${badgeColor}; font-weight: 800; border: none;">${escapeHtml(String(quest.difficulty)).toUpperCase()}</span>` : '';
         const dismissBtn = dismissible
             ? `<button type="button" class="rt-quest-dismiss-btn" data-quest-id="${escapeHtml(quest.id)}" title="Remove from log">✕</button>`
             : '';
@@ -2702,7 +2688,6 @@ export function renderQuestLog(quests, currentTime, collapsed, detached, filterT
             <div class="rt-quest-header">
                 <span class="rt-quest-title">${escapeHtml(quest.title)}</span>
                 <div class="rt-quest-badges">
-                    ${diffBadge}
                     <span class="rt-quest-badge ${statusBadgeClass}">${statusLabel}</span>
                     ${dismissBtn}
                 </div>

@@ -881,7 +881,6 @@ You may be asked to use Markers: ((PLS)), ((B)), ((XB)), ((BDG)), ((HGT)). These
             quests: true,
             questsDeadlines: false,
             questsFrustration: false,
-            questsDifficulty: false,
             questsShowArchive: true,
             CYOA_mode: false,
         },

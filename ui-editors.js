@@ -999,8 +999,6 @@ export function syncSettingsAndUI(updateFn) {
     if (frustrationCb) frustrationCb.checked = !!fresh.syspromptModules?.questsFrustration;
     const frustrationWrapEl = /** @type {HTMLElement|null} */ (document.getElementById('rpg_quests_frustration_wrap'));
     if (frustrationWrapEl) frustrationWrapEl.style.display = !!fresh.syspromptModules?.questsDeadlines ? '' : 'none';
-    const difficultyCb = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_quests_difficulty'));
-    if (difficultyCb) difficultyCb.checked = !!fresh.syspromptModules?.questsDifficulty;
     const showArchiveCb = /** @type {HTMLInputElement|null} */ (document.getElementById('rpg_quests_show_archive'));
     if (showArchiveCb) showArchiveCb.checked = fresh.syspromptModules?.questsShowArchive !== false;
 
