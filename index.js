@@ -183,6 +183,26 @@ async function checkLocalMemoRecovery(chatId) {
             return;
         }
 
+        // Cross-browser / cross-device case: another session already wrote a memo to the
+        // shared disk settings.json that is as new as or newer than what THIS browser last
+        // saw live (e.g. played on Chrome, then opened Firefox/mobile). That's normal
+        // syncing, not a lost save from THIS browser — do not offer to overwrite it with
+        // our older local copy. Only prompt when the local backup is actually ahead of the
+        // last known-good disk write (the real "reload aborted the save" case).
+        const diskStamp = Number(s.memoPersistedAt) || 0;
+        const localStamp = Number(entry.ts) || 0;
+        if (diskStamp > 0 && diskStamp >= localStamp) {
+            console.warn('[RPG Tracker] Memo recovery skipped: disk memo is same age or newer than local backup', {
+                chatId,
+                diskStamp,
+                localStamp,
+            });
+            // Re-sync this browser's backup to the (newer) disk truth so a future genuine
+            // same-browser race is measured against reality, not this stale entry.
+            snapshotMemoToLocalStorage(chatId, { force: true, allowDowngrade: true });
+            return;
+        }
+
         const ctx = SillyTavern.getContext();
         if (typeof ctx.callGenericPopup !== 'function') {
             console.warn('[RPG Tracker] Memo recovery skipped: popup API unavailable');
@@ -193,9 +213,12 @@ async function checkLocalMemoRecovery(chatId) {
         _rtRecoveryPromptActive = true;
         const localWhen = formatRecoveryTimestamp(entry.ts);
         const diskWhen = formatRecoveryTimestamp(s.memoPersistedAt);
+        const explainerText = diskStamp > 0
+            ? `This browser has a newer local copy of the STATE MEMO for this chat than what's currently on disk. This can happen if the page reloaded before SillyTavern finished writing settings.json.`
+            : `This browser has a local copy of the STATE MEMO for this chat that differs from what's currently on disk, and disk has no save timestamp to compare against. This can happen if the page reloaded before SillyTavern finished writing settings.json.`;
         const popupContent = `<div style="text-align:left; line-height:1.45;">
             <p><b>Possible unsaved tracker data found.</b></p>
-            <p>This browser has a newer local copy of the STATE MEMO for this chat than what's currently on disk. This can happen if the page reloaded before SillyTavern finished writing settings.json.</p>
+            <p>${explainerText}</p>
             <p style="margin:10px 0; padding:8px 10px; background:rgba(255,255,255,0.05); border-radius:6px; font-size:0.95em;">
                 <b>Local backup</b> (this browser)<br>
                 ${entry.currentMemo.length.toLocaleString()} chars · ${escapeHtml(localWhen)}<br><br>
