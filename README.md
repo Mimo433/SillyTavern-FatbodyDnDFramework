@@ -39,7 +39,6 @@ Together they solve the four core problems of LLM tabletop RP: the AI forgetting
 - **Automatic spell slot tracking** via 🔵 pips in the UI; never worry about remembering how many you have left.
 - **Buff/debuff temporal decay** via [TIME] delta tracking; statuses expire automatically over time based on time elapsed.
 - **Dynamic enemy scaling** — enemies adapt to quest difficulty and player level contextually.
-- **Snapshot history + delta log** - easy rollback, and see at a glance what was changed in the state.
 - **Auto model-switching** so that you can use a different model for tracking the state.
 - **Full-context audit mode** with automatic chunking for massive chat histories.
 - **Custom fields, themes, reorderable sections**; track whatever you want beyond the stock fields and customize the visuals to your liking.
@@ -58,6 +57,7 @@ Together they solve the four core problems of LLM tabletop RP: the AI forgetting
 - **Export your entire setup as a "Game Cartridge."**
 - **d100 (percentage-based rolls) support.**
 - **Real-Time Visualization Mode** — Lorebook Agent can be turned into a visual viewer that generates images of the current scene (with adjustable frequency) and displays the portraits of the currently present entities.
+- **Instant Action** — Get started by simply pressing one button.
   
 ---
 
