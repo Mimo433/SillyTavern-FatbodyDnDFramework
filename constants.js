@@ -858,6 +858,7 @@ export function buildCyoaPrompt(config = {}) {
 
     const intro = `[END OF OUTPUT REQUIREMENT]
 You MUST ALWAYS end your response with exactly ${slots.length} choices for the user. NEVER forget the choices. This is a strict requirement.
+CRITICAL: You must VARY your generated options dynamically based on the unfolding scene. DO NOT stubbornly repeat the exact same stats, traits, or narrative actions from previous turns.
 ${useXmlTag ? 'Enclose all choices inside a single <choices> XML block.' : ''}
 ${useButtonTags ? 'Wrap every single choice in a <button> tag.' : ''}
 ${useEmojis ? 'Prefix each choice text with a fitting emoji.' : ''}`;
@@ -884,13 +885,13 @@ ${btn('3. \ud83e\udde0 [Illithid] Dominate his mind.')}${useXmlTag ? '\n</choice
                 const stat = slot.label?.trim();
                 return stat
                     ? `${num}. MUST be a ROLL REQ for ${stat}. Format: "${e}[${stat} REQ N] action" (you choose the DC for N).`
-                    : `${num}. MUST be a ROLL REQ. Choose an appropriate stat and DC. Format: "${e}[STAT REQ N] action".`;
+                    : `${num}. MUST be a ROLL REQ. Choose an appropriate stat and DC. Format: "${e}[STAT REQ N] action" (VARY the stat and DO NOT just repeat the same ones from previous choices).`;
             }
             case 'trait': {
                 const name = slot.label?.trim();
                 return name
                     ? `${num}. MUST use TRAIT/ABILITY [${name}]. Format: "${e}[${name}] action text".`
-                    : `${num}. MUST use a relevant TRAIT/ABILITY tag. Format: "${e}[Trait Name] action text".`;
+                    : `${num}. MUST use a relevant TRAIT/ABILITY tag. Format: "${e}[Trait Name] action text" (VARY the trait used and DO NOT just repeat the same ones from previous choices).`;
             }
             case 'prefix': {
                 const label = slot.label?.trim();
