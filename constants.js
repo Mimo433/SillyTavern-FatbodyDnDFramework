@@ -858,7 +858,7 @@ export function buildCyoaPrompt(config = {}) {
 
     const intro = `[END OF OUTPUT REQUIREMENT]
 You MUST ALWAYS end your response with exactly ${slots.length} choices for the user. NEVER forget the choices. This is a strict requirement.
-CRITICAL: You must VARY your generated options dynamically based on the unfolding scene. DO NOT stubbornly repeat the exact same stats, traits, or narrative actions from previous turns.
+CRITICAL: You must VARY your generated options dynamically based on the unfolding scene. DO NOT stubbornly repeat the exact same stats, traits, roll requirements, or narrative actions from previous turns.
 ${useXmlTag ? 'Enclose all choices inside a single <choices> XML block.' : ''}
 ${useButtonTags ? 'Wrap every single choice in a <button> tag.' : ''}
 ${useEmojis ? 'Prefix each choice text with a fitting emoji.' : ''}`;
