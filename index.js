@@ -1214,6 +1214,14 @@ function syncOnboardingUI() {
         rngNone.checked = !s.rngEnabled;
     }
 
+    const narrativePacing = ['normal', 'high_agency', 'downtime'].includes(s.narrativePacing) ? s.narrativePacing : 'normal';
+    onboarding.querySelectorAll('input[name="rt_onboarding_narrative_pacing"]').forEach(input => {
+        input.checked = input.value === narrativePacing;
+    });
+    document.querySelectorAll('input[name="rpg_narrative_pacing"]').forEach(input => {
+        input.checked = input.value === narrativePacing;
+    });
+
     // Quests Enabled Sync
     const questsEnabled = /** @type {HTMLInputElement|null} */ (onboarding.querySelector('#rt_onboarding_quests_enabled'));
     if (questsEnabled) {
@@ -3614,15 +3622,20 @@ export function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRe
 
     bindQuickStartEvents(el);
 
-    const onboardingDrawer = el.querySelector('.rt-onboarding-drawer');
-    const onboardingDrawerToggle = el.querySelector('#rt-onboarding-drawer-toggle');
-    if (onboardingDrawer && onboardingDrawerToggle && !onboardingDrawerToggle._bound) {
+    const otherWaysDrawer = el.querySelector('.rt-onboarding-other-drawer');
+    const narratorDrawer = el.querySelector('.rt-onboarding-narrator-drawer');
+    if (otherWaysDrawer && narratorDrawer && narratorDrawer.previousElementSibling !== otherWaysDrawer) {
+        otherWaysDrawer.insertAdjacentElement('afterend', narratorDrawer);
+    }
+    el.querySelectorAll('.rt-onboarding-drawer-toggle').forEach(onboardingDrawerToggle => {
+        const onboardingDrawer = onboardingDrawerToggle.closest('.rt-onboarding-drawer');
+        if (!onboardingDrawer || onboardingDrawerToggle._bound) return;
         onboardingDrawerToggle._bound = true;
         onboardingDrawerToggle.addEventListener('click', () => {
             const isOpen = onboardingDrawer.classList.toggle('is-open');
             onboardingDrawerToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
         });
-    }
+    });
 
     // Genre tab toggle listener & persistent preference save
     const genreSelect = el.querySelector('#rt-onboarding-genre');
@@ -4021,6 +4034,27 @@ Gear:
                     settings.diceFunctionTool = false;
                 }
                 autoSelectRngToolsFromMode(settings);
+            });
+        });
+    });
+
+    el.querySelectorAll('.rt-narrative-pacing-help').forEach(button => {
+        if (button._bound) return;
+        button._bound = true;
+        button.addEventListener('click', (e) => {
+            e.stopPropagation();
+            showNarrativePacingExplanation();
+        });
+    });
+
+    const onboardingPacingInputs = el.querySelectorAll('input[name="rt_onboarding_narrative_pacing"]');
+    onboardingPacingInputs.forEach(input => {
+        const pacing = ['normal', 'high_agency', 'downtime'].includes(s.narrativePacing) ? s.narrativePacing : 'normal';
+        input.checked = input.value === pacing;
+        input.addEventListener('change', () => {
+            if (!input.checked || !['normal', 'high_agency', 'downtime'].includes(input.value)) return;
+            syncSettingsAndUI(settings => {
+                settings.narrativePacing = input.value;
             });
         });
     });

@@ -2,6 +2,12 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [5.9.98] - 2026-07-21
+
+### Changed
+- **Startup narrator controls**: Narrator Configuration is now a top-level drawer directly beneath **Other Ways to Begin**, with the same pacing selector and explanation available from the main settings.
+- **Startup drawers**: refreshed the visual treatment for **Other Ways to Begin** and Narrator Configuration for clearer hierarchy and better visibility.
+
 ## [5.9.97] - 2026-07-21
 
 ### Added

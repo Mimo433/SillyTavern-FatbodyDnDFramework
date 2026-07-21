@@ -1767,9 +1767,9 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                     <div class="rt-quickstart-status" id="rt-quickstart-status">Ready</div>
                 </div>
 
-                <div class="rt-onboarding-secondary rt-onboarding-drawer">
+                <div class="rt-onboarding-secondary rt-onboarding-drawer rt-onboarding-other-drawer">
                 <button type="button" class="rt-onboarding-drawer-toggle" id="rt-onboarding-drawer-toggle" aria-expanded="false" aria-controls="rt-onboarding-drawer-body">
-                    <span class="rt-onboarding-drawer-toggle-label">Other ways to begin</span>
+                    <span class="rt-onboarding-drawer-toggle-label"><span class="rt-onboarding-drawer-icon" aria-hidden="true">&#10022;</span><span>Other Ways to Begin<small>Fine-tune your start, create a persona, or import a character</small></span></span>
                     <span class="rt-onboarding-drawer-chevron" aria-hidden="true">&#9656;</span>
                 </button>
                 <div class="rt-onboarding-drawer-body" id="rt-onboarding-drawer-body">
@@ -2067,9 +2067,25 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                 </div>
 
                 <!-- Narrator Configuration (Salad Bar) -->
-                <div style="margin-top: 12px; border: 1px solid rgba(255,255,255,0.12); border-radius: 6px; padding: 10px; background: rgba(255,255,255,0.03); width: 100%; box-sizing: border-box;">
-                    <b style="color: var(--rt-accent); font-size: 14px; display: block; margin-bottom: 6px;">Narrator Configuration</b>
+                <div class="rt-onboarding-secondary rt-onboarding-drawer rt-onboarding-narrator-drawer">
+                    <button type="button" class="rt-onboarding-drawer-toggle" id="rt-onboarding-narrator-drawer-toggle" aria-expanded="false" aria-controls="rt-onboarding-narrator-drawer-body">
+                        <span class="rt-onboarding-drawer-toggle-label"><span class="rt-onboarding-drawer-icon" aria-hidden="true">&#10022;</span><span>Narrator Configuration<small>Set pacing, RNG, quests, and optional systems</small></span></span>
+                        <span class="rt-onboarding-drawer-chevron" aria-hidden="true">&#9656;</span>
+                    </button>
+                    <div class="rt-onboarding-drawer-body" id="rt-onboarding-narrator-drawer-body">
+                    <div class="rt-onboarding-drawer-body-inner">
+                    <div class="rt-onboarding-narrator-content" style="width: 100%; box-sizing: border-box;">
                     <small style="display: block; margin-bottom: 8px; opacity: 0.65; font-style: italic; line-height: 1.3;">Select your preferred modes and components. Changes apply to your system prompt automatically.</small>
+
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 4px;">
+                        <span style="font-size: 0.85em; font-weight: bold; opacity: 0.8;">Pacing</span>
+                        <button type="button" class="rt-narrative-pacing-help" style="background: none; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; color: inherit; font-size: 0.72em; opacity: 0.7; padding: 1px 7px; cursor: pointer;">What are these?</button>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; padding-left: 5px;">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="radio" name="rt_onboarding_narrative_pacing" value="normal" id="rt_onboarding_narrative_pacing_normal" /><span>Normal</span></label>
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="radio" name="rt_onboarding_narrative_pacing" value="high_agency" id="rt_onboarding_narrative_pacing_high_agency" /><span>High-Agency Mode</span></label>
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="radio" name="rt_onboarding_narrative_pacing" value="downtime" id="rt_onboarding_narrative_pacing_downtime" /><span>Downtime/Slice of Life Mode</span></label>
+                    </div>
                     
                     <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 4px;">
                         <span style="font-size: 0.85em; font-weight: bold; opacity: 0.8;">RNG</span>
@@ -2152,6 +2168,8 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
                     <button id="rt_onboarding_btn_update_sysprompt" style="width: 100%; margin-top: 10px; padding: 7px 12px; background: rgba(0, 200, 140, 0.18); border: 1px solid #00c88c; border-radius: 4px; color: var(--rt-text, #eee); font-size: 0.88em; cursor: pointer;" title="Writes the system prompt to your Quick Prompt Main box based on the options selected above.">
                         ↑ Apply System Prompt
                     </button>
+                </div>
+                </div>
                 </div>
             </div>`;
         }
