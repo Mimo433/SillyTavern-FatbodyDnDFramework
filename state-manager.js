@@ -2531,6 +2531,7 @@ export function writeModuleSchemaBackup(chatId) {
             stockPrompts: JSON.parse(JSON.stringify(s.stockPrompts || {})),
             syspromptModules: JSON.parse(JSON.stringify(s.syspromptModules || {})),
             narrativePacing: s.narrativePacing || 'normal',
+            cyoaConfig: JSON.parse(JSON.stringify(s.cyoaConfig || {})),
         };
         localStorage.setItem(MODULE_SCHEMA_BACKUP_KEY, JSON.stringify(payload));
     } catch (err) {
@@ -2539,18 +2540,16 @@ export function writeModuleSchemaBackup(chatId) {
 }
 
 /**
- * Re-apply the sync module-schema backup over disk-loaded settings / chatStates.
- * Call on boot before loadChatState so a cancelled settings save cannot resurrect
- * deleted custom modules (e.g. NEW_FIELD) after a code-edit refresh.
- * @param {string|null|undefined} preferredChatId
- * @returns {boolean} true if a backup was applied
+ * Returns a local configuration backup only when it differs from disk-loaded settings.
+ * The caller must ask the user before applying it.
+ * @returns {object|null}
  */
-export function applyModuleSchemaBackup(preferredChatId) {
+export function getPendingModuleSchemaBackup() {
     try {
         const raw = localStorage.getItem(MODULE_SCHEMA_BACKUP_KEY);
-        if (!raw) return false;
+        if (!raw) return null;
         const backup = JSON.parse(raw);
-        if (!backup || !Array.isArray(backup.customFields) || !Array.isArray(backup.blockOrder)) return false;
+        if (!backup || !Array.isArray(backup.customFields) || !Array.isArray(backup.blockOrder)) return null;
 
         const s = getSettings();
         const liveTags = JSON.stringify((s.customFields || []).map(f => f.tag));
@@ -2565,12 +2564,35 @@ export function applyModuleSchemaBackup(preferredChatId) {
         const backupSyspromptModules = JSON.stringify(backup.syspromptModules || {});
         const liveNarrativePacing = s.narrativePacing || 'normal';
         const backupNarrativePacing = backup.narrativePacing || 'normal';
+        const liveCyoaConfig = JSON.stringify(s.cyoaConfig || {});
+        const backupCyoaConfig = JSON.stringify(backup.cyoaConfig || {});
         const alreadyMatched = liveTags === backupTags && liveOrder === backupOrder
             && (!backup.chatId || partTags === backupTags)
             && (!backup.stockPrompts || liveStockPrompts === backupStockPrompts)
             && (!backup.syspromptModules || liveSyspromptModules === backupSyspromptModules)
-            && liveNarrativePacing === backupNarrativePacing;
-        if (alreadyMatched) return false;
+            && liveNarrativePacing === backupNarrativePacing
+            && (!backup.cyoaConfig || liveCyoaConfig === backupCyoaConfig);
+        return alreadyMatched ? null : backup;
+    } catch (err) {
+        console.warn('[RPG Tracker] Module schema backup inspection failed:', err);
+        return null;
+    }
+}
+
+/**
+ * Apply a previously inspected local configuration backup only after the user
+ * explicitly approves restoring it over disk-loaded settings.
+ * @param {string|null|undefined} preferredChatId
+ * @param {object|null} backupOverride
+ * @returns {boolean} true if a backup was applied
+ */
+export function applyModuleSchemaBackup(preferredChatId, backupOverride = null) {
+    try {
+        const backup = backupOverride || getPendingModuleSchemaBackup();
+        if (!backup) return false;
+
+        const s = getSettings();
+        const backupNarrativePacing = backup.narrativePacing || 'normal';
 
         // Always restore live schema from the last known-good in-memory snapshot.
         // If the async disk write completed, this matches disk. If it was cancelled on
@@ -2587,6 +2609,9 @@ export function applyModuleSchemaBackup(preferredChatId) {
             s.syspromptModules = { ...s.syspromptModules, ...JSON.parse(JSON.stringify(backup.syspromptModules)) };
         }
         s.narrativePacing = backupNarrativePacing;
+        if (backup.cyoaConfig && typeof backup.cyoaConfig === 'object') {
+            s.cyoaConfig = JSON.parse(JSON.stringify(backup.cyoaConfig));
+        }
 
         if (backup.chatId) {
             if (!s.chatStates) s.chatStates = {};

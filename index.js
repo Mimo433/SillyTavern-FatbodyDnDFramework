@@ -1,5 +1,5 @@
 import { EXAMPLES, COLOR_EXAMPLES, DEFAULT_STOCK_PROMPTS, RT_PROMPTS, BLOCK_ICONS, BLOCK_ORDER, PAGE_SIZE, NO_PAGINATE, buildOnboardingXpHint, buildOnboardingTimeHint, buildStartingGearHint, buildOnboardingActiveBlocks, buildCombatAndSkillScalingHint, resolveTimePromptKey, resolveTimePromptDisplayTag, buildCyoaPrompt, DEFAULT_CYOA_SLOTS, refreshCyoaConfigToShipped } from './constants.js';
-import { MODULE_NAME, DEFAULT_MODULES, getSettings, getBarBackground, migrateCustomFields, saveChatState, writeModuleSchemaBackup, applyModuleSchemaBackup, applyDeletedCustomTagTombstones, recordDeletedCustomTags, clearDeletedCustomTagTombstones, saveProfile, deleteProfile, getEffectiveRouterCampaignPrefix, sanitizeCampaignPrefixString, buildNpcInstruction, loadStockPromptsFromProfile, getNpcRelationshipMax, getNpcRelationshipMaxDefault, clampRelationshipValue, relationshipBarPct, getFriendshipTier, getAffectionTier, getRelTierBadgeStyle, getRelTierDetailedStyle, getRelTierDetailedLabelStyle, applyRelTierBadgeElement, sanitizeRouterState, rebuildAllModuleInstructions, adjustAllStoredTemplatesForTimeFormat, DEFAULT_NPC_SECTIONS, DEFAULT_PC_SECTIONS, computeBundledPromptsFingerprint, buildBundledPromptsSnapshot, getSnapshotCategoryBlocks, getPromptCategoryImpactBadge, PROMPT_DEFAULTS_CATEGORIES, PROMPT_DEFAULTS_CATEGORY_LABELS, getDefaultPortraitLocationSystemPrompt, isShippedPortraitLocationSystemPrompt, applyFactoryReset, clearExtensionLocalStorageUiState, stripChatStateGlobalUiPrefs } from './state-manager.js';
+import { MODULE_NAME, DEFAULT_MODULES, getSettings, getBarBackground, migrateCustomFields, saveChatState, writeModuleSchemaBackup, getPendingModuleSchemaBackup, applyModuleSchemaBackup, applyDeletedCustomTagTombstones, recordDeletedCustomTags, clearDeletedCustomTagTombstones, saveProfile, deleteProfile, getEffectiveRouterCampaignPrefix, sanitizeCampaignPrefixString, buildNpcInstruction, loadStockPromptsFromProfile, getNpcRelationshipMax, getNpcRelationshipMaxDefault, clampRelationshipValue, relationshipBarPct, getFriendshipTier, getAffectionTier, getRelTierBadgeStyle, getRelTierDetailedStyle, getRelTierDetailedLabelStyle, applyRelTierBadgeElement, sanitizeRouterState, rebuildAllModuleInstructions, adjustAllStoredTemplatesForTimeFormat, DEFAULT_NPC_SECTIONS, DEFAULT_PC_SECTIONS, computeBundledPromptsFingerprint, buildBundledPromptsSnapshot, getSnapshotCategoryBlocks, getPromptCategoryImpactBadge, PROMPT_DEFAULTS_CATEGORIES, PROMPT_DEFAULTS_CATEGORY_LABELS, getDefaultPortraitLocationSystemPrompt, isShippedPortraitLocationSystemPrompt, applyFactoryReset, clearExtensionLocalStorageUiState, stripChatStateGlobalUiPrefs } from './state-manager.js';
 import { diffTextLines, diffHasChanges } from './prompt-diff.js';
 import { sendStateRequest, fetchOllamaModels, fetchOpenAIModels, testOpenAIConnection, getConnectionProfiles, getCurrentCompletionPreset, setCompletionPreset, syncCombatProfile, resetCombatProfileOverride, isCombatActive } from './llm-client.js';
 import { getDiceToolName, getDiceCommandName, getDiceCommandAliases, doDiceRoll, registerDiceFunctionTool, syncDiceFunctionToolForRngContext, registerDiceSlashCommand, installInterceptor, getNarrativeBlocks, onGenerationStarted, onGenerationEnded, ensureRelTagRegex, resetRouterTick, getRouterTick, resetRouterAutoTick, getRouterSchedulerInternals, makeRngQueue, buildRngBlock, RNG_QUEUE_LEN, parseAndApplyNarrativeRelTags } from './narrative-hooks.js';
@@ -39,18 +39,6 @@ export const FOLDER_NAME = (function () {
 let _stateModelRunning = false;
 let _stateController = null;   // To abort ongoing state updates
 let _currentChatId = null;
-/**
- * True once we're sure _currentChatId reflects a real chat ST actually has open — either
- * because boot read a non-empty ctx.chatId, or because a real CHAT_CHANGED event has fired.
- * ctx.chatId at extension-init time can race ST's own chat restoration (init runs alongside
- * getCharacters/getBackgrounds/etc., not after them) and come back null/stale — more likely
- * right after editing extension files forces a slower/uncached reload. If we treated that
- * bogus null as a real "old chat" identity, the FIRST real CHAT_CHANGED of the session would
- * look like a switch into an unknown chat, and onChatChanged's "no saved snapshot" branch
- * would wipe currentMemo/memoHistory that settings.json had just loaded correctly. See
- * onChatChanged's boot-confirmation guard below.
- */
-let _chatIdBootConfirmed = false;
 let _prefixDeriveTimer = null; // Pending CHAT_CHANGED → prefix-derivation timer
 /** Set during init BOOTSTRAP so the immediate CHAT_CHANGED does not repeat /world scans. */
 let _sessionBootstrapChatId = null;
@@ -65,7 +53,6 @@ let _bootstrapSyncPromise = null;
 // safety net independent of that race. Not a substitute for the disk save; a recovery net.
 const RT_RECOVERY_LS_KEY = 'rpg_tracker_memo_recovery_v1';
 const RT_RECOVERY_MAX_CHATS = 8;
-const RT_RECOVERY_MAX_AGE_MS = 48 * 60 * 60 * 1000; // 48h — older snapshots are probably irrelevant
 /** True while a recovery prompt is open, so routine saves can't overwrite the evidence. */
 let _rtRecoveryPromptActive = false;
 /**
@@ -169,11 +156,6 @@ async function checkLocalMemoRecovery(chatId) {
             console.warn('[RPG Tracker] Memo recovery skipped: no local backup for this chat', { chatId });
             return;
         }
-        if (Date.now() - (entry.ts || 0) > RT_RECOVERY_MAX_AGE_MS) {
-            console.warn('[RPG Tracker] Memo recovery skipped: local backup too old', { chatId, ts: entry.ts });
-            return;
-        }
-
         const s = getSettings();
         const diskMemo = s.currentMemo || '';
         if (entry.currentMemo === diskMemo) {
@@ -184,27 +166,13 @@ async function checkLocalMemoRecovery(chatId) {
             return;
         }
 
-        // Cross-browser / cross-device case: another session already wrote THIS chat's
-        // memo to disk after this browser last saw it live. That is normal syncing, not a
-        // lost save from this browser — do not offer to overwrite it with an older local
-        // copy. Chat-linked state must use its own stamp here: the top-level stamp is
-        // shared by every chat and can have been advanced by an unrelated chat.
+        // A mismatch can be either a cancelled local save or a newer copy written by
+        // another browser. Timestamps cannot reliably establish intent, so never let
+        // one browser overwrite the other automatically: always ask the user.
         const diskChatState = s.chatStates?.[chatId];
         const diskStamp = diskChatState
             ? (Number(diskChatState.memoPersistedAt) || 0)
             : (Number(s.memoPersistedAt) || 0);
-        const localStamp = Number(entry.ts) || 0;
-        if (diskStamp > 0 && diskStamp >= localStamp) {
-            console.warn('[RPG Tracker] Memo recovery skipped: disk memo is same age or newer than local backup', {
-                chatId,
-                diskStamp,
-                localStamp,
-            });
-            // Re-sync this browser's backup to the (newer) disk truth so a future genuine
-            // same-browser race is measured against reality, not this stale entry.
-            snapshotMemoToLocalStorage(chatId, { force: true, allowDowngrade: true });
-            return;
-        }
 
         const ctx = SillyTavern.getContext();
         if (typeof ctx.callGenericPopup !== 'function') {
@@ -219,9 +187,7 @@ async function checkLocalMemoRecovery(chatId) {
         const diskLabel = diskStamp > 0
             ? 'Disk version (this chat)'
             : 'Disk version (this chat; no saved timestamp)';
-        const explainerText = diskStamp > 0
-            ? `This browser has a newer local copy of the STATE MEMO for this chat than what's currently on disk. This can happen if the page reloaded before SillyTavern finished writing settings.json.`
-            : `This browser has a local copy of the STATE MEMO for this chat that differs from what's currently on disk, and disk has no save timestamp to compare against. This can happen if the page reloaded before SillyTavern finished writing settings.json.`;
+        const explainerText = `This browser has a local copy of the STATE MEMO for this chat that differs from what's currently on disk. This can happen after a cancelled save or when another browser wrote a newer copy. Choose which version to keep.`;
         const popupContent = `<div style="text-align:left; line-height:1.45;">
             <p><b>Possible unsaved tracker data found.</b></p>
             <p>${explainerText}</p>
@@ -290,6 +256,39 @@ async function ensureLocalMemoRecovery(chatId) {
     // checkLocalMemoRecovery sets the flag in finally; if it returned before try's finally
     // on !chatId we already returned — still mark done when we had a chatId.
     if (!_rtRecoveryBootCheckDone) _rtRecoveryBootCheckDone = true;
+}
+
+/** Ask before a browser-local configuration snapshot replaces settings.json. */
+async function confirmLocalSettingsRecovery(backup) {
+    const ctx = SillyTavern.getContext();
+    const localWhen = formatRecoveryTimestamp(backup?.ts);
+    const content = `<div style="text-align:left;line-height:1.45;">
+        <p><b>Browser configuration differs from settings.json.</b></p>
+        <p>This browser has a saved local configuration snapshot from ${escapeHtml(localWhen)} that does not match the disk version. It may be a save that was interrupted—or an older cache from another browser session.</p>
+        <p style="margin:10px 0;padding:8px 10px;border-left:3px solid #f0ad4e;background:rgba(240,173,78,0.12);border-radius:4px;">This includes tracker fields, narrator settings, stock prompts, and <b>CYOA settings and presets</b>. Nothing will be restored automatically.</p>
+        <p>Restore this browser's local configuration?</p>
+    </div>`;
+    try {
+        const { Popup, POPUP_TYPE } = ctx;
+        if (typeof Popup === 'function') {
+            const popup = new Popup(content, POPUP_TYPE?.CONFIRM ?? 1, '', {
+                okButton: 'Restore local configuration',
+                cancelButton: 'Keep disk configuration',
+                leftAlign: true,
+                animation: 'none',
+            });
+            return !!await popup.show();
+        }
+        return !!await ctx.callGenericPopup?.(content, ctx.POPUP_TYPE?.CONFIRM ?? 1, '', {
+            okButton: 'Restore local configuration',
+            cancelButton: 'Keep disk configuration',
+            leftAlign: true,
+            animation: 'none',
+        });
+    } catch (err) {
+        console.warn('[RPG Tracker] Settings recovery prompt failed:', err);
+        return false;
+    }
 }
 let _pillDeselectHandler = null;
 let renderRouterUI = null;
@@ -1862,6 +1861,40 @@ function loadChatState(chatId) {
     return true;
 }
 
+/** Reset live per-chat state when Chat Link reaches a chat with no saved snapshot. */
+function resetUnseenChatState(s) {
+    s.currentMemo = '';
+    s.prevMemo1 = '';
+    s.prevMemo2 = '';
+    s.memoHistory = [];
+    s.lastDelta = '';
+    s.historyIndex = -1;
+    s.quests = [];
+    s.activeRouterKeys = [];
+    s.activeWorldKeys = [];
+    s.keywordActivatedKeys = [];
+    s.routerLog = [];
+    s.customPortraits = {};
+    s.customLocationImages = {};
+    s.worldProgressionLastFiredAtMinutes = -1;
+    s.worldProgressionLastFiredPeriodLabel = '';
+    s.worldProgressionSkeletonAtmosphereSummary = '';
+    s.agentImmersionMode = false;
+    resetImmersionSceneArtTracking();
+    applyChatTimeFormatSettings(null);
+    applyChatNpcRelMaxSettings(null);
+    _historyViewIndex = -1;
+
+    refreshOrderList();
+    scheduleAutoApply();
+    const deltaPanel = document.getElementById('rpg-tracker-delta-content');
+    if (deltaPanel) deltaPanel.innerHTML = '<span class="delta-empty">No changes yet.</span>';
+    updateUIMemo('');
+    refreshRenderedView();
+    if (typeof renderRouterUI === 'function') renderRouterUI();
+    if (typeof globalThis._rpgSyncAgentImmersionUi === 'function') globalThis._rpgSyncAgentImmersionUi();
+}
+
 /**
  * Installs a transient prompt interceptor to inject active lore keys
  * into the main narrator's prompt. This is non-mutating and clean.
@@ -2014,27 +2047,6 @@ function onChatChanged(newChatId) {
     // Same-chat refresh (bare emit, F5, Copilot apply, etc.): keep live tracker state.
     if (!emitHadId || oldChatId === resolvedId) {
         _currentChatId = resolvedId;
-        _chatIdBootConfirmed = true;
-        void ensureLocalMemoRecovery(resolvedId);
-        updateChatLinkUI();
-        return;
-    }
-
-    // First real CHAT_CHANGED of this page load with no confirmed prior identity: our
-    // boot-time read of ctx.chatId can race ST's own chat restoration (init() runs
-    // alongside getCharacters/getBackgrounds/etc., not after them) and come back null —
-    // more likely right after editing extension files forces a slower/uncached reload.
-    // Without this guard, that bogus null "oldChatId" makes this look like a switch into
-    // an unknown chat below, and the "no saved snapshot" branch wipes currentMemo/memoHistory
-    // that settings.json had just loaded correctly for whichever chat ST is displaying.
-    // Adopt this chat's identity without touching any live state.
-    if (!_chatIdBootConfirmed) {
-        _chatIdBootConfirmed = true;
-        _currentChatId = resolvedId;
-        const bootPrefix = getEffectiveRouterCampaignPrefix(resolvedId);
-        s.routerCampaignPrefix = bootPrefix || '';
-        syncRouterPrefixDisplays(bootPrefix || '');
-        scheduleAgentManifestRefresh(true);
         void ensureLocalMemoRecovery(resolvedId);
         updateChatLinkUI();
         return;
@@ -2174,39 +2186,7 @@ function onChatChanged(newChatId) {
     // saveChatState(oldChatId) already called above, before resetRouterTick.
 
     const found = loadChatState(resolvedId);
-    if (!found) {
-        s.currentMemo = '';
-        s.memoHistory = [];
-        s.lastDelta = '';
-        s.quests = [];
-        s.activeRouterKeys = [];
-        s.activeWorldKeys = [];
-        s.routerLog = [];
-        s.worldProgressionLastFiredAtMinutes = -1;
-        s.worldProgressionLastFiredPeriodLabel = '';
-        s.worldProgressionSkeletonAtmosphereSummary = '';
-        s.agentImmersionMode = false;
-        resetImmersionSceneArtTracking();
-
-        applyChatTimeFormatSettings(null);
-        applyChatNpcRelMaxSettings(null);
-        refreshOrderList();
-        scheduleAutoApply();
-
-        _historyViewIndex = -1;
-
-        const dp = document.getElementById('rpg-tracker-delta-content');
-        if (dp) dp.innerHTML = '<span class="delta-empty">No changes yet.</span>';
-
-        updateUIMemo('');
-        refreshRenderedView();
-        if (typeof renderRouterUI === 'function') {
-            renderRouterUI();
-        }
-        if (typeof globalThis._rpgSyncAgentImmersionUi === 'function') {
-            globalThis._rpgSyncAgentImmersionUi();
-        }
-    }
+    if (!found && !s.chatStates?.[resolvedId]) resetUnseenChatState(s);
 
     scheduleAgentManifestRefresh();
     updateChatLinkUI();
@@ -12885,32 +12865,29 @@ async function runPortraitMigrationIfNeeded() {
         sanitizeRouterState(settings);
         const bootChatId = ctx.chatId || ctx.getCurrentChatId?.() || null;
         _currentChatId = bootChatId;
-        // Only mark identity as confirmed if this boot-time read actually got a real chat id.
-        // If ST's own chat restoration hasn't populated ctx.chatId yet (a race against our
-        // own network-bound awaits above), leave this false so onChatChanged's boot-confirmation
-        // guard can safely adopt the first real CHAT_CHANGED without wiping live state.
-        _chatIdBootConfirmed = !!bootChatId;
-        // Strip intentionally-deleted custom modules (tombstones) and heal schema WAL
-        // before loadChatState — cancelled settings saves otherwise resurrect NEW_FIELD etc.
+        // Strip intentionally-deleted custom modules before loadChatState.
+        // A browser-local configuration backup is never applied automatically: it may
+        // be a genuine interrupted save or simply an older browser's cache.
         // Also strip global UI prefs from chat partitions so loadChatState cannot clobber
         // auto-image-gen / immersion / connection settings from a stale snapshot.
         const strippedTombstones = applyDeletedCustomTagTombstones();
         const strippedGlobalUi = stripChatStateGlobalUiPrefs(settings);
-        const healedFromBackup = applyModuleSchemaBackup(bootChatId);
+        const pendingSettingsBackup = getPendingModuleSchemaBackup();
+        const healedFromBackup = pendingSettingsBackup && await confirmLocalSettingsRecovery(pendingSettingsBackup)
+            ? applyModuleSchemaBackup(bootChatId, pendingSettingsBackup)
+            : false;
         if ((strippedTombstones || healedFromBackup || strippedGlobalUi) && settings.debugMode) {
             console.log('[RPG Tracker] Healed module schema before chat-state load.', {
                 strippedTombstones, healedFromBackup, strippedGlobalUi,
             });
         }
         if (healedFromBackup) {
-            // A reload raced a pending disk write (code update, extension update, plain F5)
-            // and disk came back stale — this browser's last known-good in-memory copy of
-            // custom modules / stock prompts / narrator toggles just self-healed over it.
-            toastr['info']('Detected a stale settings save from before a reload and restored your last known-good tracker config.', 'RPG Tracker', { timeOut: 6000 });
+            toastr['info']('Restored the browser-local tracker configuration you selected.', 'RPG Tracker', { timeOut: 6000 });
         }
         eventSource.on(event_types.CHAT_CHANGED, onChatChanged);
         if (bootChatId && settings.chatLinkEnabled) {
-            loadChatState(bootChatId);
+            const restoredBootChat = loadChatState(bootChatId);
+            if (!restoredBootChat && !settings.chatStates?.[bootChatId]) resetUnseenChatState(settings);
             // loadChatState can reintroduce tombstoned tags from a stale partition — strip again.
             applyDeletedCustomTagTombstones();
         }

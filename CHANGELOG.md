@@ -2,6 +2,13 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [6.0.16] - 2026-07-22
+
+### Fixed
+- **Chat Link**: new chats with no saved tracker state now begin cleanly instead of inheriting another chat's memo, quests, or portraits.
+- **Prompt injection**: clears a stale legacy Prompt Manager flag so tracker and player-character context continue to reach the model.
+- **Settings recovery**: browser and disk mismatches now always ask which copy to keep; CYOA settings and presets are included in the recoverable browser snapshot.
+
 ## [6.0.15] - 2026-07-21
 
 ### Added

@@ -685,15 +685,15 @@ async function buildNpcRelationsBlock(settings) {
 }
 
 export function installInterceptor() {
+    // The former Prompt Manager injection path was removed. Clear any flag left
+    // behind by a hot-reloaded older build so this interceptor remains the one
+    // authoritative source of tracker and player-character prompt injection.
+    delete globalThis._rpgPromptManagerInterceptorActive;
     globalThis.rpgTrackerInterceptor = async function (chat, contextSize, abort, type) {
         const settings = getSettings();
 
-        // When addPromptManagerInterceptor (Path 1) is active, we do NOT inject anything
-        // into the user message — that would break prefix-cache protection.
-        // However, we MUST still run the keyword pre-scan so that newly triggered entries
-        // are added to activeRouterKeys before Path 1 reads it to build the API payload.
-        // Path 1 fires after this interceptor in the ST pipeline, so a scan here = same-turn lore.
-        const skipInjection = !!globalThis._rpgPromptManagerInterceptorActive;
+        // The manifest interceptor is the sole injection path.
+        const skipInjection = false;
 
         // ── Swipe rollback: memo, then relationships, then lorebook agent ─────────────
         const _rbCtx = SillyTavern.getContext();
