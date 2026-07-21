@@ -2,6 +2,12 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [5.9.32] - 2026-07-21
+
+### Fixed
+- **Native ST portrait gen (Comfy)**: `/imagine` now passes `extend=false` so Multihog's curated portrait prompt goes straight to the image backend instead of being re-written by a second main-API LLM pass when "Extend free mode prompts" is enabled.
+- **CYOA settings popup**: scrollbar for high-zoom compatibility (#26).
+
 ## [5.9.3] - 2026-07-20
 
 ### Added

@@ -702,7 +702,7 @@ export async function generatePortraitDirect(prompt, entityName) {
         }
         const parser = new SlashCommandParser();
         const escapedPrompt = prompt.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-        const command = `/imagine quiet=true gallery=false "${escapedPrompt}"`;
+        const command = `/imagine quiet=true gallery=false extend=false "${escapedPrompt}"`;
         const closure = parser.parse(command);
         const result = await closure.execute();
         if (result && result.isError) {
