@@ -14981,7 +14981,7 @@ RULES:
             const activePreset = presetMatches ? presetMatches[0] : '';
 
             const html = `
-            <div style="font-family:inherit;max-width:560px;min-width:380px;">
+            <div style="font-family:inherit;max-width:560px;min-width:380px;max-height:80vh;overflow-y:auto;overflow-x:hidden;padding-right:4px;box-sizing:border-box;">
                 <div style="font-size:15px;font-weight:bold;margin-bottom:10px;color:var(--SmartThemeBodyColor, #eee);">⚙️ CYOA Mode Settings</div>
                 <div style="margin-bottom:14px;padding:8px 10px;border-radius:6px;background:rgba(120,80,220,0.12);border:1px solid rgba(120,80,220,0.35);font-size:11.5px;line-height:1.45;color:var(--SmartThemeBodyColor,#eee);">
                     <div style="font-weight:600;margin-bottom:4px;">Recommended: Pre-Seeded RNG (RNG Queue)</div>
