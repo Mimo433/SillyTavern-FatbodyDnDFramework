@@ -2,6 +2,11 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [5.9.99] - 2026-07-21
+
+### Fixed
+- **Startup Narrator Configuration**: controls now persist changes, synchronize with the sidebar, and trigger the normal system-prompt update path.
+
 ## [5.9.98] - 2026-07-21
 
 ### Changed

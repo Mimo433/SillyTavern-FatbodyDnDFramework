@@ -4009,7 +4009,16 @@ Gear:
     // --- Onboarding Narrator Configuration (Salad Bar Sync) ---
     const s = getSettings();
 
-    // (Local syncSettingsAndUI function removed; using module-scoped syncSettingsAndUI instead)
+    // Keep startup controls on the same persistence path as their sidebar counterparts.
+    // This intentionally lives here because this renderer can be mounted independently
+    // of the sidebar settings panel.
+    const syncSettingsAndUI = (mutator) => {
+        const settings = getSettings();
+        mutator(settings);
+        registerDiceFunctionTool();
+        saveSettings();
+        scheduleAutoApply();
+    };
 
     // RNG Mode Sync
     const onboardingRngInputs = el.querySelectorAll('input[name="rt_onboarding_rng_mode"]');
