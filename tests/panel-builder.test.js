@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createPanel } from '../panel-builder.js';
-import { runtimeState } from '../runtime-state.js';
+import { createPanel } from '../src/ui/panel/panel-builder.js';
+import { runtimeState } from '../src/app/runtime-state.js';
 
 describe('panel builder', () => {
     it('loads independently from the application entry point', () => {

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createMemoRecoveryManager, MAX_RECOVERY_CHATS, RECOVERY_STORAGE_KEY } from '../memo-recovery.js';
+import { createMemoRecoveryManager, MAX_RECOVERY_CHATS, RECOVERY_STORAGE_KEY } from '../src/features/recovery/memo-recovery.js';
 
 function makeManager(settings, hooks = {}) {
     return createMemoRecoveryManager({

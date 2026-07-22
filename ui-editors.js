@@ -18,7 +18,7 @@ import {
     bindRenderedCardEvents,
     sectionPages as _sectionPages,
     rebuildNpcInstructionIfNeeded
-} from './runtime-bridge.js';
+} from './src/app/runtime-bridge.js';
 import { renderMemoAsCards, MARKER_TYPE_MAP, getMarkerLibraryKeys } from './renderer.js';
 
 export function handleCategorySettings(tag, targetEl) {

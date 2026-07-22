@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { wireAgentWorldProgression } from '../panel-world-progression.js';
+import { wireAgentWorldProgression } from '../src/ui/panel/panel-world-progression.js';
 
 describe('World Progression panel controls', () => {
     it('exposes a status updater that reflects the current tracker setting', () => {

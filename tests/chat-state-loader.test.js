@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createChatStateLoader } from '../chat-state-loader.js';
+import { createChatStateLoader } from '../src/features/chat/chat-state-loader.js';
 
 describe('chat state loader', () => {
     it('returns a callable loader function', () => {

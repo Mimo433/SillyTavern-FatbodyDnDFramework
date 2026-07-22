@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createRouterViewRenderer } from '../panel-router-view.js';
-import { runtimeState } from '../runtime-state.js';
+import { createRouterViewRenderer } from '../src/ui/panel/panel-router-view.js';
+import { runtimeState } from '../src/app/runtime-state.js';
 
 afterEach(() => {
     runtimeState.refreshImmersionView = async () => {};

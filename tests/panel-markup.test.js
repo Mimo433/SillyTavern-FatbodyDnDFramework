@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildPanelMarkup } from '../panel-markup.js';
+import { buildPanelMarkup } from '../src/ui/panel/panel-markup.js';
 
 describe('panel markup', () => {
     it('includes the tracker and Agent roots with supplied setting values', () => {

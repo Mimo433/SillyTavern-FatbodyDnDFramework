@@ -1,4 +1,4 @@
-import { runtimeState } from './runtime-state.js';
+import { runtimeState } from '../../app/runtime-state.js';
 import { createRouterViewRenderer } from './panel-router-view.js';
 import { wireAgentWorldProgression } from './panel-world-progression.js';
 import { wireAgentActivity } from './panel-agent-activity.js';

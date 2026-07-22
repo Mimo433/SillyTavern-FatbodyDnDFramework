@@ -3,7 +3,7 @@ import {
     PANEL_BG_AGENT_KEYS,
     PANEL_BG_TRACKER_KEYS,
     getPanelBgConfig,
-} from '../panel-appearance.js';
+} from '../src/ui/panel/panel-appearance.js';
 
 describe('panel appearance settings', () => {
     it('uses the correct tracker and agent storage keys', () => {

@@ -1,4 +1,4 @@
-import { runtimeState } from './runtime-state.js';
+import { runtimeState } from '../../app/runtime-state.js';
 
 /** Manages the Lorebook Agent Scene View and its Records/Visualization mode UI. */
 export function createSceneViewController({

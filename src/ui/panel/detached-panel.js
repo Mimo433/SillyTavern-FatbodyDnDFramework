@@ -1,6 +1,6 @@
-import { BLOCK_ICONS } from './constants.js';
-import { canResizePanels, makeDraggable } from './ui-geometry.js';
-import { getRuntimeActions } from './runtime-bridge.js';
+import { BLOCK_ICONS } from '../../../constants.js';
+import { canResizePanels, makeDraggable } from '../../../ui-geometry.js';
+import { getRuntimeActions } from '../../app/runtime-bridge.js';
 
 export function createDetachedPanel(tag) {
     const { getSettings, loadDetached, refreshRenderedView, saveDetached } = getRuntimeActions();

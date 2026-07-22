@@ -1,4 +1,4 @@
-import { getRuntimeActions, sectionPages } from './runtime-bridge.js';
+import { getRuntimeActions, sectionPages } from '../../app/runtime-bridge.js';
 
 export function bindRenderedCardEvents(el, memo, isDetachedContext = false, onRefresh = null) {
     const runtime = getRuntimeActions();

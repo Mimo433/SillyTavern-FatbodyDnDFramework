@@ -3,9 +3,9 @@ import {
     configureRuntimeActions,
     saveSettings,
     sectionPages,
-} from '../runtime-bridge.js';
-import { bindRenderedCardEvents } from '../card-events.js';
-import { createDetachedPanel } from '../detached-panel.js';
+} from '../src/app/runtime-bridge.js';
+import { bindRenderedCardEvents } from '../src/ui/panel/card-events.js';
+import { createDetachedPanel } from '../src/ui/panel/detached-panel.js';
 
 describe('runtime bridge', () => {
     it('loads extracted UI modules without loading the application entry point', () => {

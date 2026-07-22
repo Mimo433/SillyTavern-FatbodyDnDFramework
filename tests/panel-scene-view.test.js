@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { createSceneViewController } from '../panel-scene-view.js';
+import { createSceneViewController } from '../src/ui/panel/panel-scene-view.js';
 
 afterEach(() => {
     delete globalThis._rpgRefreshImmersionView;

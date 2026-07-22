@@ -1,6 +1,6 @@
 import { getSettings } from './state-manager.js';
 import { sendStateRequest } from './llm-client.js';
-import { saveSettings, refreshRenderedView, applyTrackerThemeToDom } from './runtime-bridge.js';
+import { saveSettings, refreshRenderedView, applyTrackerThemeToDom } from './src/app/runtime-bridge.js';
 
 let themeUndoStack = [];
 

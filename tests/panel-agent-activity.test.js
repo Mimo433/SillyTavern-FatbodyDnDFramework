@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { wireAgentActivity } from '../panel-agent-activity.js';
+import { wireAgentActivity } from '../src/ui/panel/panel-agent-activity.js';
 
 afterEach(() => {
     delete globalThis.document;

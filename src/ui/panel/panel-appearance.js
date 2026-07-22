@@ -1,5 +1,5 @@
-import { getSettings } from './state-manager.js';
-import { getRuntimeActions } from './runtime-bridge.js';
+import { getSettings } from '../../../state-manager.js';
+import { getRuntimeActions } from '../../app/runtime-bridge.js';
 
 export function scalePanelBackgroundImage(dataUrl, maxDim = 1280) {
     return new Promise((resolve, reject) => {
