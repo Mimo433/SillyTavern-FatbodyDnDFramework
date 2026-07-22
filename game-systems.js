@@ -26,7 +26,7 @@ import {
     refreshRenderedView,
     autoApplySysprompt,
     fetchBaseSyspromptRaw,
-} from './index.js';
+} from './src/app/runtime-bridge.js';
 
 /** @typedef {{ deferPersistence?: boolean }} SyspromptPersistOptions */
 

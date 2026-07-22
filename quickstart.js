@@ -6,7 +6,7 @@ import {
     addPlayerCardToLorebookAgent,
     activateSillyTavernPersona,
 } from './character-creator.js';
-import { saveSettings, autoApplySysprompt } from './index.js';
+import { saveSettings, autoApplySysprompt } from './src/app/runtime-bridge.js';
 
 /** @type {boolean} */
 let _quickStartRunning = false;
