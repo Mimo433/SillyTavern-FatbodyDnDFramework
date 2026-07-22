@@ -1,4 +1,5 @@
 const RECOVERY_STORAGE_KEY = 'rpg_tracker_memo_recovery_v1';
+const RECOVERY_BROWSER_ID_KEY = 'rpg_tracker_recovery_browser_id_v1';
 const MAX_RECOVERY_CHATS = 8;
 
 /**
@@ -15,6 +16,21 @@ export function createMemoRecoveryManager({
 }) {
     let recoveryPromptActive = false;
     let bootCheckDone = false;
+    let browserId = null;
+
+    function getBrowserId() {
+        if (browserId) return browserId;
+        browserId = localStorage.getItem(RECOVERY_BROWSER_ID_KEY);
+        if (!browserId) {
+            browserId = globalThis.crypto?.randomUUID?.() || `rt-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+            localStorage.setItem(RECOVERY_BROWSER_ID_KEY, browserId);
+        }
+        return browserId;
+    }
+
+    function markMemoPersistedByCurrentBrowser(settings = getSettings()) {
+        settings.memoPersistedBy = getBrowserId();
+    }
 
     function snapshotMemoToLocalStorage(chatId, opts = {}) {
         if (!chatId || recoveryPromptActive) return;
@@ -36,6 +52,7 @@ export function createMemoRecoveryManager({
             }
             map[chatId] = {
                 ts: Date.now(),
+                browserId: getBrowserId(),
                 currentMemo: memo,
                 lastDelta: settings.lastDelta || '',
                 quests: Array.isArray(settings.quests) ? settings.quests : [],
@@ -97,6 +114,11 @@ export function createMemoRecoveryManager({
             const diskStamp = diskChatState
                 ? (Number(diskChatState.memoPersistedAt) || 0)
                 : (Number(settings.memoPersistedAt) || 0);
+            const diskWriterId = diskChatState?.memoPersistedBy || settings.memoPersistedBy || null;
+            if (entry.browserId !== getBrowserId() || diskWriterId !== getBrowserId()) {
+                console.warn('[RPG Tracker] Memo recovery skipped: disk was last saved by another browser profile', { chatId });
+                return;
+            }
             const ctx = SillyTavern.getContext();
             if (typeof ctx.callGenericPopup !== 'function') {
                 console.warn('[RPG Tracker] Memo recovery skipped: popup API unavailable');
@@ -207,6 +229,7 @@ export function createMemoRecoveryManager({
         confirmLocalSettingsRecovery,
         isBootCheckDone: () => bootCheckDone,
         markBootCheckDone: () => { bootCheckDone = true; },
+        markMemoPersistedByCurrentBrowser,
     };
 }
 

@@ -62,9 +62,11 @@ describe('memo recovery manager', () => {
             syncMemoView: vi.fn(),
         };
         const manager = makeManager(settings, hooks);
-        localStorage.setItem(RECOVERY_STORAGE_KEY, JSON.stringify({
-            'chat-1': { ts: Date.now(), currentMemo: 'local memo', lastDelta: 'local delta', quests: [{ title: 'Recovered' }] },
-        }));
+        manager.snapshotMemoToLocalStorage('chat-1', { force: true });
+        const snapshots = JSON.parse(localStorage.getItem(RECOVERY_STORAGE_KEY));
+        snapshots['chat-1'] = { ...snapshots['chat-1'], currentMemo: 'local memo', lastDelta: 'local delta', quests: [{ title: 'Recovered' }] };
+        localStorage.setItem(RECOVERY_STORAGE_KEY, JSON.stringify(snapshots));
+        settings.memoPersistedBy = snapshots['chat-1'].browserId;
         globalThis.toastr = { success: vi.fn() };
         globalThis.SillyTavern = {
             getContext: () => ({ callGenericPopup: vi.fn().mockResolvedValue(true) }),

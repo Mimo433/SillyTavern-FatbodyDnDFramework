@@ -309,6 +309,7 @@ export function saveChatState(chatId, opts = {}) {
     s.chatStates[chatId] = {
         currentMemo:  s.currentMemo,
         memoPersistedAt,
+        memoPersistedBy: s.memoPersistedBy || null,
         memoHistory:  JSON.parse(JSON.stringify(s.memoHistory)),
         lastDelta:    s.lastDelta || '',
         customPortraits: JSON.parse(JSON.stringify(s.customPortraits || {})),

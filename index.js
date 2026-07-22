@@ -70,6 +70,7 @@ const memoRecovery = createMemoRecoveryManager({
 const snapshotMemoToLocalStorage = (...args) => memoRecovery.snapshotMemoToLocalStorage(...args);
 const ensureLocalMemoRecovery = (...args) => memoRecovery.ensureLocalMemoRecovery(...args);
 const confirmLocalSettingsRecovery = (...args) => memoRecovery.confirmLocalSettingsRecovery(...args);
+const markMemoPersistedByCurrentBrowser = (...args) => memoRecovery.markMemoPersistedByCurrentBrowser(...args);
 
 let _pillDeselectHandler = null;
 globalThis._rpgRenderRouterUI = () => { if (typeof runtimeState.renderRouterUI === 'function') runtimeState.renderRouterUI(); };
@@ -527,6 +528,7 @@ async function forceDiskCheckpoint() {
         globalThis._rpgFlushRawMemoChanges();
     }
     const s = getSettings();
+    markMemoPersistedByCurrentBrowser(s);
     const chatId = runtimeState.currentChatId || SillyTavern.getContext()?.chatId || null;
     if (s.chatLinkEnabled && chatId) {
         saveChatState(chatId, { skipDiskWrite: true });
@@ -583,6 +585,7 @@ export function saveSettings(force = false, delay = 0) {
                 const useForce = !!forceWrite || pendingForce;
 
                 const s = getSettings();
+                markMemoPersistedByCurrentBrowser(s);
                 const ctx = SillyTavern.getContext();
                 const activeChatId = runtimeState.currentChatId || ctx.chatId;
                 // Snapshot chat-linked state into extension settings before persisting to disk.
