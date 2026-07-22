@@ -3,77 +3,25 @@
  * Game state schema, defaults, persistence, migration, and profile I/O.
  * Owns the single source of truth for all runtime state (currentMemo, quests,
  * modules, chat-linked snapshots, connection settings, etc.).
- * No DOM. No circular deps.
+ * Public barrel: leaf modules live under src/state/; consumers keep importing here.
  *
- * Imports: constants.js
+ * Imports: constants.js, src/state/*
  * Imported by: virtually everything — the root dependency.
  */
 
 import { DEFAULT_STOCK_PROMPTS, BLOCK_ORDER, RT_PROMPTS } from './constants.js';
+import { bindGetSettings } from './src/state/settings-ref.js';
+import { DEFAULT_NPC_SECTIONS, DEFAULT_PC_SECTIONS, MODULE_NAME } from './src/state/schema-sections.js';
+import { getNpcRelationshipMax, relPctOfMax } from './src/state/relationship-math.js';
+import { isOlderThan } from './src/state/versions.js';
 
-export const DEFAULT_NPC_SECTIONS = [
-    { id: 'sec_appearance', name: 'Appearance/Species', description: 'Species, build, age, features, usual attire — not current pose or activity.', icon: '👁️', color: '#d4a940' },
-    { id: 'sec_personality', name: 'Personality', description: 'Stable temperament and drives — not today\'s mood, fear, or stress.', icon: '🧠', color: '#8b5cf6' },
-    { id: 'sec_background', name: 'Brief Background', description: 'Standing role, origin, history — not their part in the current plot.', icon: '📜', color: '#3b82f6' },
-    { id: 'sec_habits', name: 'Habits/Behaviors', description: 'Recurring mannerisms and patterns — not one scene\'s behavior.', icon: '🔄', color: '#10b981' },
-    { id: 'sec_strengths', name: 'Strengths', description: '[Concise bullet phrases formatted in bullet points of their most notable strengths, skills, or virtues. Sharp and specific — no vague generalities. A kind character may have more strengths than flaws.]', icon: '⚡', color: '#22c55e' },
-    { id: 'sec_flaws', name: 'Flaws', description: '[Concise bullet phrases formatted in bullet points of their most notable weaknesses, bad habits, or moral failings. Be honest and specific. A troubled character may have more flaws than strengths.]\n(Note: The split between strengths and flaws does not need to be even. It is perfectly fine to have an uneven split—like having more strengths than flaws, or more flaws than strengths—so long as it authentically reflects the character. However, it can be evenly split if it makes sense.)', icon: '⚠️', color: '#ef4444' },
-    { id: 'sec_combat_profile', name: 'Combat Profile', description: '[HIDDEN UNTIL SET — only written when a [COMBAT] block for this NPC is visible in the narrative. Copy the full stat block verbatim: HP, AC, saves, weapons, abilities, spells, and any other declared stats. Never fabricate or summarize.]', icon: '🤺', color: '#38bdf8', hiddenUntilSet: true }
-];
+export * from './src/state/schema-sections.js';
+export * from './src/state/versions.js';
+export * from './src/state/relationship-math.js';
+export * from './src/state/relationship-dom.js';
 
-export const DEFAULT_PC_SECTIONS = [
-    { id: 'sec_appearance', name: 'Appearance/Species', description: '[Describe physical features and species: body type, height, hair, eyes, skin tone, distinguishing marks, scars, and natural body language. You MUST explicitly state their Species, Ethnicity, and Gender based on the character card and Player Preferences. You MUST explicitly incorporate any appearance notes provided in the card/preferences. Do NOT describe clothing, armor, or worn gear — those are handled dynamically elsewhere and will change.]', icon: '👁️', color: '#d4a940' },
-    { id: 'sec_personality', name: 'Personality', description: '[Describe temperament, how they act around others, and emotional tendencies. You MUST incorporate any traits provided.]', icon: '🧠', color: '#8b5cf6' },
-    { id: 'sec_background', name: 'Background', description: '[Provide backstory context grounded in the character card. You MUST incorporate any background hints provided. Brief but meaningful.]', icon: '📜', color: '#3b82f6' },
-    { id: 'sec_habits', name: 'Habits & Behaviors', description: '[Describe recurring mannerisms, habits, quirks, or behavioral patterns.]', icon: '🔄', color: '#10b981' },
-    { id: 'sec_strengths', name: 'Strengths', description: '[Concise bullet phrases formatted in bullet points of their most notable strengths, skills, or virtues. Sharp and specific — no vague generalities. A kind character may have more strengths than flaws.]', icon: '⚡', color: '#22c55e' },
-    { id: 'sec_flaws', name: 'Flaws', description: '[Concise bullet phrases formatted in bullet points of their most notable weaknesses, bad habits, or moral failings. Be honest and specific. A troubled character may have more flaws than strengths.]\n(Note: The split between strengths and flaws does not need to be even. It is perfectly fine to have an uneven split—like having more strengths than flaws, or more flaws than strengths—so long as it authentically reflects the character. However, it can be evenly split if it makes sense.)', icon: '⚠️', color: '#ef4444' }
-];
-
-// ── Module name (shared constant, settings key) ────────────────────────────────
-export const MODULE_NAME = 'rpg_tracker';
-
-/** @param {number} raw */
-function normalizeNpcRelationshipMax(raw) {
-    const n = Number(raw);
-    if (!Number.isFinite(n)) return 150;
-    return Math.max(10, Math.min(10000, Math.round(n)));
-}
-
-/** Global default for new chats / chats without a saved per-chat value. */
-export function getNpcRelationshipMaxDefault(settings) {
-    const s = settings || getSettings();
-    return normalizeNpcRelationshipMax(s.npcRelationshipMaxDefault ?? 150);
-}
-
-/** Effective max for the active chat (live `npcRelationshipMax`, else default). */
-export function getNpcRelationshipMax(settings) {
-    const s = settings || getSettings();
-    if (settings != null && Object.prototype.hasOwnProperty.call(settings, 'npcRelationshipMax') && settings.npcRelationshipMax != null) {
-        return normalizeNpcRelationshipMax(settings.npcRelationshipMax);
-    }
-    return normalizeNpcRelationshipMax(s.npcRelationshipMax ?? s.npcRelationshipMaxDefault ?? 150);
-}
-
-/** @param {number} value @param {number} [max] */
-export function clampRelationshipValue(value, max) {
-    const m = max ?? getNpcRelationshipMax();
-    const n = Number(value);
-    if (!Number.isFinite(n)) return 0;
-    return Math.max(-m, Math.min(m, Math.round(n)));
-}
-
-/** Bar fill width in percent (50% of track = full scale). @param {number} value @param {number} [max] */
-export function relationshipBarPct(value, max) {
-    const m = max ?? getNpcRelationshipMax();
-    if (m <= 0) return 0;
-    return (Math.abs(clampRelationshipValue(value, m)) / m) * 50;
-}
-
-/** @param {number} fraction @param {number} [max] */
-export function relPctOfMax(fraction, max) {
-    return Math.round((max ?? getNpcRelationshipMax()) * fraction);
-}
+// Leaf modules call getSettings via settings-ref; bind before DEFAULT_MODULES init.
+bindGetSettings(getSettings);
 
 /**
  * Lorebook Agent NPC module — starting relationship deltas scaled to configured max.
@@ -166,179 +114,6 @@ Typical range: 1-5 for minor moments, 5-15 for major events. Only use 15+ for li
 
 EXAMPLE — end of a response where {{user}} complimented Elena:
 *(Affection: Elena +2 — she seemed genuinely moved by the words)*`;
-}
-
-/**
- * Maps a friendship value to a tier label and behavioral hint (thresholds are % of max).
- * @param {number} value
- * @param {number} [max]
- */
-export function getFriendshipTier(value, max) {
-    const m = max ?? getNpcRelationshipMax();
-    const v = clampRelationshipValue(value, m);
-    if (v <= -0.85 * m) return { label: 'HOSTILE',              hint: 'open contempt, refuses cooperation, may sabotage or attack' };
-    if (v <= -0.65 * m) return { label: 'ENEMY/HATEFUL',        hint: 'deeply despises you, actively seeks to undermine your goals' };
-    if (v <= -0.45 * m) return { label: 'BITTER/RESENTFUL',     hint: 'hostile tone, holds active grudges, quick to anger' };
-    if (v <= -0.25 * m) return { label: 'UNFRIENDLY/COLD',      hint: 'curt and guarded, answers with bare minimum, visible irritation' };
-    if (v <= -0.10 * m) return { label: 'DISTRUSTFUL/GUARDED',  hint: 'suspicious of your motives, keeps a physical and emotional distance' };
-    if (v <= -0.03 * m) return { label: 'WARY/UNEASY',          hint: 'polite but distant, avoids personal topics, second-guesses motives' };
-    if (v <=  0.03 * m) return { label: 'NEUTRAL/ACQUAINTANCE', hint: 'civil and transactional, neither warm nor cold' };
-    if (v <=  0.10 * m) return { label: 'WARMING/FAVORABLE',    hint: 'small smiles, starting to open up, shows basic goodwill' };
-    if (v <=  0.25 * m) return { label: 'AMICABLE',             hint: 'pleasant and chatty, actively engages in conversation, cooperative' };
-    if (v <=  0.45 * m) return { label: 'FRIENDLY',             hint: 'genuine warmth, light humor, willing to help when asked' };
-    if (v <=  0.65 * m) return { label: 'CLOSE FRIEND',         hint: 'deep trust, confides worries, stands up for you, proactive help' };
-    if (v <=  0.85 * m) return { label: 'DEEP BOND/TRUSTED',    hint: 'fiercely protective, emotional bedrock, treats you as inner circle' };
-    return                      { label: 'BONDED/FAMILY',       hint: 'unbreakable loyalty, would risk life without hesitation, shares deepest secrets' };
-}
-
-/**
- * Maps an affection value to a tier label and behavioral hint (thresholds are % of max).
- * @param {number} value
- * @param {number} [max]
- */
-export function getAffectionTier(value, max) {
-    const m = max ?? getNpcRelationshipMax();
-    const v = clampRelationshipValue(value, m);
-    if (v <= -0.85 * m) return { label: 'REVULSION',                hint: 'finds your presence repulsive, recoils from proximity, hostile to advances' };
-    if (v <= -0.65 * m) return { label: 'DISGUSTED',                hint: 'active disdain for romantic or physical proximity, harsh rejections' };
-    if (v <= -0.45 * m) return { label: 'AVERSION',                 hint: 'clearly uninterested, dismisses flirtation coldly, steers away from intimacy' };
-    if (v <= -0.25 * m) return { label: 'AVOIDANT',                 hint: 'uncomfortable with romantic attention, subtly creates physical distance' };
-    if (v <= -0.10 * m) return { label: 'UNRECEPTIVE/WITHDRAWN',    hint: 'shuts down romantic undertones, visibly uncomfortable with flirting' };
-    if (v <= -0.03 * m) return { label: 'INDIFFERENT/UNINTERESTED', hint: 'no romantic spark, gentle deflection of any advances' };
-    if (v <=  0.03 * m) return { label: 'NEUTRAL/NO AFFECTION',     hint: 'no romantic or emotional attachment toward you' };
-    if (v <=  0.10 * m) return { label: 'CURIOUS/INTRIGUED',        hint: 'brief lingering looks, testing waters, open to playful banter' };
-    if (v <=  0.25 * m) return { label: 'RECEPTIVE/FLIRTATIOUS',    hint: 'actively returns flirting, welcomes light physical touch, playful tension' };
-    if (v <=  0.45 * m) return { label: 'INTERESTED',               hint: 'steals glances, responds warmly to compliments, comfortable with proximity' };
-    if (v <=  0.65 * m) return { label: 'ATTRACTED',                hint: 'seeks your company, flustered by bold compliments, visible tension' };
-    if (v <=  0.85 * m) return { label: 'SMITTEN/INFATUATED',       hint: 'cannot hide feelings, heavily romantic, deeply emotionally invested' };
-    return                      { label: 'DEEPLY IN LOVE',          hint: 'emotionally devoted, craves closeness, expresses tenderness openly' };
-}
-
-/** @param {number} a @param {number} b @param {number} t */
-function lerpTier(a, b, t) {
-    return a + (b - a) * t;
-}
-
-/**
- * Intensity 0–1 from absolute value vs configured max.
- * @param {number} value
- * @param {number} [max]
- */
-export function getRelTierIntensity(value, max) {
-    const m = max ?? getNpcRelationshipMax();
-    if (m <= 0) return 0;
-    const v = clampRelationshipValue(value, m);
-    if (v === 0) return 0;
-    return Math.abs(v) / m;
-}
-
-/**
- * Inline CSS for compact tier pills — color intensity scales with |value|/max.
- * @param {'friendship'|'affection'} type
- * @param {number} value
- * @param {number} [max]
- * @returns {string}
- */
-export function getRelTierBadgeStyle(type, value, max) {
-    const v = clampRelationshipValue(value, max ?? getNpcRelationshipMax());
-    if (v === 0) {
-        return 'color:var(--rt-text-muted,rgba(255,255,255,0.45));background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);';
-    }
-
-    const t = getRelTierIntensity(v, max);
-    const pos = v > 0;
-    let hue;
-    let satLo;
-    let satHi;
-    let lightLo;
-    let lightHi;
-
-    if (type === 'friendship') {
-        hue = pos ? 142 : 0;
-        satLo = pos ? 38 : 42;
-        satHi = pos ? 95 : 92;
-        lightLo = pos ? 58 : 58;
-        lightHi = pos ? 44 : 46;
-    } else {
-        hue = pos ? 330 : 275;
-        satLo = pos ? 42 : 38;
-        satHi = pos ? 96 : 88;
-        lightLo = pos ? 62 : 60;
-        lightHi = pos ? 50 : 48;
-    }
-
-    const sat = lerpTier(satLo, satHi, t);
-    const light = lerpTier(lightLo, lightHi, t);
-    const bgA = lerpTier(0.07, 0.26, t);
-    const borderA = lerpTier(0.20, 0.62, t);
-    const glow = t > 0.65 ? `box-shadow:0 0 ${lerpTier(3, 8, (t - 0.65) / 0.35)}px hsla(${hue},${sat}%,${light}%,${lerpTier(0.15, 0.45, (t - 0.65) / 0.35)});` : '';
-
-    return `color:hsl(${hue},${sat}%,${light}%);background:hsla(${hue},${sat}%,${light}%,${bgA});border:1px solid hsla(${hue},${sat}%,${light}%,${borderA});${glow}`;
-}
-
-/**
- * Inline CSS for the detailed tier block in the NPC popup (same intensity curve, softer fill).
- * @param {'friendship'|'affection'} type
- * @param {number} value
- * @param {number} [max]
- * @returns {string}
- */
-export function getRelTierDetailedStyle(type, value, max) {
-    const v = clampRelationshipValue(value, max ?? getNpcRelationshipMax());
-    if (v === 0) {
-        return 'background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);';
-    }
-
-    const t = getRelTierIntensity(v, max);
-    const pos = v > 0;
-    let hue;
-    let satLo;
-    let satHi;
-    let lightLo;
-    let lightHi;
-
-    if (type === 'friendship') {
-        hue = pos ? 142 : 0;
-        satLo = 38; satHi = 95; lightLo = 58; lightHi = 44;
-        if (!pos) { satLo = 42; satHi = 92; lightLo = 58; lightHi = 46; }
-    } else {
-        hue = pos ? 330 : 275;
-        satLo = 42; satHi = 96; lightLo = 62; lightHi = 50;
-        if (!pos) { satLo = 38; satHi = 88; lightLo = 60; lightHi = 48; }
-    }
-
-    const sat = lerpTier(satLo, satHi, t);
-    const light = lerpTier(lightLo, lightHi, t);
-    const bgA = lerpTier(0.06, 0.18, t);
-    const borderA = lerpTier(0.18, 0.45, t);
-
-    return `background:hsla(${hue},${sat}%,${light}%,${bgA});border:1px solid hsla(${hue},${sat}%,${light}%,${borderA});`;
-}
-
-/** @returns {string} Label color for detailed tier block (matches pill intensity). */
-export function getRelTierDetailedLabelStyle(type, value, max) {
-    const v = clampRelationshipValue(value, max ?? getNpcRelationshipMax());
-    if (v === 0) return 'color:var(--rt-text-muted,rgba(255,255,255,0.45));';
-    const t = getRelTierIntensity(v, max);
-    const pos = v > 0;
-    const hue = type === 'friendship' ? (pos ? 142 : 0) : (pos ? 330 : 275);
-    const sat = type === 'friendship'
-        ? lerpTier(pos ? 38 : 42, pos ? 95 : 92, t)
-        : lerpTier(pos ? 42 : 38, pos ? 96 : 88, t);
-    const light = type === 'friendship'
-        ? lerpTier(pos ? 58 : 58, pos ? 44 : 46, t)
-        : lerpTier(pos ? 62 : 60, pos ? 50 : 48, t);
-    return `color:hsl(${hue},${sat}%,${light}%);`;
-}
-
-/** Apply tier label + dynamic pill styling to an existing badge element. */
-export function applyRelTierBadgeElement(el, type, value, max) {
-    if (!el) return;
-    const tier = type === 'friendship' ? getFriendshipTier(value, max) : getAffectionTier(value, max);
-    el.className = `rt-npc-tier-badge ${type}`;
-    el.setAttribute('style', getRelTierBadgeStyle(type, value, max));
-    el.title = tier.hint;
-    el.textContent = tier.label;
 }
 
 /**
@@ -1604,29 +1379,7 @@ export const CARTRIDGE_PAYLOAD_GROUPS = [
     },
 ];
 
-/**
- * Compares two dotted version strings numerically (segment-by-segment), so
- * e.g. compareVersions('4.10.0', '4.5.0') correctly returns > 0. A plain
- * string comparison would treat '4.10.0' < '4.5.0' because '1' < '5'.
- * @param {string} a
- * @param {string} b
- * @returns {number} negative if a<b, 0 if equal, positive if a>b
- */
-export function compareVersions(a, b) {
-    const pa = String(a || '0').split('.').map(n => parseInt(n, 10) || 0);
-    const pb = String(b || '0').split('.').map(n => parseInt(n, 10) || 0);
-    const len = Math.max(pa.length, pb.length);
-    for (let i = 0; i < len; i++) {
-        const diff = (pa[i] || 0) - (pb[i] || 0);
-        if (diff !== 0) return diff;
-    }
-    return 0;
-}
-
-/** True when the stored settingsVersion is older than `target` (or unset). */
-export function isOlderThan(currentVersion, target) {
-    return !currentVersion || compareVersions(currentVersion, target) < 0;
-}
+// compareVersions / isOlderThan — imported (and re-exported) from src/state/versions.js
 
 // Re-entrancy guard: some migration blocks below call buildNpcInstruction()/
 // buildLocInstruction()/buildFacInstruction(), which themselves call
