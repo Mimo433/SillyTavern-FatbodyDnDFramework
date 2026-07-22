@@ -3539,6 +3539,7 @@ function createPanel() {
         clampRelationshipValue,
         confirmAndPurgeWorldHistory,
         deleteLorebookEntry,
+        escapeHtml,
         extractCurrentTimeStr,
         fileToDataUrl,
         formatInWorldTime,

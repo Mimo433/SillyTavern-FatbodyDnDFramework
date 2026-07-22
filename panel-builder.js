@@ -1,4 +1,7 @@
 import { runtimeState } from './runtime-state.js';
+import { createRouterViewRenderer } from './panel-router-view.js';
+import { wireAgentWorldProgression } from './panel-world-progression.js';
+import { wireAgentActivity } from './panel-agent-activity.js';
 
 /** Builds and wires the tracker panel. Dependencies stay explicit to avoid entry-module cycles. */
 export function createPanel(dependencies) {
@@ -24,6 +27,7 @@ export function createPanel(dependencies) {
         clampRelationshipValue,
         confirmAndPurgeWorldHistory,
         deleteLorebookEntry,
+        escapeHtml,
         extractCurrentTimeStr,
         fileToDataUrl,
         formatInWorldTime,
@@ -660,153 +664,15 @@ export function createPanel(dependencies) {
     agentPanel.style.setProperty('--rt-base-size', (settings.agentFontSize || 13) + 'px');
     const agentCloseBtn = /** @type {HTMLElement} */ (document.getElementById('rpg-tracker-agent-close'));
 
-    runtimeState.renderRouterUI = async function () {
-        const s = getSettings();
-        const keysContainer = agentPanel.querySelector('#rt-agent-router-active-keys');
-        const logContainer = agentPanel.querySelector('#rt-agent-router-log');
-        if (!keysContainer || !logContainer) return;
-
-        keysContainer.style.display = s.agentKeysCollapsed ? 'none' : 'flex';
-        const chevron = agentPanel.querySelector('#rt-agent-keys-chevron');
-        if (chevron) {
-            chevron.style.transform = s.agentKeysCollapsed ? 'rotate(-90deg)' : '';
-        }
-
-        const ctx = SillyTavern.getContext();
-        const books = {};
-        const activeKeys = s.activeRouterKeys || [];
-
-        // Collect needed lorebooks to minimize loads
-        const neededBooks = new Set();
-        for (const k of activeKeys) {
-            const parts = k.split('::');
-            if (parts.length > 1) neededBooks.add(parts[0]);
-        }
-
-        const bookLoads = await Promise.all([...neededBooks].map(async (bookName) => {
-            try {
-                return [bookName, await ctx.loadWorldInfo(bookName)];
-            } catch (_) {
-                return [bookName, null];
-            }
-        }));
-        for (const [bookName, book] of bookLoads) {
-            if (book) books[bookName] = book;
-        }
-
-        // Calculate total active tokens
-        let activeTokens = 0;
-        for (const k of activeKeys) {
-            const [bookName, uid] = k.split('::');
-            const entry = books[bookName]?.entries?.[uid];
-            if (entry) {
-                activeTokens += Math.round((entry.content || '').length / 4);
-            }
-        }
-        const activeTokensEl = agentPanel.querySelector('#rt-agent-active-tokens');
-        if (activeTokensEl) {
-            activeTokensEl.textContent = `(${activeTokens}t)`;
-        }
-
-        // Use keywordActivatedKeys (persistent pool) for yellow pill coloring.
-        // lastKeywordTriggeredKeys only covers the most recent scan pass and resets immediately.
-        const keywordTriggeredSet = new Set(s.keywordActivatedKeys || []);
-
-        keysContainer.innerHTML = activeKeys.map(k => {
-            const [bookName, uid] = k.split('::');
-            const entry = books[bookName]?.entries?.[uid];
-
-            const shortBook = bookName.split('_').pop() || bookName;
-            let label = `${shortBook}/${uid}`;
-            let title = "No entry found.";
-            if (entry) {
-                label = entry.comment || (entry.key?.[0]) || uid;
-                title = `[${bookName}] ${entry.key?.join(', ')}\n\n${(entry.content || '').substring(0, 500)}${entry.content?.length > 500 ? '...' : ''}`;
-            }
-
-            const isKeywordTriggered = keywordTriggeredSet.has(k);
-            const pillBg = isKeywordTriggered ? 'rgba(58, 46, 14, 0.9)' : 'rgba(42, 42, 53, 0.8)';
-            const pillBorder = isKeywordTriggered ? '1px solid rgba(210, 160, 40, 0.6)' : '1px solid rgba(255,255,255,0.1)';
-            const tooltipPrefix = isKeywordTriggered ? '⌂ Keyword-triggered this turn\n\n' : '';
-
-            return `<span class="rt-router-pill" style="background: ${pillBg}; padding: 2px 8px; border-radius: 12px; font-size: 0.769em; border: ${pillBorder}; display: inline-flex; align-items: center; gap: 6px; cursor: help; max-width: 120px;" title="${escapeHtml(tooltipPrefix + title)}">
-                    ${isKeywordTriggered ? '<span style="color: #d4a028; font-size: 0.9em; flex-shrink: 0;" title="Keyword-triggered this turn">⌂</span>' : ''}
-                    <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;">${escapeHtml(label)}</span>
-                    <span class="rt-router-kill-key" data-key="${k}" style="cursor:pointer; color: #ff5555; font-weight: bold; padding: 0 2px;" title="Deactivate">✕</span>
-                </span>`;
-        }).join('') || '<span style="opacity:0.5; font-size:10px;">None</span>';
-
-        logContainer.innerHTML = (s.routerLog || []).map(entry => {
-            let diffStr = '';
-            if (entry.activate?.length) diffStr += `<span style="color:#55ff55;">+${entry.activate.length}</span> `;
-            if (entry.deactivate?.length) diffStr += `<span style="color:#ff5555;">-${entry.deactivate.length}</span> `;
-            if (entry.record?.length) diffStr += `<span style="color:#55ccff;" title="Created: ${entry.record.join(', ')}">*${entry.record.length}</span> `;
-            if (entry.delete?.length) diffStr += `<span style="color:#ff3333; font-weight: bold;" title="Deleted: ${entry.delete.join(', ')}">✕${entry.delete.length}</span> `;
-            if (entry.rewrite?.length) diffStr += `<span style="color:#e67e22; font-weight: bold;" title="Rewritten: ${entry.rewrite.join(', ')}">✎${entry.rewrite.length}</span> `;
-            if (entry.consolidate?.length) diffStr += `<span style="color:#9b59b6; font-weight: bold;" title="Consolidated: ${entry.consolidate.join(', ')}">⎘${entry.consolidate.length}</span> `;
-            return `<div style="background: rgba(0,0,0,0.3); padding: 6px; border-radius: 4px; font-size: 0.769em; margin-bottom: 4px; border-left: 2px solid rgba(255,255,255,0.05);">
-                    <div style="display:flex; justify-content: space-between; opacity: 0.7; margin-bottom: 2px; font-weight: bold;">
-                        <span>${entry.time}</span>
-                        <span>${diffStr}</span>
-                    </div>
-                    <div style="line-height: 1.3;">${escapeHtml(entry.reason)}</div>
-                </div>`;
-        }).join('') || '<span style="opacity:0.5; font-size:10px;">No logs yet.</span>';
-
-        // Attach kill handlers
-        keysContainer.querySelectorAll('.rt-router-kill-key').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const target = /** @type {HTMLElement} */ (e.target);
-                const key = target.getAttribute('data-key');
-                const st = getSettings();
-                if (st.activeRouterKeys) {
-                    st.activeRouterKeys = st.activeRouterKeys.filter(k => k !== key);
-                    if (st.keywordActivatedKeys) {
-                        st.keywordActivatedKeys = st.keywordActivatedKeys.filter(k => k !== key);
-                    }
-                    if (st.lastKeywordTriggeredKeys) {
-                        st.lastKeywordTriggeredKeys = st.lastKeywordTriggeredKeys.filter(k => k !== key);
-                    }
-                    saveSettings();
-                    runtimeState.renderRouterUI();
-                }
-            });
-        });
-
-        // Refresh World Progression status display (reads agentPanel from outer scope)
-        {
-            const wpS = getSettings();
-            const wpLabel = wpS.worldProgressionLastFiredPeriodLabel || '';
-            const wpMins = wpLabel ? (parseInWorldTime(wpLabel) ?? -1) : -1;
-            const wpIntervalMins = (wpS.worldProgressionIntervalHours || 24) * 60;
-            function _fmtWP(m) {
-                return formatInWorldTime(m);
-            }
-            const wpLastEl = agentPanel.querySelector('#rt-agent-world-last-fired');
-            const wpNextEl = agentPanel.querySelector('#rt-agent-world-next-fire');
-            const wpBadge = agentPanel.querySelector('#rt-agent-world-enabled-badge');
-            if (wpLastEl) wpLastEl.textContent = wpLabel || 'Never';
-
-            let wpNextMins = -1;
-            if (wpMins >= 0) {
-                wpNextMins = wpMins + wpIntervalMins;
-            } else {
-                const tMatch = (wpS.currentMemo || '').match(/\[TIME\]([\s\S]*?)\[\/TIME\]/i);
-                const tStr = tMatch ? extractCurrentTimeStr(tMatch[1]) : '';
-                const tMins = tStr ? (parseInWorldTime(tStr) ?? -1) : -1;
-                if (tMins >= 0) wpNextMins = tMins + wpIntervalMins;
-            }
-            if (wpNextEl) wpNextEl.textContent = wpNextMins >= 0 ? _fmtWP(wpNextMins) : '—';
-            if (wpBadge) {
-                wpBadge.textContent = wpS.worldProgressionEnabled ? 'ON' : 'OFF';
-                wpBadge.style.cssText = wpS.worldProgressionEnabled
-                    ? 'font-size:0.692em; padding:1px 7px; border-radius:10px; font-weight:bold; background:rgba(52,168,83,0.18); color:#34a853; border:1px solid rgba(52,168,83,0.3);'
-                    : 'font-size:0.692em; padding:1px 7px; border-radius:10px; font-weight:bold; background:rgba(255,255,255,0.06); color:rgba(255,255,255,0.35); border:1px solid rgba(255,255,255,0.1);';
-            }
-        }
-
-        void runtimeState.refreshImmersionView().catch(() => { });
-    }
+    runtimeState.renderRouterUI = createRouterViewRenderer({
+        agentPanel,
+        escapeHtml,
+        extractCurrentTimeStr,
+        formatInWorldTime,
+        getSettings,
+        parseInWorldTime,
+        saveSettings,
+    })
 
     // Assigned below when the agent panel is wired. Declared here so
     // nav handlers outside the wiring block can always call it safely.
@@ -858,6 +724,19 @@ export function createPanel(dependencies) {
         const isAgentDetached = () => localStorage.getItem('rpg_tracker_agent_detached') === 'true';
         /** Header controls live on #rt-header-face-agent (main panel or detached agent header). */
         const queryAgentUi = (sel) => agentPanel.querySelector(sel) || panel.querySelector(sel);
+
+        const agentWorldProgression = wireAgentWorldProgression({
+            agentPanel,
+            confirmAndPurgeWorldHistory,
+            extractCurrentTimeStr,
+            formatInWorldTime,
+            getSettings,
+            parseInWorldTime,
+            saveChatState,
+            saveSettings,
+            syncCampaignPrefixAndWorldsForChat,
+        });
+        const updateAgentWorldStatus = agentWorldProgression.updateStatus;
 
         agentCloseBtn.addEventListener('click', () => {
             if (isAgentDetached()) {
@@ -995,196 +874,6 @@ export function createPanel(dependencies) {
         }
 
         // ── Agent World Progression Toggle ──
-        const toggleAgentWorld = () => {
-            const s = getSettings();
-            s.agentWorldOpen = !s.agentWorldOpen;
-            localStorage.setItem('rpg_tracker_agent_world_open', String(s.agentWorldOpen));
-            const drawer = agentPanel.querySelector('#rt-agent-world-drawer');
-            if (drawer) drawer.style.display = s.agentWorldOpen ? 'block' : 'none';
-            const icon = agentPanel.querySelector('#rt-agent-world-toggle-icon');
-            if (icon) icon.className = s.agentWorldOpen ? 'fa-solid fa-chevron-down' : 'fa-solid fa-chevron-right';
-        };
-        const worldHeader = agentPanel.querySelector('#rt-agent-world-header');
-        if (worldHeader) {
-            worldHeader.addEventListener('click', (e) => {
-                if (e.target instanceof Element && e.target.closest('#rt-agent-world-enabled-badge')) return;
-                toggleAgentWorld();
-            });
-        }
-
-        const badgeEl = agentPanel.querySelector('#rt-agent-world-enabled-badge');
-        if (badgeEl) {
-            badgeEl.addEventListener('click', async (e) => {
-                e.stopPropagation();
-                const s = getSettings();
-                s.worldProgressionEnabled = !s.worldProgressionEnabled;
-                saveSettings();
-                updateAgentWorldStatus();
-                $('#rpg_world_progression_enabled').prop('checked', s.worldProgressionEnabled);
-                if (runtimeState.currentChatId) {
-                    await syncCampaignPrefixAndWorldsForChat(runtimeState.currentChatId, 'toggle-world-progression');
-                }
-            });
-        }
-
-        // ── Agent World Progression status display helper ──
-        function updateAgentWorldStatus() {
-            const s = getSettings();
-            const label = s.worldProgressionLastFiredPeriodLabel || '';
-            const mins = label ? (parseInWorldTime(label) ?? -1) : -1;
-            const intervalHours = s.worldProgressionIntervalHours || 24;
-            const intervalMins = intervalHours * 60;
-            function fmtWP(m) {
-                return formatInWorldTime(m);
-            }
-            const lastEl = agentPanel.querySelector('#rt-agent-world-last-fired');
-            const nextEl = agentPanel.querySelector('#rt-agent-world-next-fire');
-            const badge = agentPanel.querySelector('#rt-agent-world-enabled-badge');
-            if (lastEl) lastEl.textContent = label || 'Never';
-
-            let nextMins = -1;
-            if (mins >= 0) {
-                nextMins = mins + intervalMins;
-            } else {
-                const timeMatch = (s.currentMemo || '').match(/\[TIME\]([\s\S]*?)\[\/TIME\]/i);
-                const timeStr = timeMatch ? extractCurrentTimeStr(timeMatch[1]) : '';
-                const currentMins = timeStr ? (parseInWorldTime(timeStr) ?? -1) : -1;
-                if (currentMins >= 0) {
-                    nextMins = currentMins + intervalMins;
-                }
-            }
-            if (nextEl) nextEl.textContent = nextMins >= 0 ? fmtWP(nextMins) : '—';
-            if (badge) {
-                badge.textContent = s.worldProgressionEnabled ? 'ON' : 'OFF';
-                badge.style.cssText = s.worldProgressionEnabled
-                    ? 'font-size:0.692em; padding:1px 7px; border-radius:10px; font-weight:bold; cursor:pointer; user-select:none; background:rgba(52,168,83,0.18); color:#34a853; border:1px solid rgba(52,168,83,0.3);'
-                    : 'font-size:0.692em; padding:1px 7px; border-radius:10px; font-weight:bold; cursor:pointer; user-select:none; background:rgba(255,255,255,0.06); color:rgba(255,255,255,0.35); border:1px solid rgba(255,255,255,0.1);';
-            }
-        }
-        runtimeState.updateAgentWorldStatusRef = updateAgentWorldStatus;
-
-        // ── Agent World Interval input ──
-        const worldIntervalInp = /** @type {HTMLInputElement|null} */ (agentPanel.querySelector('#rt-agent-world-interval'));
-        if (worldIntervalInp) {
-            worldIntervalInp.addEventListener('input', () => {
-                getSettings().worldProgressionIntervalHours = parseInt(worldIntervalInp.value) || 24;
-                saveSettings();
-                updateAgentWorldStatus();
-                $('#rpg_world_progression_interval').val(getSettings().worldProgressionIntervalHours);
-                if (typeof runtimeState.updateWorldProgressionLastFiredDisplayRef === 'function') {
-                    runtimeState.updateWorldProgressionLastFiredDisplayRef();
-                }
-            });
-        }
-
-        // ── Agent World Fire Now button ──
-        const worldFireNowBtn = agentPanel.querySelector('#rt-agent-world-fire-now');
-        if (worldFireNowBtn) {
-            worldFireNowBtn.addEventListener('click', async () => {
-                const { parseInWorldMinutes: piw, runWorldProgressionPass: rwp } = await import('./router.js');
-                const s = getSettings();
-                const timeMatch = (s.currentMemo || '').match(/\[TIME\]([\s\S]*?)\[\/TIME\]/i);
-                const timeStr = timeMatch ? extractCurrentTimeStr(timeMatch[1]) : '';
-                const currentMinutes = piw(timeStr);
-                if (currentMinutes < 0) {
-                    toastr['warning']('Cannot parse in-world time from State Memo. Make sure the State Tracker has run at least once.', 'World Progression');
-                    return;
-                }
-                const savedLast = s.worldProgressionLastFiredAtMinutes;
-                s.worldProgressionLastFiredAtMinutes = -1;
-                /** @type {HTMLButtonElement} */ (worldFireNowBtn).disabled = true;
-                worldFireNowBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Generating…';
-                try {
-                    await rwp(timeStr, currentMinutes);
-                    updateAgentWorldStatus();
-                    toastr['success']('World Progression report generated.', 'World Progression');
-                } catch (e) {
-                    toastr['error'](`World Progression error: ${e.message}`, 'World Progression');
-                    s.worldProgressionLastFiredAtMinutes = savedLast;
-                } finally {
-                    /** @type {HTMLButtonElement} */ (worldFireNowBtn).disabled = false;
-                    worldFireNowBtn.innerHTML = '<i class="fa-solid fa-globe"></i> Fire Now';
-                }
-            });
-        }
-
-        // ── Agent World Fire with Extra Instructions button ──
-        const worldFireExtraBtn = agentPanel.querySelector('#rt-agent-world-fire-extra');
-        if (worldFireExtraBtn) {
-            worldFireExtraBtn.addEventListener('click', async () => {
-                const { parseInWorldMinutes: piw, runWorldProgressionPass: rwp } = await import('./router.js');
-                const s = getSettings();
-                const timeMatch = (s.currentMemo || '').match(/\[TIME\]([\s\S]*?)\[\/TIME\]/i);
-                const timeStr = timeMatch ? extractCurrentTimeStr(timeMatch[1]) : '';
-                const currentMinutes = piw(timeStr);
-                if (currentMinutes < 0) {
-                    toastr['warning']('Cannot parse in-world time from State Memo. Make sure the State Tracker has run at least once.', 'World Progression');
-                    return;
-                }
-
-                const popupBody = `
-                    <div style="display:flex; flex-direction:column; gap:10px; width:100%; box-sizing:border-box;">
-                        <div style="font-size:13px; opacity:0.9; font-weight:bold;">🌍 Fire with Extra Instructions</div>
-                        <div style="font-size:11px; opacity:0.7; line-height:1.4;">
-                            Enter extra instructions to append to the World Progression system prompt for this run only (e.g., "make things pick up", "get more chaotic").
-                        </div>
-                        <textarea id="rt_wp_extra_instructions_agent" rows="4" class="text_pole"
-                            style="font-size:12px; resize:vertical; width:100%;"
-                            placeholder="e.g. Make the factions more aggressive, increase conflicts, or introduce a major weather event."></textarea>
-                    </div>
-                `;
-
-                let extraInstructions = '';
-                setTimeout(() => {
-                    const textarea = document.getElementById('rt_wp_extra_instructions_agent');
-                    if (textarea) {
-                        textarea.addEventListener('input', () => { extraInstructions = textarea.value.trim(); });
-                    }
-                }, 100);
-
-                const { Popup } = SillyTavern.getContext();
-                const choice = await Popup.show.confirm('World Progression', popupBody, { okButton: 'Fire', cancelButton: 'Cancel' });
-                if (!choice) return;
-
-                const savedLast = s.worldProgressionLastFiredAtMinutes;
-                s.worldProgressionLastFiredAtMinutes = -1;
-                /** @type {HTMLButtonElement} */ (worldFireExtraBtn).disabled = true;
-                worldFireExtraBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Generating…';
-                try {
-                    await rwp(timeStr, currentMinutes, extraInstructions);
-                    updateAgentWorldStatus();
-                    toastr['success']('World Progression report generated.', 'World Progression');
-                } catch (e) {
-                    toastr['error'](`World Progression error: ${e.message}`, 'World Progression');
-                    s.worldProgressionLastFiredAtMinutes = savedLast;
-                } finally {
-                    /** @type {HTMLButtonElement} */ (worldFireExtraBtn).disabled = false;
-                    worldFireExtraBtn.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> Fire with Extra Instructions';
-                }
-            });
-        }
-
-        // ── Agent World Reset Timeline button ──
-        const worldResetBtn = agentPanel.querySelector('#rt-agent-world-reset-timeline');
-        if (worldResetBtn) {
-            worldResetBtn.addEventListener('click', () => {
-                const s = getSettings();
-                s.worldProgressionLastFiredAtMinutes = -1;
-                s.worldProgressionLastFiredPeriodLabel = '';
-                saveSettings();
-                if (s.chatLinkEnabled && runtimeState.currentChatId) saveChatState(runtimeState.currentChatId);
-                updateAgentWorldStatus();
-                if (typeof runtimeState.updateWorldProgressionLastFiredDisplayRef === 'function') runtimeState.updateWorldProgressionLastFiredDisplayRef();
-                toastr['info']('World Progression timeline reset. Next report will start from the current time.', 'World Progression');
-            });
-        }
-
-        const worldPurgeBtn = agentPanel.querySelector('#rt-agent-world-purge-history');
-        if (worldPurgeBtn) {
-            worldPurgeBtn.addEventListener('click', () => { void confirmAndPurgeWorldHistory(); });
-        }
-
-        // ── Agent enable button (header ⏻) ──
         const agentEnableBtn = queryAgentUi('#rt-agent-router-enable-btn');
         if (agentEnableBtn) {
             agentEnableBtn.addEventListener('click', (e) => {
@@ -5605,172 +5294,17 @@ Rules:
     }
 
     // ── Lorebook Agent History Nav (← [LIVE] →) ─────────────────────────
-    const agentNavBack = /** @type {HTMLButtonElement|null} */ (agentPanel.querySelector('#rt-agent-nav-back'));
-    const agentNavFwd = /** @type {HTMLButtonElement|null} */ (agentPanel.querySelector('#rt-agent-nav-fwd'));
-    const agentNavLabel = /** @type {HTMLElement|null} */ (agentPanel.querySelector('#rt-agent-nav-label'));
-
-    const syncAgentNav = () => {
-        const s = getSettings();
-        const histLen = (s.routerHistory || []).length;
-        const redoLen = runtimeState.loreRedoStack.length;
-        if (agentNavBack) agentNavBack.disabled = histLen === 0;
-        if (agentNavFwd) agentNavFwd.disabled = redoLen === 0;
-        if (agentNavLabel) {
-            if (redoLen === 0) {
-                agentNavLabel.textContent = '[ LIVE ]';
-                agentNavLabel.title = 'Lorebook is at current live state';
-            } else {
-                agentNavLabel.textContent = `[ -${redoLen} ]`;
-                agentNavLabel.title = `Rolled back ${redoLen} agent pass${redoLen !== 1 ? 'es' : ''} — use → to redo`;
-            }
-            agentNavLabel.classList.remove('clickable');
-        }
-    };
-
-    /** Snapshot the current lorebook state for the books touched by the given history entry. */
-    const captureCurrentLoreState = async (histEntry) => {
-        const ctx = SillyTavern.getContext();
-        const s = getSettings();
-        const bookNames = Object.keys(histEntry.bookSnapshots || {});
-        const bookSnapshots = {};
-        for (const name of bookNames) {
-            try {
-                const book = await ctx.loadWorldInfo(name);
-                if (book) bookSnapshots[name] = JSON.parse(JSON.stringify(book));
-            } catch (_) { }
-        }
-        return {
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            activeRouterKeys: JSON.parse(JSON.stringify(s.activeRouterKeys || [])),
-            activeWorldKeys: JSON.parse(JSON.stringify(s.activeWorldKeys || [])),
-            routerLastRunChatLength: s.routerLastRunChatLength ?? 0,
-            bookSnapshots,
-        };
-    };
-
-    if (agentNavBack) {
-        agentNavBack.addEventListener('click', async () => {
-            const s = getSettings();
-            if (!(s.routerHistory || []).length) return;
-            agentNavBack.disabled = true;
-            if (agentNavFwd) agentNavFwd.disabled = true;
-            const histEntry = s.routerHistory[0];
-            const postPassState = await captureCurrentLoreState(histEntry);
-            const ok = await rollbackRouterPass(0);
-            if (ok) {
-                runtimeState.loreRedoStack.push({ prePassSnapshot: histEntry, postPassState });
-            } else {
-                toastr['error']('Rollback failed. Check console.', 'Lorebook Agent');
-            }
-            syncAgentNav();
-            await refreshManifest();
-        });
-    }
-
-    if (agentNavFwd) {
-        agentNavFwd.addEventListener('click', async () => {
-            if (!runtimeState.loreRedoStack.length) return;
-            if (agentNavBack) agentNavBack.disabled = true;
-            agentNavFwd.disabled = true;
-            const redoEntry = runtimeState.loreRedoStack.pop();
-            const ok = await reapplyRouterPass(redoEntry.prePassSnapshot, redoEntry.postPassState);
-            if (!ok) {
-                runtimeState.loreRedoStack.push(redoEntry);
-                toastr['error']('Redo failed. Check console.', 'Lorebook Agent');
-            }
-            syncAgentNav();
-            await refreshManifest();
-        });
-    }
-
-    // updateUndoLabel kept as alias so existing call-sites still compile
-    const updateUndoLabel = syncAgentNav;
-    // ── Active Keys Refresh Button & Toggle ────────────────────────────────
-    const keysToggleBtn = agentPanel.querySelector('#rt-agent-keys-toggle');
-    if (keysToggleBtn) {
-        keysToggleBtn.addEventListener('click', (e) => {
-            if (e.target.closest('#rt-agent-keys-refresh')) {
-                return;
-            }
-            const s = getSettings();
-            s.agentKeysCollapsed = !s.agentKeysCollapsed;
-            localStorage.setItem('rpg_tracker_agent_keys_collapsed', String(s.agentKeysCollapsed));
-
-            const keysContainer = agentPanel.querySelector('#rt-agent-router-active-keys');
-            const chevron = agentPanel.querySelector('#rt-agent-keys-chevron');
-            if (keysContainer) {
-                keysContainer.style.display = s.agentKeysCollapsed ? 'none' : 'flex';
-            }
-            if (chevron) {
-                chevron.style.transform = s.agentKeysCollapsed ? 'rotate(-90deg)' : '';
-            }
-        });
-    }
-
-    const keysRefreshBtn = agentPanel.querySelector('#rt-agent-keys-refresh');
-    if (keysRefreshBtn) {
-        keysRefreshBtn.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            keysRefreshBtn.querySelector('i')?.classList.add('fa-spin');
-            const _ctx = SillyTavern.getContext();
-            if (typeof _ctx.updateWorldInfoList === 'function') {
-                try { await _ctx.updateWorldInfoList(); } catch (_) { }
-            }
-            await runtimeState.renderRouterUI();
-            keysRefreshBtn.querySelector('i')?.classList.remove('fa-spin');
-        });
-    }
-
-    updateUndoLabel();
-
-    // ── Last Run status display ────────────────────────────────────────────
-    const lastRunEl = agentPanel.querySelector('#rt-agent-last-run');
-    function formatLastRunRelative(epochMs) {
-        if (!epochMs) return 'never';
-        const sec = Math.floor((Date.now() - epochMs) / 1000);
-        if (sec < 45) return 'just now';
-        const min = Math.floor(sec / 60);
-        if (min < 60) return `${min}m ago`;
-        const hr = Math.floor(min / 60);
-        if (hr < 24) return `${hr}h ago`;
-        return `${Math.floor(hr / 24)}d ago`;
-    }
-    function syncLastRunDisplay() {
-        if (!lastRunEl) return;
-        const s = getSettings();
-        const runEvery = s.routerRunEvery || 3;
-        const tick = getRouterTick();
-        const lastRunAt = s.routerLastRunAt || 0;
-        const parts = [`Last run: ${formatLastRunRelative(lastRunAt)}`];
-        if (runEvery > 1) {
-            const nextIn = Math.max(0, runEvery - tick);
-            parts.push(`Next in: ${nextIn} msg${nextIn !== 1 ? 's' : ''}`);
-        }
-        lastRunEl.textContent = parts.join(' · ');
-    }
-    syncLastRunDisplay();
-
-    document.addEventListener('rt_lore_agent_updated', async () => {
-        saveSettings();
-        // Flush ST's in-memory lorebook cache before re-rendering so that
-        // loadWorldInfo() picks up the entries we just wrote via the HTTP API.
-        const _ctx = SillyTavern.getContext();
-        if (typeof _ctx.updateWorldInfoList === 'function') {
-            try { await _ctx.updateWorldInfoList(); } catch (_) { }
-        }
-        await runtimeState.renderRouterUI();
-        if (typeof runtimeState.refreshAgentManifest === 'function') {
-            await runtimeState.refreshAgentManifest();
-        }
-        updateUndoLabel();
-        syncLastRunDisplay();
+    const agentActivity = wireAgentActivity({
+        agentPanel,
+        getRouterTick,
+        getSettings,
+        reapplyRouterPass,
+        refreshManifest,
+        rollbackRouterPass,
+        saveSettings,
     });
+    const { syncAgentNav, syncLastRunDisplay, updateUndoLabel } = agentActivity;
 
-    document.addEventListener('rt_generation_tick', () => {
-        syncLastRunDisplay();
-    });
-
-    // ── Lorebook Terminal Logic ──
     let _routerSteps = [];
     const terminal = agentPanel.querySelector('#rt-agent-router-terminal');
     const terminalClear = agentPanel.querySelector('#rt-agent-router-terminal-clear');
