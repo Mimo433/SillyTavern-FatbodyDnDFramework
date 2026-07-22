@@ -126,6 +126,57 @@ export function renderDayNightBadge(str) {
             }
             case 'numbers':
                 return `<div class="rt-entity-sub-line">${labelHtml} ${highlightNumbers(escapeHtmlWithColor(value))}</div>`;
+            case 'barrel': {
+                // A signed, centre-zero bar. The value format is deliberately generic:
+                //   -38/150, +38/150, 38/-150..+150, or -38/-150..+150
+                // Labels and trailing text are display-only, so BARREL works for any
+                // relationship, reputation, alignment, morale, or custom tracker axis.
+                const signedRange = value.match(/([+-]?\d[\d,]*)\s*\/\s*([+-]?\d[\d,]*)\s*(?:\.\.|to)\s*([+-]?\d[\d,]*)/i);
+                const valueAndMax = value.match(/([+-]?\d[\d,]*)\s*\/\s*([+-]?\d[\d,]*)/);
+                const m = signedRange || valueAndMax;
+
+                if (m) {
+                    const current = parseInt(m[1].replace(/,/g, ''), 10);
+                    const rangeMax = signedRange
+                        ? Math.max(Math.abs(parseInt(m[2].replace(/,/g, ''), 10)), Math.abs(parseInt(m[3].replace(/,/g, ''), 10)))
+                        : Math.abs(parseInt(m[2].replace(/,/g, ''), 10));
+
+                    if (Number.isFinite(current) && Number.isFinite(rangeMax) && rangeMax > 0) {
+                        const clamped = Math.max(-rangeMax, Math.min(rangeMax, current));
+                        const pct = (Math.abs(clamped) / rangeMax) * 50;
+                        const isPositive = clamped >= 0;
+                        const extra = value.replace(m[0], '').trim();
+                        const positiveDefault = rule.positiveColor || rule.color || 'linear-gradient(90deg, #4ade8088, #4ade80)';
+                        const negativeDefault = rule.negativeColor || rule.color || 'linear-gradient(270deg, #ef444488, #ef4444)';
+                        const positiveBarId = barId ? `${barId}:positive` : '';
+                        const negativeBarId = barId ? `${barId}:negative` : '';
+                        const positiveBg = getBarBackground(positiveBarId, positiveDefault, pct);
+                        const negativeBg = getBarBackground(negativeBarId, negativeDefault, pct);
+                        const positiveRecolorData = positiveBarId
+                            ? ` data-recolor-id="${escapeHtml(positiveBarId)}" data-recolor-current="${escapeHtml(positiveBg)}" data-barrel-direction="positive" title="Click to recolor the positive side"`
+                            : '';
+                        const negativeRecolorData = negativeBarId
+                            ? ` data-recolor-id="${escapeHtml(negativeBarId)}" data-recolor-current="${escapeHtml(negativeBg)}" data-barrel-direction="negative" title="Click to recolor the negative side"`
+                            : '';
+                        const valueClass = clamped > 0 ? 'rt-barrel-value-positive' : clamped < 0 ? 'rt-barrel-value-negative' : 'rt-barrel-value-zero';
+                        const displayValue = `${clamped > 0 ? '+' : ''}${clamped}/${rangeMax}`;
+
+                        return `<div class="rt-entity-sub-line rt-barrel-row">
+                            ${labelHtml}
+                            <div class="rt-barrel-track" aria-label="${escapeHtml(`${labelText || 'Value'} ${displayValue}`)}">
+                                <div class="rt-barrel-color-control rt-barrel-negative-control"${negativeRecolorData}></div>
+                                <div class="rt-barrel-color-control rt-barrel-positive-control"${positiveRecolorData}></div>
+                                <div class="rt-barrel-center-marker"></div>
+                                <div class="rt-barrel-fill ${isPositive ? 'rt-barrel-positive' : 'rt-barrel-negative'}" data-barrel-direction="${isPositive ? 'positive' : 'negative'}" style="width:${pct.toFixed(1)}%;background:${isPositive ? positiveBg : negativeBg};"></div>
+                            </div>
+                            <span class="rt-barrel-value ${valueClass}">${displayValue}${extra ? ` ${escapeHtml(extra)}` : ''}</span>
+                        </div>`;
+                    }
+                }
+
+                // A BARREL tag with no readable value remains useful as a styled text line.
+                return `<div class="rt-entity-sub-line">${labelHtml} ${escapeHtmlWithColor(value)}</div>`;
+            }
             case 'hp_bar': {
                 // Flexible: parses any "X/Y" optionally with extra text e.g. "45/100 (5 temp)"
                 const m = value.match(/(\d[\d,]*)\s*\/\s*(\d[\d,]*)/);
@@ -527,6 +578,8 @@ export function renderDayNightBadge(str) {
     export const MARKER_TYPE_MAP = {
         PILLS:{ renderType: 'pills', example: 'Status (Hover for details), Condition (Another detail)' }, PLS:{ renderType: 'pills', example: 'Status (Hover for details)', aliasOf: 'PILLS' },
         BAR:{ renderType: 'hp_bar', example: '50/100 (Red HP/Standing)' }, B:{ renderType: 'hp_bar', example: '50/100 (Red HP/Standing)', aliasOf: 'BAR' }, HPBAR:{ renderType: 'hp_bar', example: '50/100 (Red HP/Standing)', aliasOf: 'BAR' }, HPB:{ renderType: 'hp_bar', example: '50/100 (Red HP/Standing)', aliasOf: 'BAR' }, HP: { renderType: 'hp_bar', example: '50/100 (Red HP/Standing)', aliasOf: 'BAR' },
+        BARREL:{ renderType: 'barrel', example: 'Trust: -38/150 (signed centre-zero bar; click each side to recolor)' },
+        NPC:{ renderType: 'npc', example: 'Gandolf: (freeform NPC card; uses a matching Lorebook Agent portrait)' },
         BARRED:{ renderType: 'hp_bar', color: 'linear-gradient(90deg,#e74c3c,#c0392b)', example: '50/100 (Crimson Blood)' },
         BARBLUE:{ renderType: 'hp_bar', color: 'linear-gradient(90deg,#3498db,#2980b9)', example: '50/100 (Blue Mana/Mana)' },
         BARGREEN:{ renderType: 'hp_bar', color: 'linear-gradient(90deg,#2ecc71,#27ae60)', example: '50/100 (Green Stamina)' },
@@ -551,6 +604,12 @@ export function renderDayNightBadge(str) {
         PILLRED:{ renderType: 'pill_colored', pillClass: 'rt-pill-debuff', example: 'Stunned (Cannot take actions)' },
         PILLGREEN:{ renderType: 'pill_colored', pillClass: 'rt-pill-buff', example: 'Focused (Clear minded, no distractions)' },
         PILLBLUE:{ renderType: 'pill_colored', pillClass: 'rt-pill-magic', example: 'Shielded (Absorbs 10 damage)' },
+        PILLPINK:{ renderType: 'pill_colored', pillClass: 'rt-pill-pink', example: 'Smitten (Thinking of you)' },
+        PILLORANGE:{ renderType: 'pill_colored', pillClass: 'rt-pill-orange', example: 'Alert (On guard)' },
+        PILLPURPLE:{ renderType: 'pill_colored', pillClass: 'rt-pill-purple', example: 'Cursed (Dark magic)' },
+        PLSPINK:{ renderType: 'pill_colored', pillClass: 'rt-pill-pink', example: 'Smitten (Thinking of you)', aliasOf: 'PILLPINK' },
+        PLSORANGE:{ renderType: 'pill_colored', pillClass: 'rt-pill-orange', example: 'Alert (On guard)', aliasOf: 'PILLORANGE' },
+        PLSPURPLE:{ renderType: 'pill_colored', pillClass: 'rt-pill-purple', example: 'Cursed (Dark magic)', aliasOf: 'PILLPURPLE' },
         WARNING:{ renderType: 'badge_colored', color: '#f1c40f', example: 'Caution (Amber badge)' },
         DANGER:{ renderType: 'badge_colored', color: '#e74c3c', example: 'Hostile (Red badge)' },
         SUCCESS:{ renderType: 'badge_colored', color: '#2ecc71', example: 'Active (Green badge)' },
@@ -605,13 +664,17 @@ export function renderDayNightBadge(str) {
     /**
      * Clones `baseRule` with `color` overridden from a parsed marker color suffix.
      * Two valid colors on a gradient-capable render type (bars/progress) produce a
-     * linear-gradient; otherwise only the first color is used (second is ignored).
+     * linear-gradient. BARREL assigns them to its positive and negative sides;
+     * otherwise only the first color is used (second is ignored).
      * Invalid hex values are ignored entirely, falling back to the base rule's color.
      */
     function applyMarkerColorOverride(baseRule, color1, color2) {
         if (!isValidHexColor(color1)) return baseRule;
         const rule = { ...baseRule };
-        if (color2 && isValidHexColor(color2) && GRADIENT_CAPABLE_RENDER_TYPES.has(rule.renderType)) {
+        if (rule.renderType === 'barrel') {
+            rule.positiveColor = color1;
+            rule.negativeColor = color2 && isValidHexColor(color2) ? color2 : color1;
+        } else if (color2 && isValidHexColor(color2) && GRADIENT_CAPABLE_RENDER_TYPES.has(rule.renderType)) {
             rule.color = `linear-gradient(90deg, ${color1}, ${color2})`;
         } else {
             rule.color = color1;
@@ -650,6 +713,17 @@ export function renderDayNightBadge(str) {
             segments.push({ preText, markerType, rule });
         }
 
+        // A numeric tab stop can appear immediately before any marker, including
+        // the first one: `|50 ((PILLS)) Affection tier`. It is interpreted as a
+        // percentage of the available row width and removed from display content.
+        for (const segment of segments) {
+            const tabMatch = segment.preText.match(/^(.*?)\s*\|(\d+(?:\.\d+)?)\s*$/);
+            if (tabMatch) {
+                segment.preText = tabMatch[1].trim();
+                segment.tabStop = Math.max(0, Math.min(100, Number(tabMatch[2])));
+            }
+        }
+
         // Assign each segment its content:
         //   segment[i].content = segment[i+1].preText  (text between marker i and marker i+1)
         //   segment[last].content = remaining tail after the last marker
@@ -657,7 +731,8 @@ export function renderDayNightBadge(str) {
         // segment[i+1] so renderMarkerSegment doesn't double-prepend it as a label.
         for (let i = 0; i < segments.length; i++) {
             if (i < segments.length - 1) {
-                segments[i].content = segments[i + 1].preText;
+                // `||` is an explicit layout separator, not part of either marker's content.
+                segments[i].content = segments[i + 1].preText.replace(/\s*\|\|\s*$/, '').trim();
                 segments[i + 1].preText = ''; // consumed — don't re-use as label
             } else {
                 segments[i].content = remaining.trim();
@@ -665,6 +740,41 @@ export function renderDayNightBadge(str) {
         }
 
         return segments;
+    }
+
+    /**
+     * Calculates marker starts/ends for numeric tab-stop rows. Unspecified
+     * segments are evenly distributed between the nearest explicit stops.
+     * @returns {Array<{start: number, end: number}>}
+     */
+    function resolveMarkerTabStops(segments) {
+        const count = segments.length;
+        const starts = Array(count);
+        starts[0] = segments[0].tabStop ?? 0;
+        let previous = 0;
+
+        for (let i = 1; i < count; i++) {
+            if (segments[i].tabStop === undefined) continue;
+            const next = segments[i].tabStop;
+            const previousStart = starts[previous];
+            for (let j = previous + 1; j < i; j++) {
+                starts[j] = previousStart + ((next - previousStart) * (j - previous)) / (i - previous);
+            }
+            starts[i] = next;
+            previous = i;
+        }
+
+        const previousStart = starts[previous];
+        for (let i = previous + 1; i < count; i++) {
+            starts[i] = previousStart + ((100 - previousStart) * (i - previous)) / (count - previous);
+        }
+
+        return starts.map((rawStart, i) => {
+            const start = Math.max(0, Math.min(99.9, rawStart));
+            const nextStart = i < count - 1 ? starts[i + 1] : 100;
+            const end = Math.max(start + 0.1, Math.min(100, nextStart));
+            return { start, end };
+        });
     }
 
     /**
@@ -706,7 +816,7 @@ export function renderDayNightBadge(str) {
             } else {
                 // No colon. For progression types, try to split "Label X/Y" into "Label: X/Y"
                 // by finding the X/Y numeric pattern.
-                const PROGRESSION = new Set(['hp_bar', 'xp_bar', 'progress', 'clock', 'stars', 'weight', 'orbs', 'slots', 'phase', 'gauge', 'charge']);
+                const PROGRESSION = new Set(['barrel', 'hp_bar', 'xp_bar', 'progress', 'clock', 'stars', 'weight', 'orbs', 'slots', 'phase', 'gauge', 'charge']);
                 const numMatch = PROGRESSION.has(rule.renderType)
                     ? preText.match(/^(.*?)\s+(\d[\d,]*\s*\/\s*\d[\d,]*.*)$/)
                     : null;
@@ -719,7 +829,7 @@ export function renderDayNightBadge(str) {
         }
 
         let barId = null;
-        const progressionTypes = ['hp_bar', 'xp_bar', 'progress', 'clock', 'stars', 'weight', 'orbs', 'slots', 'phase', 'gauge', 'charge'];
+        const progressionTypes = ['barrel', 'hp_bar', 'xp_bar', 'progress', 'clock', 'stars', 'weight', 'orbs', 'slots', 'phase', 'gauge', 'charge'];
         if (progressionTypes.includes(rule.renderType)) {
             const colonIdx = reconstructedContent.indexOf(':');
             const labelText = colonIdx !== -1 ? reconstructedContent.substring(0, colonIdx).trim() : 'Bar';
@@ -756,10 +866,12 @@ export function renderDayNightBadge(str) {
     export function tryRenderMarker(line, tag = '', entityName = '', lineIdx = null) {
         const segments = tokenizeMarkers(line);
         if (segments.length === 0) return null;
+        const usesExplicitColumns = line.includes('||');
+        const usesTabStops = segments.some(segment => segment.tabStop !== undefined);
 
         const lineAnchor = (!entityName && lineIdx !== null) ? `L${lineIdx}` : '';
 
-        if (segments.length === 1) {
+        if (segments.length === 1 && !usesTabStops) {
             // Single-marker fast path — identical to the previous behaviour.
             return renderMarkerSegment(segments[0], tag, entityName, lineAnchor);
         }
@@ -767,7 +879,8 @@ export function renderDayNightBadge(str) {
         // Multi-marker: render each segment and wrap it in a typed cell.
         // Stretchy render types (bars, progress) get flex:1 so they fill remaining
         // space; fixed types (pills, badges, text) take only their natural width.
-        const STRETCH_TYPES = new Set(['hp_bar', 'xp_bar', 'progress']);
+        const STRETCH_TYPES = new Set(['barrel', 'hp_bar', 'xp_bar', 'progress']);
+        const tabStops = usesTabStops ? resolveMarkerTabStops(segments) : null;
 
         // Pre-compute each segment's reconstructed text so we can use sibling content
         // as rowContext to disambiguate same-label bars across different rows.
@@ -780,13 +893,20 @@ export function renderDayNightBadge(str) {
             // the line anchor disambiguates across different lines with no entity context.
             const rowContext = `${segContents[i === 0 ? 1 : 0] ?? ''}:${i}${lineAnchor ? ':' + lineAnchor : ''}`;
             const html = renderMarkerSegment(seg, tag, entityName, rowContext);
-            const cellClass = STRETCH_TYPES.has(seg.rule.renderType)
+            const cellClass = usesTabStops
+                ? 'rt-mmc-cell rt-mmc-cell--tab-stop'
+                : usesExplicitColumns
+                ? 'rt-mmc-cell rt-mmc-cell--column'
+                : STRETCH_TYPES.has(seg.rule.renderType)
                 ? 'rt-mmc-cell rt-mmc-cell--stretch'
                 : 'rt-mmc-cell';
-            return `<div class="${cellClass}">${html}</div>`;
+            const layoutStyle = usesTabStops
+                ? ` style="grid-column:${Math.round(tabStops[i].start * 10) + 1} / ${Math.round(tabStops[i].end * 10) + 1};grid-row:1;"`
+                : '';
+            return `<div class="${cellClass}"${layoutStyle}>${html}</div>`;
         }).join('');
 
-        return `<div class="rt-multi-marker-row">${childrenHtml}</div>`;
+        return `<div class="rt-multi-marker-row${usesTabStops ? ' rt-multi-marker-row--tab-stops' : usesExplicitColumns ? ' rt-multi-marker-row--columns' : ''}">${childrenHtml}</div>`;
     }
 
     export function renderLineInEntityContext(tag, line, entityName, rawLine) {
@@ -825,6 +945,42 @@ export function renderDayNightBadge(str) {
         const kv = line.match(/^([^:]+):\s*(.+)$/);
         if (kv) return `<div class="rt-card-kv"><span class="rt-card-key">${escapeHtmlWithColor(kv[1].trim())}:</span><span class="rt-card-val">${escapeHtmlWithColor(kv[2].trim())}</span></div>`;
         return `<div class="rt-card-item">${escapeHtmlWithColor(line.trim())}</div>`;
+    }
+
+    /**
+     * Renders freeform NPC cards embedded in any tracker block.
+     * A `((NPC)) Name:` line starts a card; all following lines belong to it
+     * until the next NPC marker, and can use arbitrary labels and render tags.
+     */
+    function renderCustomBlockWithNpcMarkers(tag, lines) {
+        const results = [];
+        let lastEntityIdx = -1;
+        let currentEntity = '';
+
+        for (let idx = 0; idx < lines.length; idx++) {
+            const rawLine = lines[idx];
+            const marker = MARKER_TOKEN_RE.exec(rawLine);
+            const isNpcMarker = marker?.index === 0 && marker[1].toUpperCase() === 'NPC';
+
+            if (isNpcMarker) {
+                currentEntity = rawLine.slice(marker[0].length).trim().replace(/:\s*$/, '').trim() || 'NPC';
+                lastEntityIdx = results.length;
+                results.push(`<div class="rt-entity-row"><div class="rt-entity-name">${escapeHtmlWithColor(currentEntity)}</div></div>`);
+                continue;
+            }
+
+            if (lastEntityIdx !== -1) {
+                results[lastEntityIdx] += renderLineInEntityContext(tag, rawLine, currentEntity, rawLine);
+            } else {
+                results.push(renderCustomBlockLine(tag, rawLine, idx));
+            }
+        }
+
+        return results.map(html => {
+            if (!html.startsWith('<div class="rt-entity-row">')) return html;
+            const nameMatch = html.match(/class="rt-entity-name"[^>]*>([^<]+)</);
+            return nameMatch ? wrapEntityHtml(decodeHtml(nameMatch[1].trim()), html) : html;
+        });
     }
 
     /**
@@ -1730,6 +1886,12 @@ function formatValueToCurrency(totalCp, detectedCurrency) {
             default:
                 // Custom blocks: resolve each line via module rows → global rules → kv fallback
                 // Pass line index so positional row matching works even without label prefixes
+                if (lines.some(line => {
+                    const marker = MARKER_TOKEN_RE.exec(line);
+                    return marker?.index === 0 && marker[1].toUpperCase() === 'NPC';
+                })) {
+                    return renderCustomBlockWithNpcMarkers(tag, lines);
+                }
                 return lines.map((line, idx) => renderCustomBlockLine(tag, line, idx));
         }
     }

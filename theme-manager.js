@@ -346,6 +346,11 @@ export function handleRecolor(barId, currentBg, targetEl) {
                     wrap.querySelectorAll('.rt-phase-node.current').forEach(el => { el.style.boxShadow = `0 0 8px ${bg}`; });
                     wrap.querySelectorAll('.rt-phase-line.filled').forEach(el => { el.style.background = bg; });
                 }
+                else if (wrap.classList.contains('rt-barrel-color-control')) {
+                    const direction = wrap.dataset.barrelDirection;
+                    const fill = wrap.parentElement?.querySelector(`.rt-barrel-fill[data-barrel-direction="${direction}"]`);
+                    if (fill) fill.style.background = bg;
+                }
                 else if (wrap.classList.contains('rt-stars-icon')) { wrap.style.color = bg; }
             });
         };

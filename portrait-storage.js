@@ -40,7 +40,12 @@ export function lookupCustomPortraitSrc(settings, entityName, portraitsMap) {
     const key = normalizeEntityName(entityName);
     if (!key) return '';
     const map = portraitsMap ?? settings?.customPortraits;
-    const raw = map?.[key];
+    // Lorebook Agent cards and tracker cards share this portrait map. Their names
+    // are usually identical, but a case-insensitive fallback makes a tracker card
+    // resilient to normal narrator formatting differences ("ALICE" vs "Alice").
+    const raw = map?.[key] || Object.entries(map || {}).find(([storedName]) =>
+        normalizeEntityName(storedName).localeCompare(key, undefined, { sensitivity: 'accent' }) === 0,
+    )?.[1];
     return raw ? resolvePortraitDisplaySrc(raw) : '';
 }
 

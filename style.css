@@ -2119,6 +2119,45 @@
     color: rgb(52, 152, 219);
 }
 
+.rt-pill-pink {
+    background: rgba(244, 114, 182, 0.1);
+    border-color: rgba(244, 114, 182, 0.3);
+}
+.rt-pill-pink:hover, .rt-pill-pink.active {
+    background: rgba(244, 114, 182, 0.22);
+    border-color: rgba(251, 146, 204, 0.6);
+}
+.rt-pill-pink .rt-unit-icon {
+    background: rgba(244, 114, 182, 0.2);
+    color: rgb(251, 146, 204);
+}
+
+.rt-pill-orange {
+    background: rgba(249, 115, 22, 0.1);
+    border-color: rgba(249, 115, 22, 0.3);
+}
+.rt-pill-orange:hover, .rt-pill-orange.active {
+    background: rgba(249, 115, 22, 0.22);
+    border-color: rgba(251, 146, 60, 0.6);
+}
+.rt-pill-orange .rt-unit-icon {
+    background: rgba(249, 115, 22, 0.2);
+    color: rgb(251, 146, 60);
+}
+
+.rt-pill-purple {
+    background: rgba(168, 85, 247, 0.1);
+    border-color: rgba(168, 85, 247, 0.3);
+}
+.rt-pill-purple:hover, .rt-pill-purple.active {
+    background: rgba(168, 85, 247, 0.22);
+    border-color: rgba(192, 132, 252, 0.6);
+}
+.rt-pill-purple .rt-unit-icon {
+    background: rgba(168, 85, 247, 0.2);
+    color: rgb(192, 132, 252);
+}
+
 .rt-entity-sub-line {
     font-size: 0.88em;
     opacity: 0.8;
@@ -2156,6 +2195,23 @@
 .rt-mmc-cell--stretch {
     flex: 1 1 auto;
     min-width: 80px;
+}
+
+/* `||` in a marker row creates equal-width tab-stop columns. */
+.rt-mmc-cell--column {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+/* Numeric |x tab stops use 0.1%-wide grid tracks across the marker row. */
+.rt-multi-marker-row--tab-stops {
+    display: grid;
+    grid-template-columns: repeat(1000, minmax(0, 1fr));
+    align-items: center;
+    gap: 0;
+}
+.rt-mmc-cell--tab-stop {
+    min-width: 0;
 }
 
 /* Strip per-segment borders/margins so the row wrapper is the only separator */
@@ -4996,6 +5052,63 @@ textarea.rt-cr-input {
 .rt-npc-bar-value.val-zero     { color: var(--rt-text-muted); }
 .rt-npc-bar-value.val-affection-positive { color: #f472b6; }
 .rt-npc-bar-value.val-affection-negative { color: #a855f7; }
+
+/* Generic signed / centre-zero tracker bar (the ((BARREL)) rendering tag). */
+.rt-barrel-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.rt-barrel-track {
+    flex: 1;
+    min-width: 48px;
+    height: 8px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 4px;
+    position: relative;
+    overflow: hidden;
+}
+.rt-barrel-center-marker {
+    position: absolute;
+    z-index: 1;
+    left: 50%;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: rgba(255, 255, 255, 0.22);
+    pointer-events: none;
+}
+.rt-barrel-color-control {
+    position: absolute;
+    z-index: 2;
+    top: 0;
+    bottom: 0;
+    width: 50%;
+    cursor: pointer;
+}
+.rt-barrel-negative-control { left: 0; }
+.rt-barrel-positive-control { right: 0; }
+.rt-barrel-fill {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    border-radius: 4px;
+    transition: width 0.3s ease, left 0.3s ease, right 0.3s ease;
+}
+.rt-barrel-positive { left: 50%; }
+.rt-barrel-negative { right: 50%; }
+.rt-barrel-value {
+    flex-shrink: 0;
+    min-width: 42px;
+    text-align: right;
+    font-family: var(--rt-font-mono);
+    font-size: 0.82em;
+    font-weight: bold;
+    white-space: nowrap;
+}
+.rt-barrel-value-positive { color: #4ade80; }
+.rt-barrel-value-negative { color: #ef4444; }
+.rt-barrel-value-zero { color: var(--rt-text-muted); }
 
 /* Ã¢â€â‚¬Ã¢â€â‚¬ NPC Relationship Tier Badges Ã¢â€â‚¬Ã¢â€â‚¬ */
 .rt-npc-tier-row {
