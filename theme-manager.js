@@ -350,6 +350,20 @@ export function handleRecolor(barId, currentBg, targetEl) {
                     const direction = wrap.dataset.barrelDirection;
                     const fill = wrap.parentElement?.querySelector(`.rt-barrel-fill[data-barrel-direction="${direction}"]`);
                     if (fill) fill.style.background = bg;
+                    const value = wrap.closest('.rt-barrel-row')?.querySelector(`.rt-barrel-value[data-barrel-direction="${direction}"]`);
+                    if (value) {
+                        if (/^linear-gradient\(/i.test(bg)) {
+                            value.style.background = bg;
+                            value.style.webkitBackgroundClip = 'text';
+                            value.style.backgroundClip = 'text';
+                            value.style.color = 'transparent';
+                        } else {
+                            value.style.background = '';
+                            value.style.webkitBackgroundClip = '';
+                            value.style.backgroundClip = '';
+                            value.style.color = bg;
+                        }
+                    }
                 }
                 else if (wrap.classList.contains('rt-stars-icon')) { wrap.style.color = bg; }
             });

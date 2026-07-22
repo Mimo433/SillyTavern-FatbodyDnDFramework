@@ -33,6 +33,7 @@ describe('((BARREL))', () => {
         expect(html).toContain('data-recolor-id="NPC::Trust:negative"');
         expect(html).toContain('data-recolor-current="#112233"');
         expect(html).toContain('background:#445566');
+        expect(html).toContain('data-barrel-direction="negative" style="color:#445566;"');
     });
 });
 

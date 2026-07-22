@@ -14,6 +14,14 @@ function makeColorTintStyle(color, backgroundPct = 12, borderPct = 40) {
     return `background:color-mix(in srgb, ${color} ${backgroundPct}%, transparent);border-color:color-mix(in srgb, ${color} ${borderPct}%, transparent);color:${color};`;
 }
 
+/** Mirrors a BARREL fill on its value text, including user-selected gradients. */
+function makeBarrelValueStyle(background) {
+    if (/^linear-gradient\(/i.test(background)) {
+        return `background:${background};-webkit-background-clip:text;background-clip:text;color:transparent;`;
+    }
+    return `color:${background};`;
+}
+
 /**
  * Extracts a time-of-day emoji + accent color from any free-form string containing
  * an "HH:MM[ AM/PM]" clock pattern (e.g. a [TIME] block line, or a "Current Time" string).
@@ -164,6 +172,10 @@ export function renderDayNightBadge(str) {
                             ? ` data-recolor-id="${escapeHtml(negativeBarId)}" data-recolor-current="${escapeHtml(negativeBg)}" data-barrel-direction="negative" title="Click to recolor the negative side"`
                             : '';
                         const valueClass = clamped > 0 ? 'rt-barrel-value-positive' : clamped < 0 ? 'rt-barrel-value-negative' : 'rt-barrel-value-zero';
+                        const valueDirection = clamped > 0 ? 'positive' : clamped < 0 ? 'negative' : 'zero';
+                        const valueColorStyle = valueDirection === 'zero'
+                            ? ''
+                            : ` style="${makeBarrelValueStyle(valueDirection === 'positive' ? positiveBg : negativeBg)}"`;
                         const displayValue = `${clamped > 0 ? '+' : ''}${clamped}/${rangeMax}`;
 
                         return `<div class="rt-entity-sub-line rt-barrel-row">
@@ -174,7 +186,7 @@ export function renderDayNightBadge(str) {
                                 <div class="rt-barrel-center-marker"></div>
                                 <div class="rt-barrel-fill ${isPositive ? 'rt-barrel-positive' : 'rt-barrel-negative'}" data-barrel-direction="${isPositive ? 'positive' : 'negative'}" style="width:${pct.toFixed(1)}%;background:${isPositive ? positiveBg : negativeBg};"></div>
                             </div>
-                            <span class="rt-barrel-value ${valueClass}">${displayValue}${extra ? ` ${escapeHtml(extra)}` : ''}</span>
+                            <span class="rt-barrel-value ${valueClass}" data-barrel-direction="${valueDirection}"${valueColorStyle}>${displayValue}${extra ? ` ${escapeHtml(extra)}` : ''}</span>
                         </div>`;
                     }
                 }
