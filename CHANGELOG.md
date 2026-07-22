@@ -2,6 +2,11 @@
 
 All notable changes to the **Multihog D&D Framework** will be documented in this file.
 
+## [6.0.17] - 2026-07-22
+
+### Changed
+- **Settings / memo recovery dialogs**: backdrop stays unblurred so you can judge the live UI; disk buttons clarify they keep what's visible right now.
+
 ## [6.0.16] - 2026-07-22
 
 ### Fixed
