@@ -1612,7 +1612,7 @@ export const CARTRIDGE_PAYLOAD_GROUPS = [
  * @param {string} b
  * @returns {number} negative if a<b, 0 if equal, positive if a>b
  */
-function compareVersions(a, b) {
+export function compareVersions(a, b) {
     const pa = String(a || '0').split('.').map(n => parseInt(n, 10) || 0);
     const pb = String(b || '0').split('.').map(n => parseInt(n, 10) || 0);
     const len = Math.max(pa.length, pb.length);
@@ -1624,7 +1624,7 @@ function compareVersions(a, b) {
 }
 
 /** True when the stored settingsVersion is older than `target` (or unset). */
-function isOlderThan(currentVersion, target) {
+export function isOlderThan(currentVersion, target) {
     return !currentVersion || compareVersions(currentVersion, target) < 0;
 }
 
