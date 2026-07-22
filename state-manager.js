@@ -12,116 +12,26 @@
 import { DEFAULT_STOCK_PROMPTS, BLOCK_ORDER, RT_PROMPTS } from './constants.js';
 import { bindGetSettings } from './src/state/settings-ref.js';
 import { DEFAULT_NPC_SECTIONS, DEFAULT_PC_SECTIONS, MODULE_NAME } from './src/state/schema-sections.js';
-import { getNpcRelationshipMax, relPctOfMax } from './src/state/relationship-math.js';
+import { getNpcRelationshipMax } from './src/state/relationship-math.js';
+import { buildNpcRelationshipInstruction } from './src/state/relationship-prompts.js';
+import {
+    getDefaultPortraitLocationSystemPrompt,
+    isShippedPortraitLocationSystemPrompt,
+    PORTRAIT_LOCATION_SYSTEM_PROMPT_WITH_NPCS,
+    PORTRAIT_LOCATION_SYSTEM_PROMPT_WITH_NPCS_V1,
+} from './src/state/portrait-prompts.js';
 import { isOlderThan } from './src/state/versions.js';
 
 export * from './src/state/schema-sections.js';
 export * from './src/state/versions.js';
 export * from './src/state/relationship-math.js';
 export * from './src/state/relationship-dom.js';
+export * from './src/state/relationship-prompts.js';
+export * from './src/state/portrait-prompts.js';
 
 // Leaf modules call getSettings via settings-ref; bind before DEFAULT_MODULES init.
 bindGetSettings(getSettings);
 
-/**
- * Lorebook Agent NPC module — starting relationship deltas scaled to configured max.
- * @param {number} [max]
- * @returns {string}
- */
-export function buildNpcRelationshipInstruction(max) {
-    const m = max ?? getNpcRelationshipMax();
-    const p = (f) => relPctOfMax(f, m);
-    return `## NPC RELATIONSHIPS
-When recording a NEW NPC, set their starting relationship values using the \`rel\` parameter in your commit call. Infer appropriate starting deltas from the narrative context. Valid range: -${m} to +${m}.
-- Long-time friends, regular companions, mentors, or close partners: set a strong starting friendship (e.g., +${p(0.30)} to +${p(0.60)}).
-- Casual friends, helpful acquaintances, or positive encounters: set a minor starting friendship (e.g., +${p(0.10)} to +${p(0.25)}).
-- Romantically interested or close loved ones: set starting affection and/or friendship (e.g., +${p(0.20)} to +${p(0.50)}).
-- Minor foes, hostile rivals, or unfriendly targets: set a minor negative starting friendship (e.g., ${p(-0.05)} to ${p(-0.15)}).
-- Direct enemies, antagonist figures, or deadly threats: set a strong negative starting friendship (e.g., ${p(-0.20)} to ${p(-0.60)}).
-- Unknown/neutral: default to 0 (no delta).
-Ongoing relationship changes are tracked automatically by the system from the narrative output. Do NOT emit relationship deltas for existing NPCs.`;
-}
-
-/**
- * Basic-mode router prompt block for [[REL:]] tags — same scaled guidelines.
- * @param {number} [max]
- * @returns {string}
- */
-export function buildRouterRelationshipInstruction(max) {
-    const m = max ?? getNpcRelationshipMax();
-    const p = (f) => relPctOfMax(f, m);
-    return `## NPC INITIAL RELATIONSHIP VALUES
-When you record a NEW NPC, you MUST set their starting relationship values using [[REL:]] tags based on narrative context. This is ONLY for initial values when first recording an NPC — ongoing relationship changes are tracked automatically by the system. Valid range: -${m} to +${m}. Examples:
-  [[REL: NameOrUID | friendship | +${p(0.30)}]]
-  [[REL: NameOrUID | affection | ${p(-0.05)}]]
-Starting value guidelines:
-- Long-time friends, regular companions, mentors, or close partners: set a strong starting friendship (e.g., +${p(0.30)} to +${p(0.60)}).
-- Casual friends, helpful acquaintances, or positive encounters: set a minor starting friendship (e.g., +${p(0.10)} to +${p(0.25)}).
-- Romantically interested or close loved ones: set starting affection and/or friendship (e.g., +${p(0.20)} to +${p(0.50)}).
-- Minor foes, hostile rivals, or unfriendly targets: set a minor negative starting friendship (e.g., ${p(-0.05)} to ${p(-0.15)}).
-- Direct enemies, antagonist figures, or deadly threats: set a strong negative starting friendship (e.g., ${p(-0.20)} to ${p(-0.60)}).
-- Unknown/neutral: default to 0 (no delta).`;
-}
-
-/**
- * Narrator sysprompt <relationship_tracking> block — scale line tied to configured max.
- * Delta guide magnitudes stay absolute (same point awards at any range width).
- * @param {number} [max]
- * @returns {string}
- */
-export function buildRelationshipTrackingSysprompt(max) {
-    const m = max ?? getNpcRelationshipMax();
-    return `RELATIONSHIP TRACKING — only active when [NPC_RELATIONS] appears in context.
-
-[NPC_RELATIONS] at the top of each turn shows current standings with active NPCs. Scale: -${m} (deep hostility) to +${m} (deep bond). Friendship = platonic trust. Affection = romantic/emotional warmth. Point changes are absolute increments clamped to ±${m}.
-
-WHEN TO EMIT:
-Be selective and natural. Only emit when {{user}} directly and meaningfully interacted with an NPC — a real moment worth noting. Magnitude MUST reflect the NPC's personality: a stoic warrior shifts less than a warm innkeeper for the same act.
-
-DO NOT EMIT when: the interaction has no emotional weight (buying supplies, directions), the NPC is absent, or nothing meaningful happened between {{user}} and that NPC this turn.
-
-INLINE ANNOTATION (visible — place immediately after the triggering moment):
-*(Friendship: Marcus +10 — saved his life in the alley)*
-*(Affection: Elena +2 — she seemed touched by the compliment)*
-
-FRIENDSHIP scale (guides, not hard rules):
-+1/+2 ... Casual warmth, shared laugh, pleasant campfire talk, small kindness
-+2/+5 ... Compliment, meaningful help, bonding over shared memories or interests
-+5/+10 .. Surviving danger together, heartfelt conversation, completing a shared goal
-+10/+15 . Defending/protecting them, act of loyalty, keeping a difficult promise
-+15/+25 . Saving their life, major self-sacrifice
-+25/+30 . Blood oath, brotherhood/sisterhood pact
--1/-3 ... Dismissiveness, mild rudeness, forgetting something important to them
--3/-5 ... Small broken promise, ignoring them in a group, letting them down
--5/-10 .. Insult, belittling, disrespecting their values or beliefs
--10/-20 . Public humiliation, badmouthing them (if overheard)
--20/-30 . Abandoning them in danger, breaking a major promise
--40/-60 . Betraying them to an enemy
-
-AFFECTION scale (guides, not hard rules):
-+1 ...... Subtle kind gesture, noticing a small detail about them
-+2/+3 ... Sincere compliment on appearance, wit, or spirit; flirtatious banter (if receptive)
-+5/+10 .. Meaningful gift, intimate conversation, shared vulnerability, romantic gesture
-+10/+20 . Protective act in romantic context, vulnerable confession of feelings
-+20/+30 . Romantic proposal (if receptive)
--1/-2 ... Awkward or tone-deaf comment, mild social blunder
--2/-3 ... Cold or dismissive behavior
--5/-10 .. Public rejection or embarrassment
--8/-15 .. Flirting with someone else in their presence
--40/-60 . Romantic betrayal or cheating
-
-Typical range: 1-5 for minor moments, 5-15 for major events. Only use 15+ for life-altering ones.
-
-EXAMPLE — end of a response where {{user}} complimented Elena:
-*(Affection: Elena +2 — she seemed genuinely moved by the words)*`;
-}
-
-/**
- * Builds the NPC instruction string based on current NPC settings.
- * @param {number} majorWords
- * @param {number} minorWords
- * @returns {string}
- */
 export function buildNpcInstruction(majorWords = 25, minorWords = 15, ignoreLimits = false) {
     let settings = {};
     try {
@@ -283,124 +193,6 @@ export const DEFAULT_MODULES = {
  * missing keys. All reads and writes to persistent state go through this.
  * @returns {Record<string, any>}
  */
-/** Original 5.5.0 location prompt (pre parent-continuity / present-NPC variants). */
-export const PORTRAIT_LOCATION_SYSTEM_PROMPT_LEGACY = `You are a location/scene prompt generator for AI image models. Given a place's lorebook description from an RPG campaign, output a single detailed image generation prompt for a wide establishing shot.
-
-Focus on:
-- Architecture, terrain, lighting, weather, and atmosphere
-- Distinctive landmarks and environmental details from the lore entry
-- Time of day and mood appropriate to the description
-- Art style: high-quality fantasy landscape, cinematic wide shot, no characters in frame
-
-Rules:
-- Output ONLY the prompt text, nothing else. No preamble, no explanation.
-- Keep it under {{wordtarget}} words.
-- The location lorebook entry is your PRIMARY source of truth.
-- Use narrator card and scene context only for world/art-style guidance.
-- Do not include game stats, quests, or non-visual information.`;
-
-/** Factory default Location Scene prompt when present-NPC injection is off. */
-export const PORTRAIT_LOCATION_SYSTEM_PROMPT_WITHOUT_NPCS = `You are a location/scene prompt generator for AI image models. Given a place's lorebook description from an RPG campaign, output a single detailed image generation prompt for a wide cinematic shot of "{{name}}" (full path: {{path}}).
-
-Focus on:
-- Architecture, terrain, lighting, weather, and atmosphere specific to THIS sub-location
-- Distinctive landmarks and environmental details from the target location's lore entry
-- Time of day and mood appropriate to the description and recent narrator output
-- Art style: high-quality fantasy scene, cinematic wide shot
-
-Scene composition:
-- When a Player Character is listed in "Characters Present Now", include them as a primary figure in the scene.
-- If no "Characters Present Now" block is provided: no characters in frame — environment and atmosphere only.
-
-Parent continuity:
-- If parent/ancestor location context is provided, treat it as a visual STYLE GUIDE only (palette, building materials, era, cultural aesthetic, weather tone).
-- The image must depict the TARGET sub-location as its own distinct place — never reuse or clone a parent's composition.
-- Parents with existing reference art: match their look and feel while showing what makes this child location unique.
-
-Rules:
-- Output ONLY the prompt text, nothing else. No preamble, no explanation.
-- Keep it under {{wordtarget}} words.
-- The target location's lorebook entry is your PRIMARY source of truth for the place itself.
-- Use narrator output and scene context for moment-to-moment mood and staging.
-- Do not include game stats, quests, or non-visual information.`;
-
-/** Factory default Location Scene prompt when present-NPC injection is on. */
-export const PORTRAIT_LOCATION_SYSTEM_PROMPT_WITH_NPCS = `You are a location/scene prompt generator for AI image models. Given a place's lorebook description from an RPG campaign, output a single detailed image generation prompt for a wide cinematic shot of "{{name}}" (full path: {{path}}).
-
-Focus on:
-- Architecture, terrain, lighting, weather, and atmosphere specific to THIS sub-location
-- Distinctive landmarks and environmental details from the target location's lore entry
-- Time of day and mood appropriate to the description and recent narrator output
-- Art style: high-quality fantasy scene, cinematic wide shot
-
-Characters:
-- The Player Character entry (when provided in "Characters Present Now") is always a primary figure in the scene — never omit them.
-- If additional NPC entries are listed in "Characters Present Now": include those NPCs naturally in the scene (mid-ground or foreground). Use their lore entries for appearance, clothing, and pose. They should feel placed in the environment, not isolated portrait close-ups.
-- Also incorporate any minor characters who appear in the recent narrator output (bystanders, guards, patrons, crowd figures, etc.) even when they are NOT listed in "Characters Present Now". Infer brief visual details from the narrative and keep them secondary in the composition.
-- If there are no characters in "Characters Present Now" and none appear in recent narrator output: no characters in frame — environment and atmosphere only.
-
-Parent continuity:
-- If parent/ancestor location context is provided, treat it as a visual STYLE GUIDE only (palette, building materials, era, cultural aesthetic, weather tone).
-- The image must depict the TARGET sub-location as its own distinct place — never reuse or clone a parent's composition.
-- Parents with existing reference art: match their look and feel while showing what makes this child location unique.
-
-Rules:
-- Output ONLY the prompt text, nothing else. No preamble, no explanation.
-- Keep it under {{wordtarget}} words.
-- The target location's lorebook entry is your PRIMARY source of truth for the place itself.
-- Use narrator output and scene context for moment-to-moment mood and staging.
-- Do not include game stats, quests, or non-visual information.`;
-
-/** Previous WITH_NPCS factory default (pre minor-narrative-characters line). */
-export const PORTRAIT_LOCATION_SYSTEM_PROMPT_WITH_NPCS_V1 = `You are a location/scene prompt generator for AI image models. Given a place's lorebook description from an RPG campaign, output a single detailed image generation prompt for a wide cinematic shot of "{{name}}" (full path: {{path}}).
-
-Focus on:
-- Architecture, terrain, lighting, weather, and atmosphere specific to THIS sub-location
-- Distinctive landmarks and environmental details from the target location's lore entry
-- Time of day and mood appropriate to the description and recent narrator output
-- Art style: high-quality fantasy scene, cinematic wide shot
-
-Characters:
-- If a "Characters Present Now" block is provided: include those NPCs naturally in the scene (mid-ground or foreground). Use their lore entries for appearance, clothing, and pose. They should feel placed in the environment, not isolated portrait close-ups.
-- If no "Characters Present Now" block is provided: no characters in frame — environment and atmosphere only.
-
-Parent continuity:
-- If parent/ancestor location context is provided, treat it as a visual STYLE GUIDE only (palette, building materials, era, cultural aesthetic, weather tone).
-- The image must depict the TARGET sub-location as its own distinct place — never reuse or clone a parent's composition.
-- Parents with existing reference art: match their look and feel while showing what makes this child location unique.
-
-Rules:
-- Output ONLY the prompt text, nothing else. No preamble, no explanation.
-- Keep it under {{wordtarget}} words.
-- The target location's lorebook entry is your PRIMARY source of truth for the place itself.
-- Use narrator output and scene context for moment-to-moment mood and staging.
-- Do not include game stats, quests, or non-visual information.`;
-
-/**
- * @param {boolean} [includePresentNpcs]
- * @returns {string}
- */
-export function getDefaultPortraitLocationSystemPrompt(includePresentNpcs = false) {
-    return includePresentNpcs
-        ? PORTRAIT_LOCATION_SYSTEM_PROMPT_WITH_NPCS
-        : PORTRAIT_LOCATION_SYSTEM_PROMPT_WITHOUT_NPCS;
-}
-
-/**
- * True when the text still matches a shipped factory default (current or legacy).
- * Custom edits return false so the toggle does not overwrite them.
- * @param {string} text
- * @returns {boolean}
- */
-export function isShippedPortraitLocationSystemPrompt(text) {
-    const norm = (s) => (s || '').replace(/\r\n/g, '\n').trim();
-    const t = norm(text);
-    return t === norm(PORTRAIT_LOCATION_SYSTEM_PROMPT_WITHOUT_NPCS)
-        || t === norm(PORTRAIT_LOCATION_SYSTEM_PROMPT_WITH_NPCS)
-        || t === norm(PORTRAIT_LOCATION_SYSTEM_PROMPT_WITH_NPCS_V1)
-        || t === norm(PORTRAIT_LOCATION_SYSTEM_PROMPT_LEGACY);
-}
-
 /**
  * Builds a fresh copy of every settings default. Extracted from getSettings()
  * so it can be reused by getFactoryCartridgePayload() (the "Stock" Game
