@@ -69,4 +69,34 @@ describe('saveChatState', () => {
         expect(s.trackerModuleDatabase[0].tag).toBe('REPUTATION');
         expect(s.syspromptSnippetDatabase[0].content).toBe('Custom law');
     });
+
+    it('preserves phone state fields across saveChatState', () => {
+        const s = getSettings();
+        s.chatStates = {
+            'phone-chat': {
+                phoneHistory: [{ type: 'call', contact: 'Marcus', summary: 'Spoke about job' }],
+                phoneContacts: [{ name: 'Marcus', relation: 'Fixer' }],
+                phoneApps: [{ id: 'app1', name: 'CryptoWallet' }],
+                phoneCallLog: [{ name: 'Marcus', duration: '1:30' }],
+                phoneMessages: { Marcus: [{ text: 'Ready?', direction: 'in' }] },
+                phoneUnread: { messages: 1, calls: 0 },
+                phoneGallery: ['image_1.png'],
+                phoneCache: { reddit_home: [{ name: 'r/tech' }] },
+                phoneVotes: { p1: 1 },
+            },
+        };
+
+        saveChatState('phone-chat', { skipDiskWrite: true });
+
+        const part = s.chatStates['phone-chat'];
+        expect(part.phoneHistory).toEqual([{ type: 'call', contact: 'Marcus', summary: 'Spoke about job' }]);
+        expect(part.phoneContacts).toEqual([{ name: 'Marcus', relation: 'Fixer' }]);
+        expect(part.phoneApps).toEqual([{ id: 'app1', name: 'CryptoWallet' }]);
+        expect(part.phoneCallLog).toEqual([{ name: 'Marcus', duration: '1:30' }]);
+        expect(part.phoneMessages.Marcus).toEqual([{ text: 'Ready?', direction: 'in' }]);
+        expect(part.phoneUnread).toEqual({ messages: 1, calls: 0 });
+        expect(part.phoneGallery).toEqual(['image_1.png']);
+        expect(part.phoneCache.reddit_home).toEqual([{ name: 'r/tech' }]);
+        expect(part.phoneVotes.p1).toBe(1);
+    });
 });

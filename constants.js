@@ -303,6 +303,24 @@ Last Rest: HH:MM, DD/MM/YYYY
 Current Time: HH:MM, DD/MM/YYYY
 
 'Last Rest' is ONLY triggered on Long Rest, NOT Short Rest (when Hit Dice, etc, are spent.) If the [TIME] delta between PREVIOUS STATE MEMO and your current update is only an hour, it is a Short Rest.`,
+  phone: `Track the character's smartphone state in a modern/realistic setting. Update ONLY when phone content changes this turn.
+[PHONE]
+Battery: X%
+Signal: Full / Low / None
+Silent: Yes / No
+Contacts: [NAME: relation | last_seen]
+Recent: [TYPE | CONTACT | DIRECTION | SUMMARY]
+[/PHONE]
+
+TRIGGERS: Only output [PHONE] when at least one field actually changed this turn.
+- Update Battery/Signal if the narrative explicitly mentions them.
+- Add to Contacts when new people exchange numbers with {{user}} or are introduced by name with contact details.
+- Log to Recent (max 5 lines): any call, text, missed call, or notification that occurred this turn.
+- {{phone_contact: NPC_NAME | type | message}} annotation → log the event and update Recent.
+- If character installs a new app in-fiction, note it.
+
+Format: Keep Recent entries compact: [call | Marcus | in | 2m conversation about the job]
+Never fabricate activity not present in the narrative.`,
 };
 
 /** Stock-prompt key for [TIME] based on the active clock + calendar toggles. */

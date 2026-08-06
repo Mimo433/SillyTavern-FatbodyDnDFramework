@@ -395,6 +395,17 @@ export function saveChatState(chatId, opts = {}) {
         // Preserve Player Character pseudo-persona which is injected into the chat state
         playerCharacter: existing.playerCharacter,
 
+        // Phone Module persistence
+        phoneHistory: existing.phoneHistory || [],
+        phoneContacts: existing.phoneContacts || [],
+        phoneApps: existing.phoneApps || [],
+        phoneCallLog: existing.phoneCallLog || [],
+        phoneMessages: existing.phoneMessages || {},
+        phoneUnread: existing.phoneUnread || { messages: 0, calls: 0 },
+        phoneGallery: existing.phoneGallery || [],
+        phoneCache: existing.phoneCache || {},
+        phoneVotes: existing.phoneVotes || {},
+
         // Adventure Companion (CHAT mode) — per-chat brainstorming history.
         // Only overwrite from the live session when saving the *active* chat; otherwise
         // keep the partition value (e.g. flush-before-switch already wrote the departing chat).

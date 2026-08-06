@@ -21,6 +21,7 @@ import { showCharacterRollPanel, showPcImportPanel, handleCharacterCreatorGenera
 import { bindCharacterCreationConnectionSettings, getCharacterCreationConnectionSettings } from './character-creation-connection.js';
 import { bindQuickStartEvents } from './quickstart.js';
 import { bindAdventureCompanion, bindAdventureCompanionSettingsDrawer, openAdventureCompanion, closeAdventureCompanion } from './adventure-companion.js';
+import { bindPhone } from './phone.js';
 import { openDisplayGroupsManager } from './display-groups.js';
 import { handleCategorySettings, openCustomFieldEditor, openPromptEditor, refreshOrderList, exportModules, importModulesFromJson, openNpcSectionEditor, openPcSectionEditor } from './ui-editors.js';
 import { openGameSystemWizard, openManageGameSystems, openSystemPromptControlRoom, syncAllNarratorTogglesForUnlockState, extractTopLevelSections, normalizeSectionOrder, getSectionRowDescriptor, transformBaseSectionContent, isBlankSectionContent, isSectionUnlocked, isEffectiveSectionEnabled } from './game-systems.js';
@@ -4876,6 +4877,8 @@ function organizeConnectionSettingsUI() {
         const settings = getSettings();
         bindCharacterCreationConnectionSettings(document.querySelector('.rpg-tracker-settings'));
         bindAdventureCompanionSettingsDrawer();
+        // Phone module: bind settings panel and register globalThis bridges
+        bindPhone(document.querySelector('.rpg-tracker-settings'));
         await bindFeatureConnectionSettings({
             uiPrefix: 'rpg_adventure_companion',
             keyPrefix: 'adventureCompanion',

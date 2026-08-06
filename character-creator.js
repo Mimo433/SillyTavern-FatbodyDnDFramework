@@ -65,6 +65,15 @@ const _CR_CLASS_CONSTANTS = [
 ];
 
 /**
+ * Returns true if the given genre should enable the Phone module.
+ * @param {string} genre
+ * @returns {boolean}
+ */
+export function isModernGenre(genre) {
+    return genre === 'realistic';
+}
+
+/**
  * Archetype class names for a genre (excludes Other / AI decides).
  * @param {string} genre
  * @returns {string[]}
@@ -258,6 +267,17 @@ export async function generateQuickStartCharacter(opts) {
         systemPromptMode: 'modules_only',
         connectionSettings: getCharacterCreationConnectionSettings(s),
     });
+
+    // Auto-enable/disable phone module based on genre
+    try {
+        const s2 = getSettings();
+        const isModern = genre === 'realistic';
+        s2.phoneEnabled = isModern;
+        if (s2.modules) s2.modules.phone = isModern;
+        await saveSettings();
+    } catch (e) {
+        console.warn('[Phone] Genre auto-enable failed:', e);
+    }
 
     const s2 = getSettings();
     const memoAfter = s2.currentMemo || '';
@@ -737,6 +757,17 @@ async function handleCharRollGenerate(el, panel) {
             systemPromptMode: 'modules_only',
             connectionSettings: getCharacterCreationConnectionSettings(s),
         });
+
+        // Auto-enable/disable phone module based on genre
+        try {
+            const s2 = getSettings();
+            const isModern = genre === 'realistic';
+            s2.phoneEnabled = isModern;
+            if (s2.modules) s2.modules.phone = isModern;
+            await saveSettings();
+        } catch (e) {
+            console.warn('[Phone] Genre auto-enable failed:', e);
+        }
 
         if (wantPlayerCard || wantStPersona) {
             const s2 = getSettings();
@@ -1263,6 +1294,17 @@ ${worldCtx}`;
         systemPromptMode: 'modules_only',
         connectionSettings: getCharacterCreationConnectionSettings(s),
     });
+
+    // Auto-enable/disable phone module based on genre
+    try {
+        const s2 = getSettings();
+        const isModern = importGenre === 'realistic';
+        s2.phoneEnabled = isModern;
+        if (s2.modules) s2.modules.phone = isModern;
+        await saveSettings();
+    } catch (e) {
+        console.warn('[Phone] Genre auto-enable failed:', e);
+    }
 
     // Sync the card's avatar as the PC portrait globally so both the State Tracker
     // and Campaign Records immediately reflect the newly imported character's image.

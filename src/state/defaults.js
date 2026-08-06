@@ -106,6 +106,18 @@ export function buildDefaultSettings() {
         characterCreationOpenaiUrl: "",
         characterCreationOpenaiKey: "",
         characterCreationOpenaiModel: "",
+        phoneEnabled: false,
+        phoneContextDepth: 20,
+        phoneNpcContactChance: 8,
+        phoneConnectionSource: 'default',
+        phoneConnectionProfileId: '',
+        phoneCompletionPresetId: '',
+        phoneOllamaUrl: 'http://localhost:11434',
+        phoneOllamaModel: '',
+        phoneOpenaiUrl: '',
+        phoneOpenaiKey: '',
+        phoneOpenaiModel: '',
+        phoneMaxTokens: 0,
         renderedViewActive: true,
 
         panelLayoutMode: 'stack',   // 'stack' = classic vertical stack | 'tabs' = compact tab mode (Character/Combat pinned, rest behind tabs)
@@ -356,6 +368,8 @@ You may be asked to use Markers: ((PLS)), ((B)), ((XB)), ((BDG)), ((HGT)). These
             xp: true,
 
             quests: true,
+
+            phone: false,
 
         },
 

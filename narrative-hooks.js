@@ -19,6 +19,7 @@ import { runRouterPass, saveSceneToLorebook, scanAssistantOutputForKeywords, par
 import { logTransaction } from './debug-viewer.js';
 import { recordSchedulerEvent } from './swipe-scheduler-debug.js';
 import { saveSettings } from './src/app/runtime-bridge.js';
+import { buildPhoneContextBlock, maybeFireNpcContact } from './phone.js';
 
 /** Resolve ST macros (e.g. {{user}}) in lore text at injection time — storage keeps macros verbatim. */
 function substituteLoreMacros(content) {
@@ -897,7 +898,8 @@ export function installInterceptor() {
         }
 
         const routerActive = !!settings.routerEnabled;
-        if (!settings.enabled && !routerActive) {
+        const phoneActive = !!(settings.phoneEnabled || settings.modules?.phone);
+        if (!settings.enabled && !routerActive && !phoneActive) {
             if (settings.debugMode) console.groupEnd();
             return;
         }
@@ -981,20 +983,43 @@ export function installInterceptor() {
         // RNG, State Memo, and Quests are only injected into the user message in Path 2.
         // In Path 1 (addPromptManagerInterceptor), these are built and injected by that interceptor
         // into a dedicated system message at the configured depth, protecting the prefix cache.
-        if (!skipInjection && settings.enabled) {
+        if (!skipInjection && (settings.enabled || phoneActive)) {
             // [PLAYER_CHARACTER] — always injected at the top of the core block
-            const curChatId = SillyTavern.getContext().chatId || globalThis._rpgCurrentChatId?.();
-            if (curChatId && settings.chatStates?.[curChatId]?.playerCharacter) {
-                const pc = settings.chatStates[curChatId].playerCharacter;
-                if (!content.includes("[PLAYER_CHARACTER]")) {
-                    injections += `[PLAYER_CHARACTER]\nName: ${pc.name}\n${pc.bio}\n[/PLAYER_CHARACTER]\n\n`;
-                    if (settings.debugMode) console.log("Player Character injected.");
+            const curChatId = getActiveChatId() || SillyTavern.getContext()?.chatId || globalThis._rpgCurrentChatId?.();
+            const pc = (curChatId && settings.chatStates?.[curChatId]?.playerCharacter) || null;
+            if (!content.includes("[PLAYER_CHARACTER]")) {
+                if (pc && pc.name) {
+                    injections += `[PLAYER_CHARACTER]\nName: ${pc.name}\n${pc.bio || ''}\n[/PLAYER_CHARACTER]\n\n`;
+                    if (settings.debugMode) console.log("[RPG Tracker] Player Character injected from chatState.");
+                } else {
+                    const ctx = SillyTavern.getContext();
+                    const pName = ctx?.name1 || ctx?.personas?.[ctx?.persona]?.name;
+                    const pBio = ctx?.personas?.[ctx?.persona]?.description || ctx?.persona_description;
+                    if (pName) {
+                        injections += `[PLAYER_CHARACTER]\nName: ${pName}\n${pBio || ''}\n[/PLAYER_CHARACTER]\n\n`;
+                        if (settings.debugMode) console.log("[RPG Tracker] Player Character injected from ST persona.");
+                    }
                 }
             }
 
-        // [NPC_RELATIONS] — injected first, before RNG queue, same mechanism as RNG.
+            // [NPC_RELATIONS] — injected first, before RNG queue, same mechanism as RNG.
             const relBlock = await buildNpcRelationsBlock(settings);
             if (relBlock) injections += relBlock;
+
+            // [PHONE_ACTIVITY] — injected alongside NPC_RELATIONS on every turn
+            if (settings.phoneEnabled || settings.modules?.phone) {
+                try {
+                    const phoneBlock = (typeof buildPhoneContextBlock === 'function')
+                        ? buildPhoneContextBlock()
+                        : (typeof globalThis._rpgBuildPhoneContextBlock === 'function' ? globalThis._rpgBuildPhoneContextBlock() : '');
+                    if (phoneBlock) {
+                        injections += phoneBlock;
+                        if (settings.debugMode) console.log('[RPG Tracker] Phone activity injected:', phoneBlock);
+                    }
+                } catch (e) {
+                    console.warn('[RPG Tracker] Phone context injection failed:', e);
+                }
+            }
 
             // Hybrid mode uses live tool calls outside combat and the queue only
             // while [COMBAT] is active. Queue-only mode continues to inject it for
@@ -1048,6 +1073,7 @@ export function installInterceptor() {
                     console.log('[RPG Tracker] End-of-output footer reminder skipped (disabled or empty format).');
                 }
             }
+
         }
 
 
@@ -1238,22 +1264,29 @@ export function installInterceptor() {
             const originalContent = extractTextContent(msg).trim();
             const displayContent = originalContent ? originalContent : "[Continue the narrative]";
             const userHeader = `\n### CURRENT USER INPUT\n${displayContent}\n`;
+            const newText = coreBlock + userHeader;
+            let updated = false;
 
             if (typeof msg.content === 'string') {
-                msg.content = coreBlock + userHeader;
+                msg.content = newText;
+                updated = true;
                 if (settings.debugMode) console.log("[Multihog Framework] Core injection prepended to string msg.content");
             } else if (Array.isArray(msg.content)) {
                 const nonTextParts = msg.content.filter(p => p && p.type !== 'text');
                 msg.content = [
-                    { type: 'text', text: coreBlock + userHeader },
+                    { type: 'text', text: newText },
                     ...nonTextParts
                 ];
+                updated = true;
                 if (settings.debugMode) console.log("[Multihog Framework] Core injection prepended to array msg.content");
-            } else if (typeof msg.mes === 'string') {
-                msg.mes = coreBlock + userHeader;
+            }
+            if (typeof msg.mes === 'string') {
+                msg.mes = newText;
+                updated = true;
                 if (settings.debugMode) console.log("[Multihog Framework] Core injection prepended to msg.mes");
-            } else {
-                if (settings.debugMode) console.log("[Multihog Framework] Core injection failed — unknown msg structure:", Object.keys(msg));
+            }
+            if (!updated) {
+                msg.content = newText;
             }
 
             if (settings.debugMode) {
@@ -2128,6 +2161,8 @@ export function onGenerationStarted(type) {
     _lastGenerationType = type;
     _rpgIsGenerating = true;
     recordSchedulerEvent('generation_started', { generationType: type ?? null });
+    // Phone module: reset per-turn flags
+    try { globalThis._rpgOnPhoneGenerationStarted?.(); } catch { }
 }
 
 /** Last run-every tick decision (for scheduler debug snapshot). */
@@ -2437,6 +2472,21 @@ export async function onGenerationEnded() {
     // Step 6: Re-check World Progression after the Lorebook Agent — an overlapping agent
     // run from a prior generation may have blocked the pre-agent check.
     await maybeRunWorldProgression();
+
+    // Step 7: Phone module NPC contact check — fires after all AI passes complete.
+    // Probabilistic, relationship-weighted: close friends contact more often than strangers.
+    const phoneSettings = getSettings();
+    if (phoneSettings.phoneEnabled || phoneSettings.modules?.phone) {
+        try {
+            if (typeof maybeFireNpcContact === 'function') {
+                await maybeFireNpcContact(combinedNarrative);
+            } else {
+                await globalThis._rpgMaybeFireNpcContact?.(combinedNarrative);
+            }
+        } catch (e) {
+            console.warn('[RPG Tracker] Phone NPC contact check failed:', e);
+        }
+    }
 }
 
 // ── World Progression deterministic trigger ─────────────────────────────────────────
