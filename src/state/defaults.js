@@ -107,6 +107,7 @@ export function buildDefaultSettings() {
         characterCreationOpenaiKey: "",
         characterCreationOpenaiModel: "",
         phoneEnabled: false,
+        phoneIncludeCardContext: true,
         phoneContextDepth: 20,
         phoneNpcContactChance: 8,
         phoneConnectionSource: 'default',

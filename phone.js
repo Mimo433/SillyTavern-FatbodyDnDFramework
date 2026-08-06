@@ -119,6 +119,48 @@ function _getPlayerCharacterInfo() {
     return { pcName: name, pcBio: bio, pcBlock: block };
 }
 
+/**
+ * Resolves the active SillyTavern character card info (the card the user is chatting with).
+ * Extracts world context, setting, scenario, personality, and descriptions for custom card lore.
+ * @returns {{ cardName: string, cardBlock: string, cardData: any } | null}
+ */
+function _getActiveCardInfo() {
+    try {
+        const stContext = SillyTavern.getContext?.() || {};
+        const charId = stContext.characterId ?? stContext.this_chid;
+        let charData = (charId != null && stContext.characters) ? stContext.characters[charId] : null;
+
+        if (!charData && stContext.characters && stContext.name2) {
+            const n2 = String(stContext.name2).toLowerCase().trim();
+            charData = Object.values(stContext.characters).find(c => c && String(c.name || '').toLowerCase().trim() === n2) || null;
+        }
+
+        if (!charData && !stContext.name2) return null;
+
+        const name = charData?.name || stContext.name2 || 'Active Character';
+        const desc = (charData?.description || charData?.data?.description || '').trim();
+        const scenario = (charData?.scenario || charData?.data?.scenario || '').trim();
+        const personality = (charData?.personality || charData?.data?.personality || '').trim();
+        const sysPrompt = (charData?.data?.system_prompt || '').trim();
+
+        const parts = [];
+        if (desc) parts.push(`Description & World Context:\n${desc}`);
+        if (scenario) parts.push(`Scenario & Setting:\n${scenario}`);
+        if (personality) parts.push(`Personality & Tone:\n${personality}`);
+        if (sysPrompt) parts.push(`Custom Directives:\n${sysPrompt}`);
+
+        if (!parts.length && !name) return null;
+
+        const cardContent = parts.join('\n\n');
+        const cardBlock = `[ACTIVE_CARD_CONTEXT]\nCard: ${name}${cardContent ? `\n${cardContent}` : ''}\n[/ACTIVE_CARD_CONTEXT]`;
+
+        return { cardName: name, cardBlock, cardData };
+    } catch (e) {
+        console.warn('[Phone] _getActiveCardInfo failed:', e);
+        return null;
+    }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Connection settings helper — always falls back to ST's main API
 // ─────────────────────────────────────────────────────────────────────────────
@@ -336,10 +378,18 @@ export async function maybeFireNpcContact(combinedNarrative) {
             .replace(/_/g, ' ')
             .trim();
 
+        let cardBlockStr = '';
+        if (s.phoneIncludeCardContext !== false) {
+            const cardInfo = _getActiveCardInfo();
+            if (cardInfo?.cardBlock) {
+                cardBlockStr = `${cardInfo.cardBlock}\n\n`;
+            }
+        }
+
         // Ask AI if this NPC would actually reach out right now
         const snippedNarrative = combinedNarrative.slice(-1500);
         const systemPrompt = `You decide if an NPC should contact the player via phone right now. Be realistic and conservative — only say yes when it genuinely fits the current situation. Reply ONLY with valid JSON.`;
-        const userPrompt   = `NPC: ${displayName}
+        const userPrompt   = `${cardBlockStr}NPC: ${displayName}
 Recent story events:
 ${snippedNarrative}
 
@@ -852,17 +902,29 @@ function _renderPage(appId, pageId, params) {
  * @returns {string}
  */
 function _buildSceneContext(overhead = 1200) {
-    const stContext   = SillyTavern.getContext();
+    const stContext   = SillyTavern.getContext?.() || {};
     const contextSize = stContext?.contextSize || 8192;
-    const charBudget  = Math.floor((contextSize - overhead) * 3.5);
+    const s           = getSettings();
     const { pcName, pcBlock } = _getPlayerCharacterInfo();
 
+    let cardBlockStr = '';
+    if (s.phoneIncludeCardContext !== false) {
+        const cardInfo = _getActiveCardInfo();
+        if (cardInfo?.cardBlock) {
+            cardBlockStr = `${cardInfo.cardBlock}\n\n`;
+        }
+    }
+
     const pcBlockStr = pcBlock ? `${pcBlock}\n\n` : '';
+    const staticHeader = `${cardBlockStr}${pcBlockStr}`;
+    const dynamicOverhead = overhead + Math.ceil(staticHeader.length / 3.5);
+    const charBudget  = Math.floor((contextSize - dynamicOverhead) * 3.5);
+
     const chat = stContext?.chat;
-    if (!Array.isArray(chat) || !chat.length) return pcBlockStr.trim();
+    if (!Array.isArray(chat) || !chat.length) return staticHeader.trim();
 
     const lines = [];
-    let usedChars = pcBlockStr.length;
+    let usedChars = staticHeader.length;
     for (let i = chat.length - 1; i >= 0; i--) {
         const m = chat[i];
         const raw = String(m.mes || m.content || '').trim();
@@ -875,7 +937,7 @@ function _buildSceneContext(overhead = 1200) {
         usedChars += line.length + 1;
     }
     const historyBlock = lines.length ? `## RECENT STORY EVENTS\n${lines.join('\n\n')}` : '';
-    return `${pcBlockStr}${historyBlock}`.trim();
+    return `${staticHeader}${historyBlock}`.trim();
 }
 
 async function _renderGoogleApp(pageId, params, screen) {
@@ -1792,7 +1854,7 @@ function _renderMessagesApp(pageId, params, screen) {
 
                 const sys = `You are roleplaying as ${contact} in a text message conversation with ${ctx.pcName}.
 
-${ctx.npcBlock ? `## WHO YOU ARE\n${ctx.npcBlock}\n` : ''}${ctx.pcBlock ? `## WHO YOU ARE TALKING TO (${ctx.pcName})\n${ctx.pcBlock}\n` : ''}## RULES
+${ctx.cardBlock ? `## WORLD & ACTIVE CARD CONTEXT\n${ctx.cardBlock}\n\n` : ''}${ctx.npcBlock ? `## WHO YOU ARE\n${ctx.npcBlock}\n\n` : ''}${ctx.pcBlock ? `## WHO YOU ARE TALKING TO (${ctx.pcName})\n${ctx.pcBlock}\n\n` : ''}## RULES
 - Stay fully in character as ${contact}. Speak how this character would actually speak.
 - You ONLY know what ${contact} would realistically know. Do NOT reference events, places, or information ${contact} hasn't been told about in the story.
 - Do NOT mention game stats, HP, combat mechanics, gear lists, or anything meta.
@@ -1946,7 +2008,7 @@ function _renderDialerApp(pageId, params, screen) {
                 const ctx = await _buildNpcCallContext(contact);
                 const sys = `You are roleplaying as ${contact} answering a phone call from ${ctx.pcName}.
 
-${ctx.npcBlock ? `## WHO YOU ARE\n${ctx.npcBlock}\n\n` : ''}${ctx.pcBlock ? `## WHO YOU ARE TALKING TO (${ctx.pcName})\n${ctx.pcBlock}\n\n` : ''}## RULES
+${ctx.cardBlock ? `## WORLD & ACTIVE CARD CONTEXT\n${ctx.cardBlock}\n\n` : ''}${ctx.npcBlock ? `## WHO YOU ARE\n${ctx.npcBlock}\n\n` : ''}${ctx.pcBlock ? `## WHO YOU ARE TALKING TO (${ctx.pcName})\n${ctx.pcBlock}\n\n` : ''}## RULES
 - Stay fully in character as ${contact}. Speak how this character would actually speak — their tone, vocabulary, and personality.
 - You ONLY know what ${contact} would realistically know. Never reference anything ${contact} hasn't been told.
 - Do NOT mention game mechanics, stats, HP, combat info, or anything meta.
@@ -1990,7 +2052,7 @@ ${contact} says:`;
                 const allLines = Array.from(transcriptEl?.children || []).map(el => el.textContent).join('\n');
                 const sys = `You are roleplaying as ${contact} on a phone call with ${ctx.pcName}.
 
-${ctx.npcBlock ? `## WHO YOU ARE\n${ctx.npcBlock}\n\n` : ''}${ctx.pcBlock ? `## WHO YOU ARE TALKING TO (${ctx.pcName})\n${ctx.pcBlock}\n\n` : ''}## RULES
+${ctx.cardBlock ? `## WORLD & ACTIVE CARD CONTEXT\n${ctx.cardBlock}\n\n` : ''}${ctx.npcBlock ? `## WHO YOU ARE\n${ctx.npcBlock}\n\n` : ''}${ctx.pcBlock ? `## WHO YOU ARE TALKING TO (${ctx.pcName})\n${ctx.pcBlock}\n\n` : ''}## RULES
 - Stay fully in character as ${contact}. Speak naturally in 1–2 sentences.
 - You ONLY know what ${contact} realistically knows from the story.
 - Output ONLY spoken dialogue. No tags, no actions, no asterisks, no quotes.`;
@@ -2184,9 +2246,18 @@ async function _buildNpcCallContext(contact) {
         } catch (_) {}
     }
 
+    // ── Active Card / World Context ───────────────────────────────────────────
+    let cardBlock = '';
+    if (settings.phoneIncludeCardContext !== false) {
+        const cardInfo = _getActiveCardInfo();
+        if (cardInfo?.cardBlock) {
+            cardBlock = cardInfo.cardBlock;
+        }
+    }
+
     // ── Chat history, sized to player's actual context window ────────────────
     const contextSize  = stContext?.contextSize || 8192;
-    const promptOverhead = 2000 + Math.ceil(((npcBlock?.length || 0) + (pcBlock?.length || 0)) / 3.5);
+    const promptOverhead = 2000 + Math.ceil(((cardBlock?.length || 0) + (npcBlock?.length || 0) + (pcBlock?.length || 0)) / 3.5);
     const charBudget   = Math.floor((contextSize - promptOverhead) * 3.5);
 
     let chatContext = '';
@@ -2219,7 +2290,7 @@ async function _buildNpcCallContext(contact) {
         }).join('\n');
     }
 
-    return { pcName, pcBio, pcBlock, npcBlock, chatContext, threadHistory };
+    return { pcName, pcBio, pcBlock, cardBlock, npcBlock, chatContext, threadHistory };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2570,6 +2641,14 @@ async function _capturePhoto(mode, customDesc, statusEl) {
         const memo = s.currentMemo || '';
         const { pcName } = _getPlayerCharacterInfo();
 
+        let cardWorldInfo = '';
+        if (s.phoneIncludeCardContext !== false) {
+            const cardInfo = _getActiveCardInfo();
+            if (cardInfo?.cardData?.description || cardInfo?.cardData?.data?.description) {
+                cardWorldInfo = (cardInfo.cardData.description || cardInfo.cardData.data.description).slice(0, 300).replace(/[\r\n]+/g, ' ').trim();
+            }
+        }
+
         let prompt = '';
         let photoLabel = '';
 
@@ -2583,7 +2662,8 @@ async function _capturePhoto(mode, customDesc, statusEl) {
             const locMatch = memo.match(/\[LOCATION\]([\s\S]*?)\[\/LOCATION\]/i);
             const timeInfo = getInWorldTimeInfo().rawTime;
             const locInfo = locMatch ? locMatch[1].slice(0, 200) : '';
-            prompt = `Realistic smartphone photo of current scene. Environment/Setting: ${locInfo || 'modern environment'}. Time of day: ${timeInfo || 'daytime'}. Candid photography, natural lighting, sharp focus.`;
+            const settingContext = locInfo || cardWorldInfo || 'modern environment';
+            prompt = `Realistic smartphone photo of current scene. Environment/Setting: ${settingContext}. Time of day: ${timeInfo || 'daytime'}. Candid photography, natural lighting, sharp focus.`;
         } else {
             photoLabel = customDesc ? `Photo: ${customDesc.slice(0, 30)}` : 'Custom Photo';
             prompt = `Realistic smartphone photo: ${customDesc}. Candid photography, sharp detail, natural lighting.`;
@@ -2709,6 +2789,10 @@ function _renderPhoneSettingsApp(pageId, params, screen) {
 <div class="rpg-phone-settings-app">
   <h3>Phone Settings</h3>
   <label class="rpg-phone-settings-row">
+    <span>Include active card & world context in AI prompts</span>
+    <input type="checkbox" id="rpg_phone_card_ctx_toggle" ${s.phoneIncludeCardContext !== false ? 'checked' : ''}/>
+  </label>
+  <label class="rpg-phone-settings-row">
     <span>Context depth (interactions in AI context)</span>
     <input type="range" min="1" max="100" value="${s.phoneContextDepth || 20}" id="rpg_phone_ctx_depth_slider"/>
     <span id="rpg_phone_ctx_depth_val">${s.phoneContextDepth || 20}</span>
@@ -2720,6 +2804,14 @@ function _renderPhoneSettingsApp(pageId, params, screen) {
   </label>
   <button class="rpg-phone-btn rpg-phone-btn-danger" id="rpg_phone_clear_history_btn">🗑️ Clear Phone History</button>
 </div>`;
+
+    const cardToggle = document.getElementById('rpg_phone_card_ctx_toggle');
+    cardToggle?.addEventListener('change', () => {
+        const s2 = getSettings();
+        s2.phoneIncludeCardContext = cardToggle.checked;
+        saveSettings();
+        savePhoneState();
+    });
 
     const depthSlider = document.getElementById('rpg_phone_ctx_depth_slider');
     const depthVal    = document.getElementById('rpg_phone_ctx_depth_val');
@@ -2794,6 +2886,18 @@ export function bindPhone(settingsContainer) {
             // Show/hide phone icon in panel header
             const icon = document.getElementById('rpg_phone_icon_btn');
             if (icon) icon.style.display = enabledCb.checked ? '' : 'none';
+            saveSettings();
+        });
+    }
+
+    // Include Card Context checkbox
+    const cardCtxCb = settingsContainer.querySelector('#rpg_phone_include_card_context_cb');
+    if (cardCtxCb) {
+        const s = getSettings();
+        cardCtxCb.checked = s.phoneIncludeCardContext !== false;
+        cardCtxCb.addEventListener('change', () => {
+            const s2 = getSettings();
+            s2.phoneIncludeCardContext = cardCtxCb.checked;
             saveSettings();
         });
     }

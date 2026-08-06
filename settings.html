@@ -858,6 +858,11 @@
                                     <span>Enable Phone Module</span>
                                     <i class="fa-solid fa-circle-question interactable" title="When enabled, adds a 📱 icon to the State Tracker header. Phone activity is injected into the AI context only when relevant."></i>
                                 </label>
+                                <label class="checkbox_label" title="Include active character card description, scenario, and custom world context in Phone AI prompts.">
+                                    <input id="rpg_phone_include_card_context_cb" type="checkbox" />
+                                    <span>Include Active Card Context</span>
+                                    <i class="fa-solid fa-circle-question interactable" title="When enabled, Phone AI prompts include the active card's description, setting, and world information. Useful for cards with custom world lore."></i>
+                                </label>
                                 <div class="flex-container alignItemsCenter gap-1">
                                     <label style="font-size:0.82em; opacity:0.75; white-space:nowrap;">Context Depth
                                         <i class="fa-solid fa-circle-question interactable" title="How many recent phone events to inject into AI context. Only sent when relevant."></i>
